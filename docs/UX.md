@@ -156,10 +156,17 @@ opens the facts and the evidence, and "show in source" deep-links back.
 
 ## Visual system
 
-- **Palette.** Warm paper (`#f5f4ee`), white cards, a deep municipal green for
-  commitment and action (`#0f4c43`), sand for attention and investigation,
-  amber for unknown, red for risk. No decorative colors: every hue maps to a
+- **Palette: civic signage.** The blue and white of municipal and street
+  signs. Cool white surfaces (`#f3f5f8`), ink (`#0d1b2e`), and municipal blue
+  for action and brand (`#1747b8`). Road-sign yellow (`#f2b705`) is reserved
+  for "a person needs to act here". Amber (`#7f5300`) means unknown, green
+  means done, red means risk. No decorative colors: every hue maps to a
   meaning.
+  - Every color is a token in the `:root` block of `home.css`; nothing below
+    it is a literal, apart from Microsoft's own colors in the Outlook and
+    SharePoint frames.
+  - A city theme is one token block.
+  - Every text pair meets WCAG AA.
 - **Type.** One Hebrew-first sans stack at four sizes (12 / 14 / 17 / 30–36).
   Numbers are tabular. Latin codes always sit in an isolated LTR span; Hebrew
   sentences never start with a number token that reorders.

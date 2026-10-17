@@ -2,41 +2,43 @@
    One light theme, Hebrew-first, logical properties only. */
 
 :root {
-  --bg: #f4f3ee;
+  /* Palette "civic signage": the blue and white of municipal signs, road-sign yellow only where a person must act.
+     amber = unknown, ok = done, danger = risk. Every color in the UI comes from this block. */
+  --bg: #f3f5f8;
   --surface: #ffffff;
-  --surface-2: #f7f6f1;
-  --surface-3: #efeee7;
-  --ink: #15241f;
-  --ink-2: #3d4b46;
-  --muted: #6c7a75;
-  --line: #e4e2d8;
-  --line-strong: #d3d1c5;
-  --primary: #0f4c43;
-  --primary-strong: #0a3933;
-  --primary-soft: #e7f0ec;
-  --primary-line: #c7dbd4;
-  --sand: #e8ad63;
-  --sand-strong: #d99a4e;
-  --sand-soft: #fbf1e2;
-  --sand-line: #f0ddbc;
-  --amber: #9a5a0b;
-  --amber-soft: #fdf3e3;
-  --amber-line: #efdbb7;
-  --ok: #1d7a5c;
-  --ok-soft: #e8f4ef;
-  --ok-line: #c7e2d7;
-  --danger: #a63e35;
-  --danger-soft: #fbeeec;
-  --danger-line: #ecc9c5;
-  --blue: #2c5d8a;
-  --blue-soft: #ebf1f8;
-  --blue-line: #ceddec;
-  --violet: #5a4b8a;
-  --violet-soft: #efecf8;
-  --violet-line: #dad2ee;
-  --teal: #14706a;
-  --teal-soft: #e6f2f0;
-  --teal-line: #c3e0dc;
+  --surface-2: #f7f8fa;
+  --surface-3: #eceff4;
+  --ink: #0d1b2e;
+  --ink-2: #33415a;
+  --muted: #5c687c;
+  --line: #e1e5ec;
+  --line-strong: #cdd3dd;
+  --primary: #1747b8;
+  --primary-strong: #0f3591;
+  --primary-soft: #e8eefb;
+  --primary-line: #c6d4f3;
+  --sand: #f2b705;
+  --sand-strong: #d9a204;
+  --sand-soft: #fff6d6;
+  --sand-line: #f3dd8f;
+  --amber: #7f5300;
+  --amber-soft: #fff3dc;
+  --amber-line: #efd59e;
+  --ok: #0e7a50;
+  --ok-soft: #e6f4ee;
+  --ok-line: #bfe3d2;
+  --danger: #bf281b;
+  --danger-soft: #fdecea;
+  --danger-line: #f3c4bf;
+  --blue: #1747b8;
+  --blue-soft: #e8eefb;
+  --blue-line: #c6d4f3;
+  --violet: #5b44b2;
+  --violet-soft: #efebfb;
+  --violet-line: #d8cff3;
+  --teal: #0f6f86;
+  --teal-soft: #e4f2f6;
+  --teal-line: #bfe0ea;
   --radius: 18px;
   --radius-md: 14px;
   --radius-sm: 10px;
@@ -47,28 +49,28 @@
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Surfaces and accents that used to be hard-coded below. */
-  --glow: #edf3ef;
-  --landing-top: #f7f6f0;
-  --landing-bottom: #f2f1ea;
-  --hero-1: #11544a;
-  --hero-2: #0b3d36;
-  --hero-3: #10443c;
-  --hero-shadow: #092d27;
-  --ink-shadow: #12231e;
-  --on-hero: #e9f2ef;
-  --on-hero-good: #8fe0c2;
-  --on-hero-warn: #f3c17c;
-  --on-hero-bar: #5ac59f;
-  --data-good: #3ba983;
-  --on-sand: #2c1d08;
-  --placeholder: #9aa39f;
-  --av0-bg: #f6e3c8; --av0-ink: #7a4a10;
-  --av1-bg: #dce8f6; --av1-ink: #24527f;
-  --av2-bg: #dcefe7; --av2-ink: #155e4a;
-  --av3-bg: #e7e1f6; --av3-ink: #4a3b7e;
-  --av4-bg: #d9efe9; --av4-ink: #0f5b56;
-  --quote-bg: #0f2320;
-  --quote-ink: #dff3ec;
+  --glow: #e4ecfa;
+  --landing-top: #f8fafd;
+  --landing-bottom: #eef2f8;
+  --hero-1: #1747b8;
+  --hero-2: #0c2d7c;
+  --hero-3: #123a9a;
+  --hero-shadow: #0a2463;
+  --ink-shadow: #0d1b2e;
+  --on-hero: #eef3ff;
+  --on-hero-good: #a7f0cd;
+  --on-hero-warn: #ffd34d;
+  --on-hero-bar: #4fd39b;
+  --data-good: #12915f;
+  --on-sand: #2b2200;
+  --placeholder: #8b95a6;
+  --av0-bg: #fff1c2; --av0-ink: #6e5100;
+  --av1-bg: #e3ebff; --av1-ink: #1747b8;
+  --av2-bg: #e1f3ea; --av2-ink: #0e7a50;
+  --av3-bg: #efe7ff; --av3-ink: #5b3fb0;
+  --av4-bg: #e3f1f6; --av4-ink: #165f80;
+  --quote-bg: #0d1b2e;
+  --quote-ink: #e3ebff;
 }
 
 * { box-sizing: border-box; }
