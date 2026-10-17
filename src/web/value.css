@@ -256,3 +256,42 @@
   .v-strip-card { grid-template-columns: auto minmax(0, 1fr); }
   .v-strip-go { grid-column: 2; }
 }
+
+/* --- simplification: the head's block is a headline and its findings */
+.role-lower.is-single { grid-template-columns: 1fr; }
+.role-lower.is-single .findings-block { border: 0; padding: 0; }
+
+/* --- one fold for the reasoning: closed by default, one click away */
+.v-more {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0; overflow: hidden;
+}
+.v-more > summary {
+  list-style: none; cursor: pointer; padding: 16px 22px; font-weight: 700; font-size: 15px;
+  display: flex; gap: 10px; align-items: baseline;
+}
+.v-more > summary::-webkit-details-marker { display: none; }
+.v-more > summary::before { content: "+"; color: var(--primary); font-weight: 700; width: 12px; }
+.v-more[open] > summary::before { content: "–"; }
+.v-more > summary span { font-size: 12px; font-weight: 500; color: var(--muted); }
+.v-more > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.v-more-body { padding: 0 22px 20px; display: grid; gap: 14px; }
+.v-more .v-card { box-shadow: none; padding: 0; border: 0; }
+.v-more.is-inline { border: 0; background: none; margin-top: 8px; }
+.v-more.is-inline > summary { padding: 10px 0; font-size: 13px; color: var(--muted); }
+.v-more.is-inline .v-more-body { padding: 0; }
+
+.v-tiles.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.v-tile.is-unknown { background: var(--amber-soft); border-color: var(--amber-line); }
+.v-tile.is-unknown b, .v-tile.is-unknown small { color: var(--amber); }
+.v-boundary-line, .v-locked-line {
+  margin: 0; display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-2);
+  padding: 12px 16px; border-radius: var(--radius-md); background: var(--primary-soft); border: 1px solid var(--primary-line);
+}
+.v-boundary-line .icon, .v-locked-line .icon { width: 16px; height: 16px; color: var(--primary); flex: none; }
+.v-link-line { text-decoration: none; }
+.v-link-line:hover { border-color: var(--primary); }
+.v-link-line .icon:last-child { margin-inline-start: auto; }
+@media (max-width: 900px) { .v-tiles.is-three { grid-template-columns: 1fr 1fr; } }
+.kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .kpi-strip { grid-template-columns: 1fr; } }

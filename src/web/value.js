@@ -85,45 +85,41 @@ export async function rightsPage() {
   const t = data.totals;
   const share = t.households ? t.notReceiving / t.households : 0;
   const perHousehold = t.notReceiving ? t.unclaimedAnnual / t.households : 0;
+  const reservist = data.grounds.find((g) => !g.connected);
   return `
     <div class="view value-view">
       <header class="page-head">
         <div>
-          <p class="eyebrow">מיצוי זכויות · יוזמה של העירייה</p>
-          <h1>מי זכאי להנחה בארנונה ולא מקבל אותה</h1>
-          <p class="page-sub">המערכת מצליבה את מרשם התושבים עם נתוני גביית הארנונה לפי כלל מוצהר, ומציגה את מי שזכאי ועדיין לא מימש את זכותו. במקום לחכות שהתושב יבקש, העירייה פונה אליו.</p>
+          <p class="eyebrow">מיצוי זכויות</p>
+          <h1>זכאים להנחה בארנונה שלא מקבלים אותה</h1>
         </div>
-        <div class="head-figure"><b>${shekel(t.unclaimedAnnual)}</b><span>בשנה, בהנחות שלא מומשו</span></div>
+        <div class="head-figure"><b>${shekel(t.unclaimedAnnual)}</b><span>בשנה שלא מומשו</span></div>
       </header>
 
-      <section class="v-tiles" aria-label="תמונת מצב">
-        <div class="v-tile"><span>משקי בית שנבדקו</span><b>${num(t.households)}</b></div>
-        <div class="v-tile"><span>עומדים בתנאי הזכאות</span><b>${cell(t.eligible)}</b></div>
-        <div class="v-tile"><span>כבר מקבלים הנחה</span><b>${cell(t.receiving)}</b></div>
-        <div class="v-tile is-key"><span>זכאים ולא מקבלים</span><b>${cell(t.notReceiving)}</b><small>${t.outreachSent ? `${num(t.outreachSent)} כבר קיבלו פנייה מהעירייה` : 'עדיין לא נשלחה פנייה'}</small></div>
-      </section>
-
-      <section class="v-card">
-        <div class="section-head"><h2>לפי עילת זכאות</h2><span class="section-count">${esc(data.rule.name_he)} · גרסה ${num(data.rule.version)}</span></div>
-        <div class="v-grounds">
-          ${data.grounds.map((g) => groundCard(g, data)).join('')}
-        </div>
-        <p class="v-rule-line">${icon('doc')} ${esc(data.rule.citation)} · בעל הכלל: ${esc(data.rule.owner)} · <span class="v-demo-flag">${esc(data.rule.status_he)}</span></p>
+      <section class="v-tiles is-three" aria-label="תמונת מצב">
+        <div class="v-tile is-key"><span>זכאים ולא מקבלים</span><b>${cell(t.notReceiving)}</b><small>${t.outreachSent ? `${num(t.outreachSent)} קיבלו פנייה` : 'טרם נשלחה פנייה'}</small></div>
+        <div class="v-tile"><span>כבר מקבלים</span><b>${cell(t.receiving)}</b></div>
+        ${reservist ? `<div class="v-tile is-unknown"><span>לא נבדקו: ${esc(reservist.labelHe)}</span><b>${num(reservist.unchecked)}</b><small>אין מקור מחובר</small></div>` : ''}
       </section>
 
       ${data.access.canSeeNames ? worklist(data) : aggregateNotice(data)}
 
-      ${boundaryPanel(data)}
+      <p class="v-boundary-line">${icon('shield')} <b>${num(data.boundary.rowsSentToModel)} רשומות תושבים נשלחו למודל AI.</b> החישוב רץ בתוך המערכת, לפי כלל מוצהר.</p>
 
-      <section class="v-card v-quiet">
-        <h2>המספרים שעליהם החישוב נשען</h2>
-        <ul class="v-params">
-          <li><b>${shekel(data.params.tariffPerSqm.value)} למ״ר בשנה</b> — ${esc(data.params.tariffPerSqm.reason)} <span>בעלים: ${esc(data.params.tariffPerSqm.owner)}</span></li>
-          ${data.rule.grounds.filter((g) => g.connected).map((g) => `<li><b>${Math.round(g.rate * 100)}%</b> — שיעור ההנחה בעילה "${esc(g.label_he)}". <span>שיעור להדגמה</span></li>`).join('')}
-          <li><b>פחות מ־${num(data.suppression.minCellSize)}</b> — מספר קטן מזה מוסתר ממי שאינו מטפל בבקשות הנחה. <span>בעלים: ${esc(data.suppression.owner)}</span></li>
-        </ul>
-        <p class="v-projection">${icon('info')} בנתוני ההדגמה: ${num(t.notReceiving)} מתוך ${num(t.households)} משקי בית (${Math.round(share * 100)}%). באותו שיעור, בעיר של 10,000 משקי בית היו כ־${num(Math.round(share * 10000))} משקי בית וכ־${shekel(Math.round(perHousehold * 10000))} בשנה. זו הכפלה פשוטה של המדגם, לא תחזית.</p>
-      </section>
+      <details class="v-more">
+        <summary>איך זה חושב <span>${esc(data.rule.name_he)} · ${num(data.grounds.length)} עילות · ${num(t.households)} משקי בית נבדקו</span></summary>
+        <div class="v-more-body">
+          <div class="v-grounds">${data.grounds.map((g) => groundCard(g, data)).join('')}</div>
+          <p class="v-rule-line">${icon('doc')} ${esc(data.rule.citation)} · בעל הכלל: ${esc(data.rule.owner)} · <span class="v-demo-flag">${esc(data.rule.status_he)}</span></p>
+          ${boundaryPanel(data)}
+          <ul class="v-params">
+            <li><b>${shekel(data.params.tariffPerSqm.value)} למ״ר בשנה</b> — ${esc(data.params.tariffPerSqm.reason)} <span>בעלים: ${esc(data.params.tariffPerSqm.owner)}</span></li>
+            ${data.rule.grounds.filter((g) => g.connected).map((g) => `<li><b>${Math.round(g.rate * 100)}%</b> — שיעור ההנחה בעילה "${esc(g.label_he)}". <span>שיעור להדגמה</span></li>`).join('')}
+            <li><b>פחות מ־${num(data.suppression.minCellSize)}</b> — מספר קטן מזה מוסתר ממי שאינו מטפל בבקשות הנחה. <span>בעלים: ${esc(data.suppression.owner)}</span></li>
+          </ul>
+          <p class="v-projection">${icon('info')} בנתוני ההדגמה ${Math.round(share * 100)}% ממשקי הבית זכאים ולא מקבלים. בעיר של 10,000 משקי בית זה כ־${num(Math.round(share * 10000))} משקי בית וכ־${shekel(Math.round(perHousehold * 10000))} בשנה. הכפלה של המדגם, לא תחזית.</p>
+        </div>
+      </details>
     </div>`;
 }
 
@@ -152,7 +148,7 @@ function worklist(data) {
     <section class="v-card">
       <div class="section-head">
         <h2>תושבים שכדאי לפנות אליהם</h2>
-        <span class="section-count">${icon('eye')} ${esc(data.access.whyHe)}</span>
+        <span class="section-count">${icon('eye')} גלוי לתפקיד שלך</span>
       </div>
       <div class="v-list" role="list">
         ${data.worklist.map((h) => worklistRow(h)).join('')}
@@ -168,11 +164,11 @@ function worklistRow(h) {
       <div class="v-avatar" aria-hidden="true">${esc(initials(best.name))}</div>
       <div class="v-row-main">
         <h3>${esc(best.name)} <span class="v-row-sub">${esc(h.address)}</span></h3>
-        <p>${chip(best.groundHe, { tone: 'ok' })} ${h.qualifiers.length > 1 ? `<span class="v-row-sub">ועוד ${num(h.qualifiers.length - 1)} במשק הבית</span>` : ''}</p>
-        <p class="v-evidence">${best.evidence.map((e) => `<span class="evidence-chip" title="${esc(`${e.table}.${e.column}`)}">${esc(e.sourceHe)} · ${ltr(e.row)} · ${esc(e.columnHe)}: ${/^\d{4}-\d{2}-\d{2}$/.test(e.value) ? esc(shortDate(e.value)) : esc(e.value)}</span>`).join('')}<span class="evidence-chip">גביית ארנונה · לא רשומה הנחה</span></p>
+        <p>${chip(best.groundHe, { tone: 'ok' })} ${h.qualifiers.length > 1 ? `<span class="v-row-sub">+${num(h.qualifiers.length - 1)} במשק הבית</span>` : ''}</p>
+        <p class="v-evidence">${best.evidence.slice(0, 1).map((e) => `<span class="evidence-chip" title="${esc(`${e.table}.${e.column}`)}">${esc(e.sourceHe)} · ${ltr(e.row)} · ${esc(e.columnHe)}: ${/^\d{4}-\d{2}-\d{2}$/.test(e.value) ? esc(shortDate(e.value)) : esc(e.value)}</span>`).join('')}</p>
       </div>
       <div class="v-row-figures">
-        <b>${shekel(h.unclaimedAnnual)}</b><span>בשנה, מתוך חיוב של ${shekel(h.annualArnona)}</span>
+        <b>${shekel(h.unclaimedAnnual)}</b><span>בשנה</span>
       </div>
       <div class="v-row-action">
         ${
@@ -185,21 +181,14 @@ function worklistRow(h) {
 }
 
 function aggregateNotice(data) {
-  return `
-    <section class="v-card v-locked-list">
-      ${icon('lock')}
-      <div>
-        <h2>השמות והכתובות לא מוצגים לך</h2>
-        <p>${esc(data.access.whyHe)} כאן מוצגים מספרים בלבד, ומספר קטן מ־${num(data.suppression.minCellSize)} מוסתר כדי שלא ניתן יהיה לזהות משק בית.</p>
-      </div>
-    </section>`;
+  return `<p class="v-locked-line">${icon('lock')} השמות גלויים רק למי שמטפל בבקשות הנחה. מספר קטן מ־${num(data.suppression.minCellSize)} מוסתר.</p>`;
 }
 
 function boundaryPanel(data) {
   const b = data.boundary;
   return `
     <section class="v-card v-boundary" aria-labelledby="v-boundary-title">
-      <div class="section-head"><h2 id="v-boundary-title">גבול המידע: מה ראה מודל ה־AI</h2><span class="section-count">${icon('shield')} נבדק בכל חישוב</span></div>
+      <div class="section-head"><h2 id="v-boundary-title">גבול המידע: מה ראה מודל ה־AI</h2></div>
       <div class="v-boundary-grid">
         <div>
           <h3>מנוע הכללים (בתוך המערכת)</h3>
@@ -271,13 +260,15 @@ export async function meetingsPage() {
   const c = data.counts;
   const canAct = ctx.kind === 'head';
   const recalled = data.recalled.map((id) => data.decisions.find((d) => d.id === id)).filter(Boolean);
+  // Each decision appears once: alerts first, then the rest of the open list.
+  const alerted = new Set(data.alerts.map((d) => d.id));
+  const showMine = data.mine.length && ctx.kind !== 'head';
   return `
     <div class="view value-view">
       <header class="page-head">
         <div>
           <p class="eyebrow">זיכרון ארגוני · מהישיבה למשימות</p>
           <h1>מה הוחלט, מי אחראי, ומה נתקע</h1>
-          <p class="page-sub">המערכת קוראת את סיכומי ישיבות ההנהלה, מזהה החלטות, אחראים ומועדים, ובודקת מול הישיבות הבאות מה בוצע. משימות נוצרות רק כשאדם מאשר.</p>
         </div>
         <div class="head-figure"><b>${num(c.open)}</b><span>החלטות פתוחות</span></div>
       </header>
@@ -301,14 +292,14 @@ export async function meetingsPage() {
       ${
         data.alerts.length
           ? `<section class="v-card v-alerts">
-              <div class="section-head"><h2>${icon('alert')} דורש תשומת לב</h2><span class="section-count">זוהה אוטומטית</span></div>
+              <div class="section-head"><h2>${icon('alert')} דורש תשומת לב</h2></div>
               ${data.alerts.map((d) => alertRow(d, data, canAct)).join('')}
             </section>`
           : ''
       }
 
       ${
-        data.mine.length
+        showMine
           ? `<section class="v-card">
               <div class="section-head"><h2>המשימות שלי מהישיבות</h2><span class="section-count">${num(data.mine.length)}</span></div>
               ${data.mine.map((d) => decisionRow(d, data)).join('')}
@@ -318,8 +309,8 @@ export async function meetingsPage() {
 
       <section class="v-card">
         <div class="section-head">
-          <h2>כל ההחלטות</h2>
-          <span class="section-count">${num(c.total)} החלטות · ${num(c.done)} בוצעו · ${num(c.overdue)} באיחור · ${num(c.noOwner)} ללא אחראי</span>
+          <h2>שאר ההחלטות</h2>
+          <span class="section-count">${num(c.open - alerted.size)} פתוחות נוספות</span>
         </div>
         ${data.meetings
           .slice()
@@ -327,16 +318,17 @@ export async function meetingsPage() {
           .map(
             (m) => `
           <h3 class="v-meeting-title">${icon('doc')} ${esc(m.title)} · ${esc(shortDate(m.date))} <button type="button" class="text-link" data-v-minutes="${esc(m.id)}">לסיכום המלא</button></h3>
-          ${data.decisions.filter((d) => d.meetingId === m.id).map((d) => decisionRow(d, data)).join('')}`,
+          ${data.decisions.filter((d) => d.meetingId === m.id && d.status !== 'done' && !alerted.has(d.id)).map((d) => decisionRow(d, data)).join('')}`,
           )
           .join('')}
+        ${c.done ? `<details class="v-more is-inline"><summary>בוצעו <span>${num(c.done)}</span></summary><div class="v-more-body">${data.decisions.filter((d) => d.status === 'done').map((d) => decisionRow(d, data)).join('')}</div></details>` : ''}
         ${
           canAct
             ? `<div class="v-tasks-bar">
-                <p>${c.readyForTasks ? `אפשר להפוך ${num(c.readyForTasks)} החלטות פתוחות שיש להן אחראי למשימות, עם תזכורת שלושה ימים לפני המועד.` : 'כל ההחלטות שיש להן אחראי כבר הפכו למשימות.'}${c.noOwner ? ` ${num(c.noOwner)} החלטות עדיין ממתינות לאחראי.` : ''}</p>
+                <p>${c.readyForTasks ? `${num(c.readyForTasks)} החלטות מוכנות להפוך למשימות עם תזכורת.` : 'כל ההחלטות עם אחראי כבר משימות.'}</p>
                 <button class="btn" type="button" data-v-tasks ${c.readyForTasks ? '' : 'disabled'}>${icon('check')} יצירת משימות ותזכורות</button>
               </div>`
-            : `<p class="v-tasks-note">${icon('info')} מנהלת המחלקה יוצרת את המשימות, וכל אחראי רואה כאן את המשימות שלו.</p>`
+            : ''
         }
       </section>
     </div>`;

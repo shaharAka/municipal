@@ -167,6 +167,15 @@ opens the facts and the evidence, and "show in source" deep-links back.
     SharePoint frames.
   - A city theme is one token block.
   - Every text pair meets WCAG AA.
+- **Less than what it replaces.** A page may not carry more than the email or
+  spreadsheet it replaces:
+  - one title, one key number and one main action per page;
+  - no subtitles that restate the title, and no footnotes;
+  - no number shown twice on a page;
+  - lists show five rows.
+  - The reasoning (formula, assumption, data boundary, declared parameters)
+    sits in one "איך זה חושב" fold, closed by default and one click away.
+  - Budget: about 150 words on a home, about 250 on a working page.
 - **Type.** One Hebrew-first sans stack at four sizes (12 / 14 / 17 / 30–36).
   Numbers are tabular. Latin codes always sit in an isolated LTR span; Hebrew
   sentences never start with a number token that reorders.

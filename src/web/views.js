@@ -60,18 +60,14 @@ export function landingView({ viewers, answer, overview, approvals, rights = nul
     .map((viewer, index) => {
       const person = parsePerson(viewer.label);
       const kind = roleKind(viewer.label);
-      const tabs = navFor(kind).map((id) => NAV[id]?.label).filter(Boolean);
-      const clearance = Number(viewer.clearance ?? 0);
       return `
         <button class="role-row" type="button" data-role="${esc(viewer.id)}" data-role-label="${esc(viewer.label)}">
           <span class="avatar avatar-${index % 5}">${esc(initials(person.name))}</span>
           <span class="role-main">
             <strong>${esc(person.name)}</strong>
             <span class="role-title">${esc(person.title)}</span>
-            <span class="role-tabs">${esc(tabs.slice(0, 3).join(' · '))}</span>
           </span>
           <span class="role-side">
-            <span class="clearance">${clearance >= 3 ? 'סיווג 3' : 'סיווג 1'}</span>
             ${icon('arrowLeft')}
           </span>
         </button>`;
@@ -96,7 +92,6 @@ export function landingView({ viewers, answer, overview, approvals, rights = nul
           <i class="pv-seg-plain" style="width:${(Number(counts.notEligible ?? 0) / total) * 100}%"></i>
           <i class="pv-seg-warn" style="width:${(Number(counts.unknown ?? 0) / total) * 100}%"></i>
         </div>
-        <p class="preview-note">${icon('info')} ${num(counts.unknown)} משקי בית אינם ניתנים להכרעה — חסר נתון הכנסה. גם זה חלק מהתשובה.</p>
       </div>`
     : `<div class="preview preview-empty"><p>טוען דוגמה מהנתונים…</p></div>`;
 
@@ -116,11 +111,7 @@ export function landingView({ viewers, answer, overview, approvals, rights = nul
           </div>
           <p class="eyebrow">גרסת הדגמה · נתונים סינתטיים</p>
           <h1>העירייה יודעת.<br><span>עכשיו היא יכולה לפעול.</span></h1>
-          <p class="landing-lead">
-            המערכת מתחברת למערכות הקיימות, לומדת איך המחלקה עובדת בפועל, ומציגה את מה שדורש פעולה:
-            תושבים שזכאים להטבה ולא מקבלים אותה, החלטות שנתקעו, ושלבים שבהם תיקים מחכים.
-            כל מספר מגיע עם הכלל והמקור, וכל פעולה מחכה לאישור של אדם.
-          </p>
+          <p class="landing-lead">מה דורש פעולה במחלקה, עם המקור לכל מספר ואישור של אדם לכל פעולה.</p>
           ${preview}
           <ul class="landing-findings" aria-label="מה המערכת מצאה">
             ${rights ? `<li><b>${num(rights.totals.unclaimedAnnual)} ₪</b><span>בשנה בהנחות ארנונה שלא מומשו</span><em>${rights.totals.notReceiving === null ? 'משקי בית זכאים שלא מקבלים' : `${num(rights.totals.notReceiving)} משקי בית זכאים ולא מקבלים`}</em></li>` : ''}
@@ -133,17 +124,14 @@ export function landingView({ viewers, answer, overview, approvals, rights = nul
           <div class="who-head">
             <p class="eyebrow">כניסה למערכת</p>
             <h2 id="who-title">מי נכנס עכשיו?</h2>
-            <p>זהות אמיתית מהספרייה הארגונית. כל תפקיד רואה את מה שהוא צריך להחליט — ולא את כל המערכת.</p>
           </div>
           <div class="role-list" role="list">${roles}</div>
           <div class="who-foot">
             <span>${pending} החלטות ממתינות במחלקה כרגע</span>
-            <span>${icon('lock')} גישה לפי הרשאות המקור</span>
           </div>
         </section>
       </div>
       <footer class="landing-foot">
-        <span>${icon('lock')} קריאה בלבד מהמערכות · הרשאות המקור נשמרות</span>
         <span>נכון ל־${shortDate(overview?.organization?.capturedAt)} · גרסת הדגמה</span>
       </footer>
     </div>`;
@@ -177,23 +165,12 @@ export function homeView({ viewer, kind, overview, answer, org, process, approva
   const focus = focusItems({ kind, approvals, process, gap, openInterviews, pending });
   const viewerRef = viewer?.id ? `mun:person:${viewer.id}` : '';
   const mine = viewerRef ? (org?.responsibilities ?? []).filter((r) => r.personRef === viewerRef) : [];
-  const headline =
-    ({
-      head: 'המחלקה במבט אחד, וההחלטות שמחכות לך.',
-      clerk: 'התיקים שלך, וההחלטות שדורשות אותך.',
-      field: 'הביקורות שלך והמערכות שבהן אתה עובד.',
-      rule: 'השאלות וההחלטות על כלל הזכאות.',
-      steward: 'שינויי המודל והכיסוי של הנתונים.',
-      secretary: 'המשימות והמסמכים שמחכים לך.',
-    })[kind] ?? 'מה מחכה לך היום.';
-
   return `
     <div class="view home-view">
       <header class="page-head">
         <div>
           <p class="eyebrow">${heDate(overview?.organization?.capturedAt)} · נתוני הדגמה</p>
           <h1>שלום, ${esc(person.name.split(' ')[0])}</h1>
-          <p class="page-sub">${esc(headline)}</p>
         </div>
       </header>
 
@@ -207,12 +184,10 @@ export function homeView({ viewer, kind, overview, answer, org, process, approva
         </section>
         <aside class="rail">
           ${mine.length ? personalCard(mine) : ''}
-          ${navFor(kind).includes('sources') ? sourcesCard(connectors, navFor(kind).includes('sources')) : ''}
           ${decisionsCard(overview?.decisions ?? [])}
         </aside>
       </div>
 
-      <p class="data-note">${icon('shield')} כל מספר במסך מגיע מהנתונים, עם הכלל והמקור. ההחלטות נשמרות על שם האדם שאישר אותן.</p>
     </div>`;
 }
 
@@ -241,27 +216,14 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
           <div>
             <p class="eyebrow">המחלקה במבט אחד</p>
             <h2>${num(open)} תיקים פתוחים · ${num(overdue)} חורגים מהיעד</h2>
-            <p>הזמן נמדד מיומן התיקים: משך חציוני של ${num(median)} ימים לתיק, ומתוכם ${num(bottleneckDays)} ימים בצוואר הבקבוק.</p>
           </div>
           <button class="btn btn-quiet btn-small" type="button" data-open-palette>${icon('search')} שאלו שאלה</button>
         </header>
-        <div class="role-metrics">
-          <div><b>${num(open)}</b><span>תיקים פתוחים</span></div>
-          <div class="is-warn"><b>${num(overdue)}</b><span>חורגים מיעד של ${num(cases?.slaDays ?? 30)} ימים</span></div>
-          <div><b>${num(median)}</b><span>ימים, משך חציוני לתיק</span></div>
-          <div><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקבוק</span></div>
-        </div>
-        <div class="role-lower">
-          <div class="stage-block">
-            <h3>תיקים פתוחים לפי שלב</h3>
-            ${(cases?.stages ?? []).map((stage) => `<div class="stage-row"><span>${finals.has(stage.activity) ? `${esc(stage.label)} · השלב האחרון, התיק לא נסגר` : esc(stage.label)}</span><div class="bar"><i style="width:${Math.round((Number(stage.count) / Math.max(1, open)) * 100)}%"></i></div><b>${num(stage.count)}</b></div>`).join('') || '<p class="muted">אין תיקים פתוחים.</p>'}
-          </div>
+        <div class="role-lower is-single">
           <div class="findings-block">
-            <h3>מה גילינו</h3>
-            ${finalOpen ? `<div class="finding-row"><span class="finding-num">${num(finalOpen)}</span><div><strong>תיקים שסיימו את כל השלבים ולא נסגרו</strong><p>השלב האחרון ביומן בוצע, אבל התיק עדיין פתוח: ${num(oldestFinal)} ימים בתיק הוותיק ביותר.</p></div></div>` : ''}
-            <a class="finding-row" href="#/insights"><span class="finding-num">${num(bottleneckDays)}</span><div><strong>${esc(bottleneck?.labels ?? '')} הוא צוואר הבקבוק</strong><p>${num(share)}% מזמן התיק. ${num(bottleneck?.occurrences ?? 0)} תיקים נמדדו.</p></div></a>
-            <div class="finding-row"><span class="finding-num">${num(gapCount)}</span><div><strong>משקי בית בלי נתון הכנסה</strong><p>לא ניתן להכריע בזכאות. השאלה נשלחת מהרכזת אל משה טל, ובעל הכלל מכריע.</p></div></div>
-            <a class="finding-row" href="#/insights"><span class="finding-num">${num(openResp)}</span><div><strong>אחריויות שזוהו מהעבודה</strong><p>${num(confirmedResp)} אושרו עדיין. האחריות מוצגת לאדם עצמו, לא למנהל.</p></div></a>
+            ${finalOpen ? `<div class="finding-row"><span class="finding-num">${num(finalOpen)}</span><div><strong>תיקים שסיימו את כל השלבים ולא נסגרו</strong><p>הוותיק פתוח ${num(oldestFinal)} ימים.</p></div></div>` : ''}
+            <a class="finding-row" href="#/insights"><span class="finding-num">${num(bottleneckDays)}</span><div><strong>${esc(bottleneck?.labels ?? '')} הוא צוואר הבקבוק</strong><p>${num(share)}% מזמן הטיפול בתיק.</p></div></a>
+            <div class="finding-row"><span class="finding-num">${num(gapCount)}</span><div><strong>משקי בית בלי נתון הכנסה</strong><p>לא ניתן להכריע בזכאות שלהם.</p></div></div>
           </div>
         </div>
       </section>`;
@@ -277,7 +239,6 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
           <div>
             <p class="eyebrow">התור שלך</p>
             <h2>${num(myCases.length)} תיקים פתוחים · ${unclosed ? `${num(unclosed)} סיימו את כל השלבים ולא נסגרו` : `${num(overdue)} חורגים מהיעד`}</h2>
-            <p>${unclosed ? 'השלב האחרון ביומן בוצע, אבל התיק לא נסגר. סגירה מסודרת תוציא אותם מהתור ומספירת החריגים.' : 'לפי השלב האחרון ביומן התיק. הזמן נמדד מתאריך פתיחת התיק.'}</p>
           </div>
           <a class="text-link" href="#/approvals">להחלטות שלי ${icon('arrowLeft')}</a>
         </header>
@@ -295,7 +256,6 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
                 .join('')}${myCases.length > 5 ? `<p class="rail-note">ועוד ${num(myCases.length - 5)} תיקים ב<a href="#/insights">תמונת המחלקה</a>.</p>` : ''}</div>`
             : '<p class="muted">אין תיקים פתוחים בתור שלך כרגע.</p>'
         }
-        <div class="role-block-foot">${icon('info')} ${num(overdue)} תיקים חורגים מיעד של ${num(cases?.slaDays ?? 30)} ימים. ${icon('clock')} הזמן נמדד מתאריך פתיחת התיק.</div>
       </section>`;
   }
 
@@ -313,14 +273,12 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
           <div>
             <p class="eyebrow">העבודה שלך</p>
             <h2>${headline}</h2>
-            <p>${food ? 'הביקורות בתיקי רישיון עסק מגיעות מיומן התיק, וההיסטוריה נספרת רק כשהופעת בה כפעיל.' : 'המקור אינו מקצה ביקורות תברואה לאדם, ולכן אינן מיוחסות אליך. זו מגבלה של הנתונים, לא של המסך.'}</p>
           </div>
           <a class="text-link" href="#/insights">לתמונת התהליך ${icon('arrowLeft')}</a>
         </header>
         <div class="role-metrics">
           <div><b>${num(done)}</b><span>${food ? 'ביקורות מזון שביצעת' : 'ביקורות תברואה שביצעת'}</span></div>
           <div><b>${num(openInspections.length)}</b><span>ביקורות פתוחות</span></div>
-          <div><b>${num(cases?.open ?? 0)}</b><span>תיקים פתוחים במחלקה</span></div>
         </div>
         ${
           openInspections.length
@@ -330,9 +288,8 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
                   (entry) => `<button class="case-row" type="button" data-record="${esc(entry.ref)}"><span class="case-row-main"><strong>${esc(entry.subjectName)}</strong><span>${esc(entry.stageLabel)} · ${esc(entry.serviceLabel)}</span></span><span class="case-row-meta">${num(entry.ageDays)} ימים</span>${icon('arrowLeft')}</button>`,
                 )
                 .join('')}</div>`
-            : `<p class="muted">${food ? 'אין תיקי רישיון עסק פתוחים בשלב ביקורת כרגע.' : 'אין ביקורות פתוחות שמשויכות אליך, כי המקור לא מקצה אותן.'}</p>`
+            : `<p class="muted">${food ? 'אין ביקורת שממתינה לך.' : 'המקור לא משייך ביקורות תברואה לאדם.'}</p>`
         }
-        <div class="role-block-foot">${icon('info')} ${food ? 'ההיסטוריה האישית מחושבת מאירועי ביקורת בתיקי רישיון העסק. אין כאן שיבוץ עתידי, כי הוא לא קיים במקור.' : 'המקור הוא יומן התיקים; אין בו שדה של מפקח תברואה, ולכן המסך לא ממציא שיבוץ.'}</div>
       </section>`;
   }
 
@@ -346,7 +303,6 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
           <div>
             <p class="eyebrow">כלל הזכאות</p>
             <h2>${open === 1 ? 'שאלה אחת ממתינה ממך' : open ? `${num(open)} שאלות ממתינות ממך` : 'אין שאלות פתוחות'}</h2>
-            <p>${rule ? `${ltr(rule.code)} גרסה ${esc(rule.version)} · ${esc(rule.owner)} · ${esc(rule.citation)}` : 'כלל הזכאות נקרא מהקטלוג.'}</p>
           </div>
           ${open ? `<button class="btn btn-small" type="button" data-interview-open="${esc(openInterviews[0].ref)}">${icon('question')} ענה לשאלה</button>` : ''}
         </header>
@@ -355,7 +311,6 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
           <div><b>${num(open)}</b><span>שאלות פתוחות</span></div>
           <div><b>${num(approvals?.pending?.length ?? 0)}</b><span>החלטות שלך</span></div>
         </div>
-        <div class="role-block-foot">${icon('info')} ${open ? 'השאלות נשלחו אליך ממיכל; התשובות נרשמות על שמך. שאלת מדיניות נרשמת כהחלטת בעל הכלל.' : 'אין שאלה שממתינה לך. ההחלטות על הכלל מופיעות למטה.'}</div>
       </section>`;
   }
 
@@ -367,11 +322,9 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
           <div>
             <p class="eyebrow">המודל</p>
             <h2>${num(properties.length)} שינויי מודל ממתינים</h2>
-            <p>הוספות נכנסות כשכבת הרחבה של העיר. החבילות המשותפות לא נערכות.</p>
           </div>
           <a class="text-link" href="#/approvals">להחלטות ${icon('arrowLeft')}</a>
         </header>
-        <div class="role-block-foot">${icon('layers')} ${num(overview?.ontology?.pageTypes?.length ?? 0)} טיפוסים · ${num(overview?.graph?.pages ?? 0)} רשומות · ${num(overview?.graph?.facts ?? 0)} עובדות. ${num(mine.length)} אחריויות אישיות.</div>
       </section>`;
   }
 
@@ -380,10 +333,9 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
   return `
     <section class="role-block role-clerk">
       <header class="role-block-head">
-        <div><p class="eyebrow">המשימות שלך</p><h2>${num(open)} תיקים פתוחים במחלקה</h2><p>פניות, מסמכים ואישורים שמחכים לאדם. אין החלטות שמחכות לך כרגע.</p></div>
+        <div><p class="eyebrow">המחלקה</p><h2>${num(open)} תיקים פתוחים</h2></div>
         <a class="text-link" href="#/workspace">למערכות ${icon('arrowLeft')}</a>
       </header>
-      <div class="role-block-foot">${icon('info')} אפשר לפתוח את דואר העבודה ואת ספריית המסמכים, ולעקוב אחרי הפערים וההחלטות של המחלקה.</div>
     </section>`;
 }
 
@@ -391,16 +343,6 @@ function focusItems({ kind, approvals, process, gap, openInterviews, pending }) 
   const items = [];
 
   if (kind === 'field') {
-    items.push({
-      tone: 'blue',
-      icon: 'mail',
-      reason: 'המערכות שלך',
-      title: 'הדואר ומסמכי המחלקה',
-      why: 'הקריאה מתוך הכלים עצמם, עם תוויות הרגישות וההרשאה שלך — לקריאה בלבד.',
-      impact: 'M365',
-      cta: 'למערכות',
-      href: '#/workspace',
-    });
     const bottleneck = process?.model?.bottleneck;
     if (bottleneck) {
       items.push({
@@ -499,7 +441,6 @@ function focusList(items, name, showMore = false, totalPending = 0) {
             <div class="focus-copy">
               <p class="focus-reason">${esc(item.reason)}</p>
               <h3>${mixed(item.title)}</h3>
-              <p class="focus-why">${mixed(item.why)}</p>
             </div>
             <div class="focus-side">
               <span class="focus-impact">${esc(item.impact)}</span>
@@ -592,11 +533,7 @@ function sourcesCard(connectors, canManage = true) {
 
 function decisionsCard(decisions) {
   if (!decisions.length) {
-    return `
-      <section class="rail-card">
-        <header class="rail-head"><h3>החלטות אחרונות</h3></header>
-        <p class="rail-note">עדיין אין החלטות. הן יופיעו כאן עם שם המאשר והזמן.</p>
-      </section>`;
+    return '';
   }
   return `
     <section class="rail-card">
@@ -785,10 +722,6 @@ export function approvalsView({ approvals, filter = 'all', pick = '', showOrg = 
   const visibleGroups = filter === 'all' ? groups : groups.filter(filterMatches);
   const visibleItems = visibleGroups.flatMap((group) => group.items);
   const selected = visibleItems.find((item) => item.id === pick) ?? visibleItems[0] ?? null;
-  const days = (counts.automations ? pending.filter((p) => p.kind === 'automation') : []).reduce(
-    (sum, item) => sum + Number(item.annualDaysSaved ?? 0),
-    0,
-  );
   const filters = [
     { id: 'all', label: 'הכל', count: counts.total ?? 0 },
     { id: 'automations', label: 'אוטומציות', count: counts.automations ?? 0 },
@@ -802,16 +735,9 @@ export function approvalsView({ approvals, filter = 'all', pick = '', showOrg = 
         <div>
           <p class="eyebrow">מרכז ההכרעות</p>
           <h1>מה מחכה להחלטה שלך</h1>
-          <p class="page-sub">כל פריט עם הסיבה שלו, הראיה שלו ופעולה אחת. שום דבר לא משתנה עד שמישהו מאשר.</p>
         </div>
         <div class="head-figure"><b>${num(counts.total)}</b><span>פריטים פתוחים</span></div>
       </header>
-
-      <div class="decision-summary">
-        ${approvalSummary(approvals, days)
-          .map((entry) => `<div><b>${entry.value}</b><span>${esc(entry.label)}</span></div>`)
-          .join('')}
-      </div>
 
       ${
         pending.length
@@ -849,44 +775,6 @@ export function approvalsView({ approvals, filter = 'all', pick = '', showOrg = 
           : emptyBox('check', 'אין החלטות פתוחות', 'כל מה שהמערכת הציעה טופל. פריטים חדשים יופיעו כאן אחרי מחקר או שינוי בנתונים.')
       }
     </div>`;
-}
-
-function approvalSummary(approvals, days) {
-  const counts = approvals.counts ?? {};
-  const viewer = approvals.viewerKind ?? 'head';
-  if (viewer === 'head') {
-    return [
-      { value: num(days), label: 'ימי המתנה של תיקים בשנה בהצעות האוטומציה' },
-      { value: num(counts.automations ?? 0), label: counts.automations === 1 ? 'אוטומציה פתוחה' : 'אוטומציות פתוחות' },
-      { value: num(counts.suggestions ?? 0), label: counts.suggestions === 1 ? 'אישור תהליך או טופס' : 'אישורי תהליך או טופס' },
-    ];
-  }
-  if (viewer === 'steward') {
-    return [
-      { value: num(counts.properties ?? 0), label: counts.properties === 1 ? 'מאפיין מוצע' : 'מאפיינים מוצעים' },
-      { value: num(counts.total ?? 0), label: counts.total === 1 ? 'פריט פתוח' : 'פריטים פתוחים' },
-      { value: '0', label: 'עריכות בחבילות המשותפות' },
-    ];
-  }
-  if (viewer === 'rule') {
-    return [
-      { value: num(counts.gaps ?? 0), label: counts.gaps === 1 ? 'פער פתוח' : 'פערים פתוחים' },
-      { value: num(counts.suggestions ?? 0), label: counts.suggestions === 1 ? 'הצעת מחקר' : 'הצעות מחקר' },
-      { value: num(counts.rules ?? 0), label: 'שינויי כלל פתוחים' },
-    ];
-  }
-  if (viewer === 'clerk') {
-    return [
-      { value: num(counts.gaps ?? 0), label: counts.gaps === 1 ? 'פער שחוסם החלטה' : 'פערים שחוסמים החלטה' },
-      { value: num(counts.suggestions ?? 0), label: counts.suggestions === 1 ? 'הצעת מחקר' : 'הצעות מחקר' },
-      { value: num(counts.total ?? 0), label: counts.total === 1 ? 'פריט פתוח' : 'פריטים פתוחים' },
-    ];
-  }
-  return [
-    { value: num(counts.total ?? 0), label: counts.total === 1 ? 'פריט פתוח' : 'פריטים פתוחים' },
-    { value: '0', label: 'אוטומציות פתוחות' },
-    { value: '0', label: 'שינויי מודל פתוחים' },
-  ];
 }
 
 function queueRow(item, selected) {
@@ -962,13 +850,16 @@ function approvalDetail(item, viewerKind = 'head') {
       <div><span>הקשר</span><strong>${esc(item.metaHe ?? '')}</strong></div>
       ${item.field ? `<div><span>מאפיין</span><strong>${ltr(item.field)}</strong></div>` : ''}
     </div>
+    ${item.whatHappensHe ? `<div class="execution-note">${icon('info')} ${mixed(item.whatHappensHe)}</div>` : ''}
+    <details class="v-more is-inline detail-more">
+      <summary>איך חושב המספר <span>הנוסחה, ההנחה וההתפלגות</span></summary>
+      <div class="v-more-body">
     ${
       item.formulaHe
         ? `<div class="formula-box"><h3>איך חושב המספר</h3><p>${mixed(item.basisHe ?? '')}</p><p>${mixed(item.formulaHe)}</p><p class="formula-assumption">${mixed(item.assumptionHe ?? '')}</p></div>`
         : ''
     }
     ${item.riskReasonHe ? `<p class="risk-reason">${icon('info')} ${mixed(item.riskReasonHe)}</p>` : ''}
-    ${item.whatHappensHe ? `<div class="execution-note">${icon('alert')} ${mixed(item.whatHappensHe)}</div>` : ''}
     ${item.waitSamples?.length >= 3 ? waitDistribution(item) : ''}
     ${
       item.evidenceHe?.length
@@ -976,6 +867,8 @@ function approvalDetail(item, viewerKind = 'head') {
         : ''
     }
     <div class="detail-source">${icon('shield')} ${item.kind === 'gap' ? 'פער נסגר על ידי אדם, לא באישור גורפ' : item.kind === 'rule' ? 'ההחלטה נשארת אצל בעל הכלל' : 'ההחלטה תירשם על שמך, עם הזמן והמקור'}</div>
+      </div>
+    </details>
     <footer class="detail-foot">
       ${
         item.kind === 'gap'
@@ -1011,7 +904,6 @@ export function sourcesView({ connectors, showInsights = true, kind = 'head' }) 
         <div>
           <p class="eyebrow">מקורות המידע</p>
           <h1>מאיפה המערכת יודעת</h1>
-          <p class="page-sub">כל מקור שמחובר מפעיל מחקר משלו. המחקר מציע — אדם מאשר. שום דבר לא נכתב חזרה למערכת המקור.</p>
         </div>
         <div class="head-figure"><b>${num(connected)}/${num(sources.length)}</b><span>מקורות מחוברים</span></div>
       </header>
@@ -1153,7 +1045,6 @@ export function insightsView({ overview, org, process, service, proposals, canAp
         <div>
           <p class="eyebrow">תמונת המחלקה</p>
           <h1>איך באמת עובדת המחלקה</h1>
-          <p class="page-sub">התהליך זוהה מיומן התיקים, לא נכתב ביד. הזמן נמדד בין אירוע לאירוע — לא הוערך.</p>
         </div>
         <div class="head-status">${icon('flow')} ${num(model?.caseCount)} תיקים · ${num(model?.windowDays)} ימי תצפית</div>
       </header>
@@ -1166,7 +1057,6 @@ export function insightsView({ overview, org, process, service, proposals, canAp
         <div class="kpi"><b>${num(model?.medianTotalDays)}</b><span>ימים, משך חציוני לתיק</span><small>90% מהתיקים עד ${num(model?.p90TotalDays)} ימים</small></div>
         <div class="kpi"><b>${num(variants.length)}</b><span>מסלולים שונים</span><small>בתצפית הזו כל תיק שייך לאחד מהם</small></div>
         <div class="kpi kpi-warn"><b>${num(bottleneck?.medianWaitDays)}</b><span>ימים בצוואר הבקבוק</span><small>${esc(bottleneck?.labels ?? '')} · ${pct(Number(bottleneck?.medianWaitDays ?? 0) / Math.max(1, Number(model?.medianTotalDays ?? 1)))} מהזמן</small></div>
-        <div class="kpi"><b>${num(pendingProposals.length)}</b><span>אוטומציות מוצעות</span><small>מבוססות על השלבים שנמדדו</small></div>
       </div>
 
       <section class="panel flow-panel">
@@ -1216,10 +1106,10 @@ export function insightsView({ overview, org, process, service, proposals, canAp
           </div>
         </section>
         <section class="panel">
-          <div class="section-head"><div><h2>איפה מחכים</h2><p>חציון ההמתנה אחרי כל שלב</p></div></div>
+          <div class="section-head"><div><h2>איפה מחכים</h2><p>שלוש ההמתנות הארוכות</p></div></div>
           <div class="wait-list">
             ${steps
-              .slice(0, 6)
+              .slice(0, 3)
               .map(
                 (step) => `<div class="wait-row"><div class="wait-top"><strong>${esc(step.labels)}</strong><span>${num(step.medianWaitDays)} ימים</span></div><div class="bar bar-soft"><i style="width:${Math.round((Number(step.medianWaitDays) / maxWaits) * 100)}%"></i></div><span class="wait-role">${esc(step.dependsOnHe || step.role || '')} · ${num(step.occurrences)} מקרים</span></div>`,
               )
@@ -1228,28 +1118,11 @@ export function insightsView({ overview, org, process, service, proposals, canAp
         </section>
       </div>
 
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">המשך הטיפול</p><h2>${canApprove ? 'אוטומציות שממתינות לאישור' : 'אוטומציות מוצעות'}</h2><p>כל אחת נובעת מהמתנה מדודה, ומציגה את ההשפעה השנתית שלה.</p></div>${canApprove ? `<a class="text-link" href="#/approvals">לכל ההחלטות ${icon('arrowLeft')}</a>` : ''}</div>
-        <div class="proposal-grid">
-          ${pendingProposals
-            .map(
-              (p) => `
-            <article class="proposal-card">
-              <div class="proposal-top"><span class="kind-badge tone-green">${icon('flow')} אוטומציה</span><span class="risk risk-${esc(p.risk)}">סיכון ${esc(riskHe(p.risk))}</span></div>
-              <h3>${mixed(p.titleHe)}</h3>
-              <p>${mixed(p.rationaleHe)}</p>
-              <div class="proposal-impact"><b>${num(p.annualDaysSaved)}</b><span>ימי המתנה של תיקים בשנה</span><em>${num(p.expectedCasesPerYear)} מקרים</em></div>
-              <div class="evidence-row">${(p.evidenceHe ?? []).map((e) => `<span class="evidence-chip">${esc(e)}</span>`).join('')}</div>
-              ${p.formulaHe ? `<details class="proposal-formula"><summary>איך חושב המספר</summary><p>${mixed(p.basisHe ?? '')}</p><p>${mixed(p.formulaHe)}</p><p class="formula-assumption">${mixed(p.assumptionHe ?? '')}</p><p>${mixed(p.riskReasonHe ?? '')}</p></details>` : ''}
-              ${canApprove ? `<button class="btn btn-small" type="button" data-approve="automation" data-id="${esc(p.ref)}">אישור והפעלה</button>` : '<span class="pending-pill">ממתין לבעל התהליך</span>'}
-            </article>`,
-            )
-            .join('') || '<p class="muted">אין הצעות אוטומציה לשירות הזה.</p>'}
-        </div>
-      </section>
+      ${pendingProposals.length ? `<a class="v-boundary-line v-link-line" href="#/approvals">${icon('flow')} <b>${num(pendingProposals.length)} אוטומציות מוצעות לשלבים האלה</b> ממתינות במרכז ההכרעות ${icon('arrowLeft')}</a>` : ''}
 
-      <section class="panel">
-        <div class="section-head"><div><p class="eyebrow">הארגון</p><h2>מי מחזיק את העבודה</h2><p>${num(units.length)} יחידות · ${num(people.length)} עובדים · ${num(org?.responsibilities?.length)} אחריויות שזוהו מהעבודה</p></div></div>
+      <details class="v-more">
+        <summary>מי מחזיק את העבודה <span>${num(units.length)} יחידות · ${num(people.length)} עובדים</span></summary>
+        <div class="v-more-body">
         <div class="unit-grid">
           ${units
             .map(
@@ -1265,16 +1138,9 @@ export function insightsView({ overview, org, process, service, proposals, canAp
             )
             .join('')}
         </div>
-      </section>
+        </div>
+      </details>
 
-      <div class="model-strip">
-        <span>${icon('layers')} המודל</span>
-        <span><b>${num(overview?.graph?.pages)}</b> רשומות</span>
-        <span><b>${num(overview?.graph?.facts)}</b> עובדות</span>
-        <span><b>${num(overview?.graph?.evidence)}</b> ראיות</span>
-        <span><b>${num(overview?.ontology?.pageTypes?.length)}</b> טיפוסים</span>
-        <span class="model-note">כל עובדה נושאת מקור, מיקום וסטטוס</span>
-      </div>
     </div>`;
 }
 
@@ -1317,7 +1183,6 @@ export function workspaceView({ outlook, doclib, ws, kind }) {
         <div>
           <p class="eyebrow">הצגת המקור</p>
           <h1>המקור שמאחורי הנתונים</h1>
-          <p class="page-sub">לא מחליפים את Outlook או SharePoint — מציגים את המקור כדי לאמת מה נלמד, לפי ההרשאה שלך.</p>
         </div>
         <div class="head-status">${icon('lock')} תצוגת מקור · לקריאה בלבד</div>
       </header>

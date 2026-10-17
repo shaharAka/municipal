@@ -174,3 +174,33 @@ One test assertion moves with the business names: `'מאפייה השכונה'` 
   elsewhere in the POC, nothing is written back to billing, mail or calendars.
 - **Roles.** The nav adds `rights` for the head, secretary and treasury, and
   `meetings` for everyone except treasury.
+
+## Applied since: palette and simplification (18 Oct, 01:20–02:00)
+
+The patch above is applied. Two changes were made directly in the repo after
+it. They aren't in `value-pages.patch`.
+
+1. **Palette: civic signage.**
+   - Every hard-coded color in `home.css` moved onto tokens first. That step
+     was verified pixel for pixel: 0.000% change on all 18 screens.
+   - Then the token block was swapped. All 24 text pairs pass WCAG AA. The
+     old muted gray failed: 4.04–4.49 against its backgrounds.
+   - See `docs/UX.md` → Visual system.
+2. **Less text, one fold for the reasoning.** Words per page, before → after:
+
+   | Page | Before | After |
+   |---|---|---|
+   | Landing | 266 | 136 |
+   | Head's home | 370 | 170 |
+   | Rights (Hila) | 654 | 207 |
+   | Decisions | 362 | 225 |
+   | Department picture | 764 | 260 |
+   | Meetings | 455 | 348 |
+
+   The department picture went from 2,666px to 989px tall. Formulas,
+   assumptions, the data boundary and the org map now sit in a closed "איך זה
+   חושב" fold. Automations appear once, in the decision queue. A decision
+   appears once on the meetings page. The rules are in `docs/UX.md` → "Less
+   than what it replaces".
+
+The screenshots in `screens/` predate both changes.
