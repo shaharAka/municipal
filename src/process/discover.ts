@@ -30,6 +30,11 @@ export const PARAMS = {
     owner: 'דנה לוי, מנהלת תברואה ובריאות',
     reason: 'Share of the measured wait an automation is assumed to remove. An assumption, stated, not measured.',
   },
+  routingDaysSavedPerCase: {
+    value: 1.2,
+    owner: 'דנה לוי, מנהלת תברואה ובריאות',
+    reason: 'A routing decision is assumed to save 1.2 days of applicant waiting per new application. An assumption, stated, not measured.',
+  },
 } as const;
 
 export type StepStats = {
@@ -39,6 +44,10 @@ export type StepStats = {
   medianWaitDays: number;
   p90WaitDays: number;
   role: string;
+  /** What the wait depends on, not who to blame. */
+  dependsOnHe: string;
+  /** Every measured wait behind the median, rounded to a tenth of a day. */
+  waitSamples: number[];
   isRework: boolean;
 };
 
@@ -72,11 +81,25 @@ export type AutomationProposal = {
   kind: 'routing' | 'sla_reminder' | 'document_request' | 'standard_letter';
   title: string;
   rationale: string;
+  /** The same proposal in the language the department reads. */
+  titleHe: string;
+  rationaleHe: string;
+  evidenceHe: string[];
   step: string | null;
   expectedCasesPerYear: number;
   timeSavedDaysPerCase: number;
+  /** Applicant waiting days avoided per year — not staff workdays. */
   annualDaysSaved: number;
   risk: 'low' | 'medium' | 'high';
+  /** What the number rests on, in the department's language. */
+  basisHe: string;
+  formulaHe: string;
+  assumptionHe: string;
+  riskReasonHe: string;
+  waitSamples: number[];
+  waitMedian: number;
+  waitP90: number;
+  waitCount: number;
   evidence: string[];
 };
 
@@ -193,6 +216,8 @@ export function discoverProcess(graph: Graph, serviceCode: string, serviceName: 
         medianWaitDays: Math.round(median(waits) * 10) / 10,
         p90WaitDays: Math.round(percentile(waits, 90) * 10) / 10,
         role: actorTitle,
+        dependsOnHe: DEPENDS_ON_HE[activity] ?? 'זמן הטיפול בשלב',
+        waitSamples: waits.map((value) => Math.round(value * 10) / 10).slice(0, 160),
         isRework: (reworkCases.get(activity) ?? 0) / Math.max(1, caseCount) > PARAMS.reworkRateForLetter.value,
       };
     })
@@ -213,6 +238,20 @@ export function discoverProcess(graph: Graph, serviceCode: string, serviceName: 
     coverageOfTopVariants,
   };
 }
+
+const DEPENDS_ON_HE: Record<string, string> = {
+  APPLICATION_RECEIVED: 'הגשת הבקשה על ידי העסק',
+  DOCUMENTS_RECEIVED: 'בדיקת שלמות המסמכים',
+  DOCUMENTS_REQUESTED: 'הגשת המסמכים על ידי העסק',
+  INSPECTION_SCHEDULED: 'זמינות מפקחים ולוח הזמנים',
+  INSPECTION_DONE: 'ביקורת בשטח',
+  CORRECTIONS_REQUESTED: 'תיקון הליקויים על ידי העסק',
+  CORRECTIONS_RECEIVED: 'איסוף ואימות התיקונים',
+  REINSPECTION: 'ביקורת חוזרת בשטח',
+  APPROVED: 'החלטת האישור',
+  LICENCE_ISSUED: 'הפקת הרישיון',
+  FEE_CHARGED: 'חיוב האגרה',
+};
 
 const WAITING_STEPS = new Set(['DOCUMENTS_REQUESTED', 'INSPECTION_SCHEDULED', 'CORRECTIONS_REQUESTED']);
 
@@ -235,6 +274,10 @@ export function proposeAutomations(model: ProcessModel): AutomationProposal[] {
           : 'sla_reminder';
 
     const timeSaved = Math.round(step.medianWaitDays * PARAMS.assumedReduction.value * 10) / 10;
+    const sharePct = Math.round(shareOfTotal * 100);
+    const reductionPct = Math.round(PARAMS.assumedReduction.value * 100);
+    const expectedCases = Math.round(casesPerYear * (step.occurrences / Math.max(1, model.caseCount)));
+    const annualWaitingDays = Math.round(casesPerYear * timeSaved * (step.occurrences / Math.max(1, model.caseCount)));
     proposals.push({
       id: stableId('AP', model.serviceCode, step.activity),
       kind,
@@ -244,16 +287,41 @@ export function proposeAutomations(model: ProcessModel): AutomationProposal[] {
           : kind === 'standard_letter'
             ? 'Generate the correction letter from the inspection findings'
             : 'Remind the inspector before the inspection SLA is missed',
-      rationale: `${step.labels} waits a median of ${step.medianWaitDays} days after it is triggered (${step.occurrences} occurrences). It is ${Math.round(shareOfTotal * 100)}% of the ${model.medianTotalDays}-day median case duration.`,
+      rationale: `${step.labels} waits a median of ${step.medianWaitDays} days after it is triggered (${step.occurrences} occurrences). It is ${sharePct}% of the ${model.medianTotalDays}-day median case duration.`,
+      titleHe:
+        kind === 'document_request'
+          ? 'בקשה אוטומטית למסמכים החסרים, עם תזכורת אחת'
+          : kind === 'standard_letter'
+            ? 'הפקת מכתב התיקונים מתוך ממצאי הביקורת'
+            : 'תזכורת לרכזת הרישוי לפני חריגה מזמן שיבוץ הפיקוח',
+      rationaleHe: `${step.labels} ממתין חציון של ${step.medianWaitDays} ימים מרגע היצירה (${step.occurrences} מקרים). זה ${sharePct}% מתוך חציון של ${model.medianTotalDays} ימים לתיק.`,
+      evidenceHe: [
+        `${step.occurrences} אירועים מתוך ${model.caseCount} תיקים`,
+        `חציון המתנה ${step.medianWaitDays} ימים, p90 ${step.p90WaitDays} ימים`,
+        `הנחה מוצהרת: ${reductionPct}% מההמתנה מוסרת`,
+      ],
       step: step.activity,
-      expectedCasesPerYear: Math.round(casesPerYear * (step.occurrences / Math.max(1, model.caseCount))),
+      expectedCasesPerYear: expectedCases,
       timeSavedDaysPerCase: timeSaved,
-      annualDaysSaved: Math.round(casesPerYear * timeSaved * (step.occurrences / Math.max(1, model.caseCount))),
+      annualDaysSaved: annualWaitingDays,
       risk: kind === 'standard_letter' ? 'medium' : 'low',
+      basisHe: `${model.caseCount} תיקים בתצפית של ${model.windowDays} ימים ≈ ${casesPerYear} תיקים בשנה.`,
+      formulaHe: `${expectedCases} מקרים בשנה × ${timeSaved} ימי המתנה שנחסכים לתיק ≈ ${annualWaitingDays} ימי המתנה בשנה.`,
+      assumptionHe: `ההנחה: ${reductionPct}% מההמתנה מוסרת (בעל ההנחה: ${PARAMS.assumedReduction.owner}).`,
+      waitSamples: step.waitSamples,
+      waitMedian: step.medianWaitDays,
+      waitP90: step.p90WaitDays,
+      waitCount: step.occurrences,
+      riskReasonHe:
+        kind === 'standard_letter'
+          ? 'המכתב מנוסח אוטומטית מהממצאים; עורך אדם נדרש לפני שליחה.'
+          : kind === 'document_request'
+            ? 'הבקשה מנוסחת אוטומטית; אם המסמך כבר התקבל, יש לעצור את השליחה.'
+            : 'התזכורת אינה משנה החלטה; היא רק מתריעה לפני חריגה.',
       evidence: [
         `${step.occurrences} events across ${model.caseCount} cases`,
         `median wait ${step.medianWaitDays} days, p90 ${step.p90WaitDays} days`,
-        `measured assumption: ${Math.round(PARAMS.assumedReduction.value * 100)}% of the wait is removed`,
+        `measured assumption: ${reductionPct}% of the wait is removed`,
       ],
     });
   }
@@ -261,24 +329,100 @@ export function proposeAutomations(model: ProcessModel): AutomationProposal[] {
   const corrections = model.steps.find((s) => s.activity === 'CORRECTIONS_REQUESTED');
   const reworkShare = corrections && model.caseCount > 0 ? corrections.occurrences / model.caseCount : 0;
   if (reworkShare > PARAMS.reworkRateForLetter.value) {
+    const reworkPct = Math.round(reworkShare * 100);
+    const coverPct = Math.round(model.coverageOfTopVariants * 100);
+    const routingDays = PARAMS.routingDaysSavedPerCase.value;
+    const routingAnnual = Math.round(casesPerYear * routingDays);
     proposals.push({
       id: stableId('AP', model.serviceCode, 'ROUTING'),
       kind: 'routing',
       title: 'Route new applications to the inspector by zone and risk level',
-      rationale: `${Math.round(reworkShare * 100)}% of cases come back for corrections, and the first assignment is made by hand in ${model.variants[0]?.caseCount ?? 0} of the ${model.caseCount} cases in the dominant variant.`,
+      rationale: `${reworkPct}% of cases come back for corrections, and the first assignment is made by hand in ${model.variants[0]?.caseCount ?? 0} of the ${model.caseCount} cases in the dominant variant.`,
+      titleHe: 'שיוך בקשות חדשות למפקח לפי אזור ורמת סיכון',
+      rationaleHe: `${reworkPct}% מהתיקים חוזרים לתיקונים, והשיוך הראשון נעשה ידנית ב-${model.variants[0]?.caseCount ?? 0} מתוך ${model.caseCount} תיקים במסלול הדומיננטי.`,
+      evidenceHe: [
+        `${model.variants.length} מסלולים זוהו; שלושת המובילים מכסים ${coverPct}% מהתיקים`,
+        `${reworkPct}% מהתיקים חזרו לתיקונים`,
+      ],
       step: 'INSPECTION_SCHEDULED',
       expectedCasesPerYear: casesPerYear,
-      timeSavedDaysPerCase: 1.2,
-      annualDaysSaved: Math.round(casesPerYear * 1.2),
+      timeSavedDaysPerCase: routingDays,
+      annualDaysSaved: routingAnnual,
       risk: 'low',
+      basisHe: `${model.caseCount} תיקים בתצפית של ${model.windowDays} ימים ≈ ${casesPerYear} תיקים בשנה.`,
+      formulaHe: `${casesPerYear} מקרים בשנה × ${routingDays} ימי המתנה שנחסכים ≈ ${routingAnnual} ימי המתנה בשנה.`,
+      assumptionHe: `ההנחה: ${routingDays} ימי המתנה נחסכים לכל בקשה (בעל ההנחה: ${PARAMS.routingDaysSavedPerCase.owner}).`,
+      riskReasonHe: 'השיוך משפיע על עומס המפקחים; הוא מוצע לפי אזור ורמת סיכון, וניתן לבדיקה.',
+      waitSamples: model.steps.find((entry) => entry.activity === 'INSPECTION_SCHEDULED')?.waitSamples ?? [],
+      waitMedian: model.steps.find((entry) => entry.activity === 'INSPECTION_SCHEDULED')?.medianWaitDays ?? 0,
+      waitP90: model.steps.find((entry) => entry.activity === 'INSPECTION_SCHEDULED')?.p90WaitDays ?? 0,
+      waitCount: model.steps.find((entry) => entry.activity === 'INSPECTION_SCHEDULED')?.occurrences ?? 0,
       evidence: [
-        `${model.variants.length} variants discovered; the top three cover ${Math.round(model.coverageOfTopVariants * 100)}% of cases`,
-        `${Math.round(reworkShare * 100)}% of cases reworked`,
+        `${model.variants.length} variants discovered; the top three cover ${coverPct}% of cases`,
+        `${reworkPct}% of cases reworked`,
       ],
     });
   }
 
   return proposals.sort((a, b) => b.annualDaysSaved - a.annualDaysSaved);
+}
+
+/**
+ * Approves one automation proposal and records who decided it.
+ *
+ * The server calls this; the graph contract test calls it directly, so the test
+ * never needs a running HTTP server (and never mutates a developer's demo).
+ */
+export function approveAutomation(
+  graph: Graph,
+  proposalRef: string,
+  actor: string,
+  at: string,
+): { decisionRef: string; pageRef: string } | null {
+  const page = graph.page(proposalRef);
+  if (!page || page.type !== 'automation_proposal') return null;
+  const decisionRef = refFor('decision', 'approve-' + page.ref.replace(/[^a-z0-9]/gi, '-'));
+  if (!graph.page(decisionRef)) {
+    graph.addPage({
+      ref: decisionRef,
+      type: 'decision',
+      title: 'אושר: ' + String(page.properties.title_he ?? page.title),
+      properties: {},
+      createdAt: at,
+    });
+    const provenance: Provenance = {
+      kind: 'recorded',
+      source: 'workbench approval',
+      method: 'person decision',
+      as_of: at,
+      evidence_class: 'asserted',
+      confirmed_by_role: actor,
+    };
+    for (const [property, value] of Object.entries({
+      decision_id: decisionRef,
+      kind: 'automation_approved',
+      status: 'approved',
+      decided_at: at,
+      decided_by: actor,
+      rationale: 'אושר מתוך הראיות שנמדדו בתהליך.',
+      subject_ref: page.ref,
+    })) {
+      graph.setProperty({ pageRef: decisionRef, property, value, status: 'confirmed', provenance, evidenceIds: [] });
+    }
+    graph.addEdge({ kind: 'approves', from: decisionRef, to: page.ref });
+  }
+  const provenance: Provenance = {
+    kind: 'recorded',
+    source: 'workbench approval',
+    method: 'person decision',
+    as_of: at,
+    evidence_class: 'asserted',
+    confirmed_by_role: actor,
+  };
+  for (const [property, value] of Object.entries({ status: 'approved', approved_by: actor, approved_at: at })) {
+    graph.setProperty({ pageRef: page.ref, property, value, status: 'confirmed', provenance, evidenceIds: [] });
+  }
+  return { decisionRef, pageRef: page.ref };
 }
 
 /** Writes the discovered model into the graph as pages, so it can be reviewed. */
@@ -339,6 +483,7 @@ export function persistProcess(
       median_wait_days: step.medianWaitDays,
       p90_wait_days: step.p90WaitDays,
       actor_role: step.role,
+      depends_on_he: step.dependsOnHe,
       is_rework: step.isRework,
     };
     for (const [property, value] of Object.entries(s)) {
@@ -360,9 +505,21 @@ export function persistProcess(
       proposal_id: ref,
       proposal_kind: proposal.kind,
       title: proposal.title,
+      title_he: proposal.titleHe,
       rationale: proposal.rationale,
+      rationale_he: proposal.rationaleHe,
+      evidence: proposal.evidence,
+      evidence_he: proposal.evidenceHe,
       expected_cases_per_year: proposal.expectedCasesPerYear,
       time_saved_days_per_case: proposal.timeSavedDaysPerCase,
+      annual_waiting_days_saved: proposal.annualDaysSaved,
+      wait_samples: proposal.waitSamples,
+      wait_median: proposal.waitMedian,
+      wait_p90: proposal.waitP90,
+      basis_he: proposal.basisHe,
+      formula_he: proposal.formulaHe,
+      assumption_he: proposal.assumptionHe,
+      risk_reason_he: proposal.riskReasonHe,
       risk: proposal.risk,
       status: 'proposed',
     };

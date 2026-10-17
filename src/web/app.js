@@ -515,7 +515,7 @@ function proposalCard(proposal, processes, automations) {
     <dl class="proposal-metrics">
       <div><dt>Expected cases / yr</dt><dd>${n(proposal.expectedCasesPerYear)}</dd></div>
       <div><dt>Time saved / case</dt><dd>${day(proposal.timeSavedDaysPerCase)} d</dd></div>
-      <div><dt>Annual days saved</dt><dd>${n(proposal.annualDaysSaved)}</dd></div>
+      <div><dt>Annual waiting days avoided</dt><dd>${n(proposal.annualDaysSaved)}</dd></div>
       <div><dt>Risk</dt><dd>${badge(proposal.risk ?? 'unrated', riskTone)}</dd></div>
     </dl>
     <div class="evidence"><h4>Evidence</h4><ul>${(proposal.evidence ?? []).map((item) => h`<li>${item}</li>`)}</ul></div>

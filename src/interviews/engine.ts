@@ -33,6 +33,8 @@ export type InterviewQuestion = {
   prompt_he: string;
   prompt_en: string;
   kind: 'choice' | 'text' | 'person';
+  /** Data questions go to the data holder; policy questions are the rule owner's. */
+  category: 'data' | 'policy';
   options?: string[];
   prefill?: string;
   prefill_source?: string;
@@ -84,27 +86,30 @@ function buildQuestions(property: string, labelHe: string, respondentName: strin
       prompt_he: `איפה נשמר ${labelHe}?`,
       prompt_en: `Where is "${property}" kept?`,
       kind: 'choice',
+      category: 'data',
       options: ['גזברות - מערכת חיובים', 'ביטוח לאומי - ממשק נתונים', 'לשכת התושבים', 'אין מקור מסודר'],
       prefill: 'גזברות - מערכת חיובים',
-      prefill_source: 'org map: the finance liaison owns fee data',
+      prefill_source: 'מפת הארגון: רכז הגזברות מחזיק את נתוני האגרה',
     },
     {
       id: 'missing_policy',
       prompt_he: `כאשר ${labelHe} חסר, מה צריכה לעשות בדיקת הזכאות?`,
       prompt_en: `When "${property}" is missing, what should the eligibility check do?`,
       kind: 'choice',
+      category: 'policy',
       options: ['להשאיר "לא ידוע" (המצב היום)', 'לדחות את הבקשה עד לקבלת הנתון', 'להקצות ללא זכאות'],
       prefill: currentBehaviour,
-      prefill_source: 'current rule behaviour, computed from the last answer',
+      prefill_source: 'התנהגות הכלל הנוכחי, כפי שנגזרה מהתשובה האחרונה',
     },
     {
       id: 'who_can_supply',
       prompt_he: 'מי יכול לספק את הערך לבקשות הפתוחות?',
       prompt_en: 'Who can supply the value for the open cases?',
       kind: 'person',
-      options: ['רון דיין, אחראי נתונים מחלקתי', 'משה טל, רכז גזברות', 'הילה קורן, מזכירת מחלקה'],
+      category: 'data',
+      options: ['רונית דיין, אחראית נתונים מחלקתית', 'משה טל, רכז גזברות', 'הילה קורן, מזכירת מחלקה'],
       prefill: respondentName,
-      prefill_source: 'org map: closest responsibility match',
+      prefill_source: 'מפת הארגון: ההתאמה הקרובה ביותר לאחריות',
     },
   ];
 }
@@ -116,7 +121,7 @@ export function openInterview(
   opts: { capturedAt: string; personRef?: string },
 ): { interview: InterviewView | null; existing: boolean; reason?: string } {
   const gap = graph.page(gapRef);
-  if (!gap || gap.type !== 'knowledge_candidate') return { interview: null, existing: false, reason: 'No such gap.' };
+  if (!gap || gap.type !== 'knowledge_candidate') return { interview: null, existing: false, reason: 'לא נמצא פער כזה.' };
 
   const proposal = (gap.properties.proposal ?? {}) as Record<string, unknown>;
   const property = String(proposal.property ?? '');
@@ -128,13 +133,13 @@ export function openInterview(
         return page ? { ref: page.ref, name: page.title, title: String(page.properties.job_title ?? '') } : null;
       })()
     : respondentFor(graph, org, property);
-  if (!respondent) return { interview: null, existing: false, reason: 'No person in the org map can answer this.' };
+  if (!respondent) return { interview: null, existing: false, reason: 'אין במפת הארגון אדם שיכול לענות על זה.' };
 
   const open = graph
     .ofType('interview')
     .find((i) => String(i.properties.person_ref) === respondent.ref && String(i.properties.status) === 'open');
   if (open) {
-    return { interview: viewInterview(graph, open.ref), existing: true, reason: 'One open interview at a time; this one is already waiting.' };
+    return { interview: viewInterview(graph, open.ref), existing: true, reason: 'שאלה אחת פתוחה לאדם בכל רגע; זו כבר ממתינה.' };
   }
 
   const questions = buildQuestions(
@@ -186,14 +191,16 @@ export function answerInterview(
   answers: Record<string, string>,
   actor: string,
   capturedAt: string,
+  opts: { policyOwner?: boolean } = {},
 ): {
   interview: InterviewView | null;
   contradiction: string | null;
   proposalRef: string | null;
+  ruleDecisionRef: string | null;
   whatIf: { eligible: number; notEligible: number; unknown: number } | null;
 } {
   const page = graph.page(interviewRef);
-  if (!page || page.type !== 'interview') return { interview: null, contradiction: null, proposalRef: null, whatIf: null };
+  if (!page || page.type !== 'interview') return { interview: null, contradiction: null, proposalRef: null, ruleDecisionRef: null, whatIf: null };
 
   const questions = (page.properties.questions ?? []) as InterviewQuestion[];
   const clean = Object.fromEntries(
@@ -271,7 +278,7 @@ export function answerInterview(
         },
         evidence_summary: `${actor} answered that a missing ${property} should lead to "${policyAnswer}". Applying that would move ${whatIf.unknown} undecided households and needs the rule owner's approval.`,
         support_count: answered,
-        status: 'open',
+        status: opts.policyOwner ? 'accepted' : 'open',
         proposed_by: 'interview engine v1',
       };
       for (const [name, value] of Object.entries(values)) {
@@ -291,15 +298,62 @@ export function answerInterview(
         });
       }
     }
+    let ruleDecisionRef: string | null = null;
+    if (opts.policyOwner) {
+      graph.setProperty({
+        pageRef: proposalRef,
+        property: 'status',
+        value: 'accepted',
+        status: 'confirmed',
+        provenance: provenance(capturedAt, 'rule owner decision', actor),
+        evidenceIds: [],
+      });
+      ruleDecisionRef = refFor('decision', 'rule-' + stableId('DEC', proposalRef).replace('DEC-', ''));
+      if (!graph.page(ruleDecisionRef)) {
+        graph.addPage({
+          ref: ruleDecisionRef,
+          type: 'decision',
+          title: `אושר שינוי כלל — חסר ${property} → ${policy === 'not_eligible' ? 'אינו זכאי' : 'לא ידוע'}`,
+          properties: {},
+          createdAt: capturedAt,
+        });
+        for (const [name, value] of Object.entries({
+          decision_id: ruleDecisionRef,
+          kind: 'eligibility_rule_approved',
+          status: 'approved',
+          decided_at: capturedAt,
+          decided_by: actor,
+          rationale: `בעל הכלל אישר את השינוי; ${whatIf.unknown} משקי בית עוברים מ״לא ידוע״ להכרעה בגרסה הבאה.`,
+          subject_ref: refFor('eligibility_rule', `${currentRule.code}-v${currentRule.version}`),
+        })) {
+          graph.setProperty({
+            pageRef: ruleDecisionRef,
+            property: name,
+            value,
+            status: 'confirmed',
+            provenance: provenance(capturedAt, 'rule owner decision', actor),
+            evidenceIds: [],
+          });
+        }
+        graph.addEdge({ kind: 'approves', from: ruleDecisionRef, to: proposalRef });
+      }
+    }
     return {
       interview: viewInterview(graph, interviewRef),
-      contradiction: `The rule leaves this undecided; the answer says "${policyAnswer}".`,
+      contradiction: `הכלל משאיר את המקרה ללא הכרעה; התשובה אומרת "${policyAnswer}".`,
       proposalRef,
+      ruleDecisionRef,
       whatIf,
     };
   }
 
-  return { interview: viewInterview(graph, interviewRef), contradiction: null, proposalRef: null, whatIf: null };
+  return {
+    interview: viewInterview(graph, interviewRef),
+    contradiction: null,
+    proposalRef: null,
+    ruleDecisionRef: null,
+    whatIf: null,
+  };
 }
 
 export function viewInterview(graph: Graph, ref: string): InterviewView {
