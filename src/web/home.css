@@ -156,3 +156,13 @@ details ul { margin: 10px 0 0; padding-inline-start: 18px; font-size: 13px; colo
 .field span { font-weight: 600; color: var(--ink); }
 .field input, .field select { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 13px; color: var(--ink-2); }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ------------------------------------------------------------------- demo */
+.scenario-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.scenario { position: relative; }
+.step-n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; }
+.scenario .row-between { justify-content: flex-start; gap: 10px; }
+.pain { margin-top: 8px !important; font-size: 12.5px !important; color: var(--amber) !important; }
+.demo-out { margin-top: 14px; }
+.demo-out .counts { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 880px) { .scenario-grid { grid-template-columns: 1fr; } }

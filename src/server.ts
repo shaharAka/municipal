@@ -370,6 +370,37 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     suggestion.artifact = artifact;
     return json(res, 200, { suggestion });
   }
+  if (parts[1] === 'forms' && parts[2] === 'submit' && req.method === 'POST') {
+    const body = await readBody(req);
+    const type = String(body.type ?? 'household');
+    const kind = (body.kind ?? 'application') as FormKind;
+    const values = (body.values ?? {}) as Record<string, unknown>;
+    const form = generateForm(platform.ontology, type, kind, { only: Object.keys(values) });
+    const submission = validateSubmission(
+      platform.ontology,
+      form,
+      { values, typed_by: viewerName(platform, viewer), prefilled: {} },
+      captureTime,
+    );
+    if (submission.problems.length) return json(res, 400, { problems: submission.problems });
+    const subject = String(body.subject ?? '');
+    if (!platform.graph.page(subject)) return json(res, 400, { problems: ['no such subject record'] });
+    for (const fact of submission.facts) {
+      platform.graph.setProperty({
+        pageRef: subject,
+        property: fact.property,
+        value: fact.value,
+        status: fact.status,
+        provenance: fact.provenance,
+        evidenceIds: [],
+      });
+    }
+    return json(res, 200, {
+      written: submission.facts.length,
+      subject,
+      properties: Object.fromEntries(submission.facts.map((f) => [f.property, f.value])),
+    });
+  }
   if (parts[1] === 'learning') {
     const decisions = platform.graph.ofType('decision').map((p) => ({
       ref: p.ref, title: p.title, kind: p.properties.kind, status: p.properties.status,

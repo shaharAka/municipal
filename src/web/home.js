@@ -18,6 +18,7 @@ const TABS = [
   { id: 'map', label: 'מפת התהליך' },
   { id: 'learning', label: 'למידה' },
   { id: 'forms', label: 'טפסים' },
+  { id: 'demo', label: 'תרחישים' },
   { id: 'people', label: 'אנשים' },
   { id: 'process', label: 'תהליכים' },
   { id: 'onboard', label: 'קליטה' },
@@ -385,6 +386,130 @@ async function formsView() {
     : `<section class="card"><h3>עדיין אין טפסים</h3><p>אשרו הצעה מסוג טופס בלשונית <a href="#/sources" style="color:var(--accent)">מקורות</a> — והטופס יופיע כאן, מוכן לשימוש.</p></section>`}`;
 }
 
+
+/* -------------------------------------------------------------------- demo */
+const SCENARIOS = [
+  {
+    id: 'eligibility',
+    n: '1',
+    titleHe: 'כמה משקי בית זכאים להנחה?',
+    painHe: 'היום: פנייה לגזברות, אקסל, ובדיקה ידנית של כל תיק.',
+    doHe: 'שואלים בשפה חופשית. המערכת מחזירה שלושה מספרים, את הכלל והגרסה שלו, ומה שלא ניתן להכריע.',
+    steps: [{ action: 'ask', label: 'שאל את המערכת' }],
+  },
+  {
+    id: 'gap',
+    n: '2',
+    titleHe: 'מי יכול לסגור את הפער?',
+    painHe: 'היום: אף אחד לא יודע מי מחזיק את נתון ההכנסה, אז הפער נשאר.',
+    doHe: 'המערכת פותחת שלוש שאלות למשה מהגזברות. התשובה נשמרת כראיה, וסתירה לכלל הופכת להצעה עם מספרי "מה יקרה אם".',
+    steps: [
+      { action: 'interview-open', label: 'פתח שאלה למשה' },
+      { action: 'interview-answer', label: 'ענה בשלוש תשובות' },
+    ],
+  },
+  {
+    id: 'source',
+    n: '3',
+    titleHe: 'מה קורה כשמחברים מקור חדש?',
+    painHe: 'היום: חיבור מערכת חדשה הוא פרויקט IT של חודשים.',
+    doHe: 'מחברים את הדואר. המחקר מציע אחריויות ושלב חסר בתהליך, עם הראיות. אדם מאשר — ואז זה נכנס למודל.',
+    steps: [
+      { action: 'source-enable', label: 'חבר את הדואר' },
+      { action: 'approve-responsibilities', label: 'אשר את האחריויות' },
+    ],
+  },
+  {
+    id: 'form',
+    n: '4',
+    titleHe: 'טופס שנולד מהמודל',
+    painHe: 'היום: כל שינוי בטופס דורש פיתוח, וכל טופס נכתב מחדש.',
+    doHe: 'מייצרים טופס מהמודל, ממלאים אותו, והערך נשמר על משק הבית עם מקור וחתימת מגיש.',
+    steps: [
+      { action: 'form-create', label: 'צור טופס' },
+      { action: 'form-fill', label: 'מלא ומסור' },
+    ],
+  },
+];
+function demoView() {
+  return `
+    <h1>ארבעה תרחישים, חמישה קליקים</h1>
+    <p class="lede">כל תרחיש מתחיל מכאב אמיתי במחלקה. כל כפתור כאן מבצע פעולה אמיתית על הנתונים — לא הדמיה.</p>
+    <div class="scenario-grid">
+      ${SCENARIOS.map((scenario) => `
+        <article class="card scenario">
+          <div class="row-between"><span class="step-n">${scenario.n}</span><h3>${escapeHtml(scenario.titleHe)}</h3></div>
+          <p class="pain">${escapeHtml(scenario.painHe)}</p>
+          <p>${escapeHtml(scenario.doHe)}</p>
+          <div class="chips" style="margin-top:12px">
+            ${scenario.steps.map((step) => `<button class="btn small" type="button" data-demo-action="${step.action}">${escapeHtml(step.label)}</button>`).join('')}
+          </div>
+          <div class="demo-out" id="out-${scenario.id}" role="status"></div>
+        </article>`).join('')}
+    </div>
+    <p class="hello" style="margin-top:26px">מה שהמערכת לעולם לא עושה לבד: לא משנה מודל, לא מפעילה אוטומציה, לא קובעת זכאות. זה תמיד מחכה לאדם.</p>`;
+}
+
+async function runDemoAction(action, out) {
+  out.innerHTML = '<p class="hello">פועל…</p>';
+  const show = (html) => { out.innerHTML = html; };
+  try {
+    if (action === 'ask') {
+      const answer = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: 'כמה משקי בית זכאים להנחה באגרת תברואה?' }) });
+      show(`<div class="counts">${[['זכאים', answer.counts.eligible, 'good'], ['אינם זכאים', answer.counts.notEligible, ''], ['לא ידוע', answer.counts.unknown, 'unknown']].map(([label, value, tone]) => `<div class="count ${tone}"><b>${num(value)}</b><span>${label}</span></div>`).join('')}</div><p class="note">כלל ${answer.rule.code} גרסה ${answer.rule.version} · ${escapeHtml(answer.rule.owner)}</p>`);
+      return;
+    }
+    if (action === 'interview-open') {
+      const data = await api('/api/interviews');
+      const gap = data.gaps[0];
+      const result = await api('/api/interviews/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ gapRef: gap.ref }) });
+      state.demo = { interviewRef: result.interview.ref };
+      show(`<p class="note">נפתחה שאלה אל <strong>${escapeHtml(result.interview.personName)}</strong> · ${result.interview.questions.length} שאלות. ${escapeHtml(result.interview.questions[0].prompt_he)}</p>`);
+      return;
+    }
+    if (action === 'interview-answer') {
+      const ref = state.demo?.interviewRef ?? (await api('/api/interviews')).interviews.find((i) => i.status === 'open')?.ref;
+      if (!ref) { show('<p class="note">צריך קודם לפתוח שאלה.</p>'); return; }
+      const result = await api('/api/interviews/answer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref, answers: { source_system: 'גזברות - מערכת חיובים', missing_policy: 'להקצות ללא זכאות', who_can_supply: 'משה טל, רכז גזברות' } }) });
+      show(`<p class="note">התשובה נשמרה. סתירה לכלל: ${escapeHtml(result.contradiction ?? '')}</p><p class="note">מה יקרה אם יאושר: <strong>${num(result.whatIf.eligible)}</strong> זכאים · <strong>${num(result.whatIf.notEligible)}</strong> לא זכאים · <strong>${num(result.whatIf.unknown)}</strong> לא ידוע</p>`);
+      return;
+    }
+    if (action === 'source-enable') {
+      const data = await api('/api/connectors/exchange/toggle', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
+      const source = data.sources.find((s2) => s2.id === 'exchange');
+      show(`<p class="note">הדואר מחובר. המחקר מצא <strong>${source.suggestions.length}</strong> הצעות: ${source.suggestions.map((s2) => escapeHtml(s2.titleHe)).join(' · ')}</p>`);
+      return;
+    }
+    if (action === 'approve-responsibilities') {
+      const data = await api('/api/connectors');
+      const suggestion = data.sources.find((s2) => s2.id === 'exchange')?.suggestions.find((s2) => s2.kind === 'responsibility');
+      if (!suggestion) { show('<p class="note">צריך קודם לחבר את הדואר.</p>'); return; }
+      const result = await api(`/api/suggestions/${encodeURIComponent(suggestion.id)}/approve`, { method: 'POST' });
+      show(`<p class="note">אושר: <strong>${escapeHtml(result.suggestion.artifact.labelHe)}</strong>. נשמרה החלטה על שם המאשר.</p>`);
+      return;
+    }
+    if (action === 'form-create') {
+      const data = await api('/api/connectors');
+      const suggestion = data.sources.find((s2) => s2.id === 'entra')?.suggestions.find((s2) => s2.kind === 'form');
+      if (!suggestion) { show('<p class="note">אין הצעת טופס כרגע.</p>'); return; }
+      const result = await api(`/api/suggestions/${encodeURIComponent(suggestion.id)}/approve`, { method: 'POST' });
+      state.demo = { ...(state.demo ?? {}), form: result.suggestion.artifact.spec };
+      show(`<p class="note">נוצר טופס: <strong>${escapeHtml(result.suggestion.artifact.labelHe)}</strong></p><div class="form-preview">${result.suggestion.artifact.spec.fields.map((f) => `<label class="field"><span>${escapeHtml(f.labelHe)}</span><input disabled placeholder="${escapeHtml(f.labelHe)}" /></label>`).join('')}</div>`);
+      return;
+    }
+    if (action === 'form-fill') {
+      const pages = await api('/api/pages?type=household');
+      const household = (pages.pages ?? []).find((p) => p.properties.income_band && p.properties.household_size);
+      if (!household) { show('<p class="note">לא נמצא משק בית למילוי.</p>'); return; }
+      const result = await api('/api/forms/submit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'household', kind: 'application', subject: household.ref, values: { household_size: 4, income_band: 'LOW', discount_status: 'PENDING' } }) });
+      show(`<p class="note">נשמרו <strong>${result.written}</strong> ערכים על ${escapeHtml(household.title)}: ${Object.entries(result.properties).map(([k, v]) => `${k}=${v}`).join(' · ')}</p>`);
+      return;
+    }
+  } catch (error) {
+    show(`<div class="err">${escapeHtml(error.message)}</div>`);
+  }
+}
+
 /* ------------------------------------------------------------------ render */
 
 async function sourcesView() {
@@ -430,7 +555,7 @@ async function sourcesView() {
     </section>` : ''}`;
 }
 
-const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, learning: learningView, forms: formsView, people: peopleView, process: processView, onboard: onboardView };
+const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, learning: learningView, forms: formsView, demo: demoView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -515,6 +640,13 @@ document.addEventListener('click', async (event) => {
     });
     if (location.hash !== '#/sources') location.hash = '#/sources';
     else render();
+    return;
+  }
+  const demo = event.target.closest('[data-demo-action]');
+  if (demo) {
+    const scenarioId = demo.closest('.scenario')?.querySelector('.demo-out')?.id?.replace('out-', '');
+    const out = document.getElementById('out-' + scenarioId);
+    if (out) runDemoAction(demo.dataset.demoAction, out);
     return;
   }
   const pickForm = event.target.closest('[data-form-pick]');
