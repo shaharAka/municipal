@@ -16,6 +16,7 @@ const TABS = [
   { id: 'ask', label: 'שאל' },
   { id: 'sources', label: 'מקורות' },
   { id: 'map', label: 'מפת התהליך' },
+  { id: 'workspace', label: 'דואר ומסמכים' },
   { id: 'learning', label: 'למידה' },
   { id: 'forms', label: 'טפסים' },
   { id: 'demo', label: 'סיור' },
@@ -510,6 +511,81 @@ async function runDemoAction(action, out) {
   }
 }
 
+
+/* ---------------------------------------------------------------- workspace */
+function outlookPane(messages, index) {
+  const current = messages[index] ?? messages[0];
+  return `
+    <div class="outlook">
+      <div class="ol-rail">
+        <div class="ol-account"><span class="ol-avatar">ג</span><div><strong>${escapeHtml(current?.to?.[0] ?? '')}</strong><span>${escapeHtml(messages.length)} הודעות</span></div></div>
+        <nav class="ol-folders">
+          <span class="ol-folder active">דואר נכנס <b>${num(messages.length)}</b></span>
+          <span class="ol-folder">נשלח</span>
+          <span class="ol-folder">נמחק</span>
+          <span class="ol-folder">ארכיון</span>
+        </nav>
+        <p class="ol-note">תצוגת מקור · לקריאה בלבד</p>
+      </div>
+      <div class="ol-list">
+        <div class="ol-search">חיפוש <span class="tiny muted">בדואר של המחלקה</span></div>
+        ${messages.map((m, i) => `<button class="ol-item ${i === index ? 'active' : ''}" type="button" data-msg="${i}">
+          <span class="ol-from">${escapeHtml(m.from)}</span>
+          <span class="ol-subject">${escapeHtml(m.subject)}</span>
+          <span class="ol-meta">${escapeHtml(m.label)} · ${escapeHtml(m.received.slice(0, 10))}</span>
+        </button>`).join('')}
+      </div>
+      <div class="ol-read">
+        ${current ? `
+          <h3>${escapeHtml(current.subject)}</h3>
+          <div class="ol-head"><span class="ol-avatar small">${escapeHtml(current.from.slice(0, 1))}</span><div><strong>${escapeHtml(current.from)}</strong><span class="tiny muted">${escapeHtml(current.fromAddress)} · ${escapeHtml(current.received.slice(0, 16).replace('T', ' '))}</span></div></div>
+          <div class="ol-body">${escapeHtml(current.body)}</div>
+          <p class="ol-label">רגישות: ${escapeHtml(current.label)}</p>` : ''}
+      </div>
+    </div>`;
+}
+function sharepointPane(documents, index) {
+  const current = documents[index] ?? documents[0];
+  return `
+    <div class="sp">
+      <div class="sp-bar">
+        <span class="sp-brand">SharePoint · מסמכי המחלקה</span>
+        <span class="sp-actions">חדש · העלאה · שיתוף</span>
+      </div>
+      <div class="sp-grid">
+        <table class="sp-table">
+          <thead><tr><th>שם</th><th>שונה</th><th>רגישות</th><th>גודל</th></tr></thead>
+          <tbody>${documents.map((d, i) => `<tr class="${i === index ? 'active' : ''}" data-doc="${i}">
+            <td class="sp-name"><span class="sp-icon">${/xlsx/.test(d.name) ? '▦' : '▤'}</span>${escapeHtml(d.name)}</td>
+            <td>${escapeHtml(d.modified.slice(0, 10))}</td>
+            <td>${d.label === 'Restricted' ? '<span class="sp-lock">מוגבל</span>' : escapeHtml(d.label)}</td>
+            <td>${num(Math.round(d.size / 1024))} KB</td>
+          </tr>`).join('')}</tbody>
+        </table>
+        <aside class="sp-preview">
+          <p class="eyebrow">תצוגה מקדימה</p>
+          <h4>${escapeHtml(current.name)}</h4>
+          <p class="tiny muted">${num(current.pages)} עמודים · ${escapeHtml(current.label)}</p>
+          <pre class="sp-text">${escapeHtml(current.text)}</pre>
+        </aside>
+      </div>
+    </div>`;
+}
+async function workspaceView() {
+  const [outlook, doclib] = await Promise.all([api('/api/outlook'), api('/api/doclib')]);
+  return `
+    <h1>המערכות שהאנשים כבר מכירים</h1>
+    <p class="lede">אותו מידע, במראה של הכלים שהמחלקה עובדת איתם. הקריאה משם היא לקריאה בלבד, והמערכת לומדת מהעותק שלה.</p>
+    <section class="section">
+      <div class="section-head"><h2>דואר נכנס</h2><p>${escapeHtml(outlook.mailbox)} · ${num(outlook.messages.length)} הודעות</p></div>
+      ${outlookPane(outlook.messages, state.ws?.msg ?? 0)}
+    </section>
+    <section class="section">
+      <div class="section-head"><h2>ספריית המסמכים</h2><p>${num(doclib.documents.length)} קבצים · תוויות הרגישות מגיעות מהמקור</p></div>
+      ${sharepointPane(doclib.documents, state.ws?.doc ?? 0)}
+    </section>`;
+}
+
 /* ------------------------------------------------------------------ render */
 
 async function sourcesView() {
@@ -555,7 +631,7 @@ async function sourcesView() {
     </section>` : ''}`;
 }
 
-const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
+const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, workspace: workspaceView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -642,6 +718,10 @@ document.addEventListener('click', async (event) => {
     else render();
     return;
   }
+  const msg = event.target.closest('[data-msg]');
+  if (msg) { state.ws = { ...(state.ws ?? {}), msg: Number(msg.dataset.msg) }; render(); return; }
+  const doc = event.target.closest('[data-doc]');
+  if (doc) { state.ws = { ...(state.ws ?? {}), doc: Number(doc.dataset.doc) }; render(); return; }
   const replay = event.target.closest('[data-action="replay"]');
   if (replay) { startReplay(replay); return; }
   const tourScenario = event.target.closest('[data-tour-scenario]');

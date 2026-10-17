@@ -607,6 +607,33 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     suggestion.artifact = artifact;
     return json(res, 200, { suggestion });
   }
+  if (parts[1] === 'outlook') {
+    const messages = platform.fixture.messages.map((m) => ({
+      id: m.id,
+      subject: m.subject,
+      from: m.from.emailAddress.name,
+      fromAddress: m.from.emailAddress.address,
+      to: m.toRecipients.map((r) => r.emailAddress.name),
+      received: m.receivedDateTime,
+      label: m.sensitivityLabel.name,
+      body: m.body.content,
+    }));
+    return json(res, 200, { mailbox: platform.fixture.users[0]?.mail ?? '', messages });
+  }
+  if (parts[1] === 'doclib') {
+    const drive = platform.fixture.drives[0];
+    const documents = drive.items.map((d) => ({
+      id: d.id,
+      name: d.name,
+      modified: d.lastModifiedDateTime,
+      label: d.sensitivityLabel.name,
+      size: d.size,
+      webUrl: d.webUrl,
+      pages: d.pageBreaks.length + 1,
+      text: d.contentText.slice(0, 900),
+    }));
+    return json(res, 200, { library: drive.name, webUrl: drive.webUrl, documents });
+  }
   if (parts[1] === 'forms' && parts[2] === 'submit' && req.method === 'POST') {
     const body = await readBody(req);
     const type = String(body.type ?? 'household');
