@@ -295,3 +295,19 @@
 @media (max-width: 900px) { .v-tiles.is-three { grid-template-columns: 1fr 1fr; } }
 .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 900px) { .kpi-strip { grid-template-columns: 1fr; } }
+
+/* Grid and flex children on the value pages must be allowed to shrink below
+   their min-content width; otherwise a long meeting title widens the page. */
+.value-view,
+.value-view > *,
+.v-card,
+.v-recall,
+.v-alert,
+.v-decision,
+.v-meeting-title { min-width: 0; }
+.v-meeting-title { flex-wrap: wrap; }
+
+/* The owner picker is the widest control in an alert; let it wrap and shrink
+   on a phone instead of widening the card. */
+.v-assign { min-width: 0; flex-wrap: wrap; }
+.v-assign select { min-width: 0; flex: 1 1 180px; }
