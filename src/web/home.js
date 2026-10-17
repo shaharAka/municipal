@@ -819,37 +819,49 @@ function simpleAnswer(answer) {
     ${answer.unknownReasons?.length ? `<p class="note">הסיבה ל״לא ידוע״: חסר נתון הכנסה. <button class="engine-btn" type="button" data-engine="interview">איך מטפלים בזה?</button></p>` : ''}
   </section>`;
 }
-function tasksFor(role, data) {
+function focusFor(roleLabel, data) {
   const { approvals, interviews, lic, answer } = data;
-  if (/מנהל|head/i.test(role)) {
-    return [
-      { label: 'פריטים שממתינים לאישור', value: approvals.pending.length, href: '#/approvals' },
-      { label: 'אוטומציות מוצעות', value: approvals.counts.automations, href: '#/approvals' },
-      { label: 'הצעות לשינוי המודל', value: approvals.counts.candidates, href: '#/approvals' },
-    ];
+  const kind = roleKind(roleLabel);
+  const items = [];
+  if (kind === 'head') {
+    for (const pending of approvals.pending.slice(0, 4)) {
+      items.push({ title: pending.titleHe, reason: 'ממתין לאישור', why: pending.whyHe, href: '#/approvals', cta: 'לבדיקה' });
+    }
+  } else if (kind === 'clerk') {
+    const unknown = answer.counts?.unknown ?? 0;
+    if (unknown) items.push({ title: unknown + ' משקי בית בלי נתון הכנסה', reason: 'חוסם החלטת זכאות', why: 'המערכת פתחה שאלה למשה מהגזברות. תשובה אחת מחזירה את ההחלטה.', href: '#/demo', cta: 'לשאלה' });
+    for (const gap of interviews.gaps.slice(0, 2)) {
+      items.push({ title: String(gap.proposal?.property ?? gap.summary).slice(0, 60), reason: 'פער שממתין לאדם', why: gap.summary, href: '#/approvals', cta: 'לפתיחה' });
+    }
+    const open = interviews.interviews.filter((i) => i.status === 'open');
+    if (open.length) items.push({ title: open.length + ' שאלות פתוחות', reason: 'ממתין לתשובה', why: 'שלוש שאלות לכל היותר, עם הניחוש מוכן.', href: '#/demo', cta: 'לשאלות' });
+  } else {
+    const step = lic.model.steps[0];
+    if (step) items.push({ title: step.labels + ' · ' + num(step.medianWaitDays) + ' ימים', reason: 'המתנה חריגה בתהליך', why: 'חציון ' + num(lic.model.medianTotalDays) + ' יום לתיק, ' + num(lic.model.caseCount) + ' תיקים.', href: '#/demo', cta: 'לתהליך' });
+    if (lic.proposals.length) items.push({ title: lic.proposals.length + ' הצעות אוטומציה', reason: 'מוצע לשיפור', why: 'נמדד מתוך הנתונים, ממתין לאישור.', href: '#/approvals', cta: 'להצעות' });
   }
-  if (/רכז|מזכיר|coordinator|clerk/i.test(role)) {
-    return [
-      { label: 'משקי בית בלי נתון הכנסה', value: answer.counts?.unknown ?? 0, href: '#/ask' },
-      { label: 'שאלות פתוחות לאנשים', value: interviews.interviews.filter((i) => i.status === 'open').length, href: '#/demo' },
-      { label: 'פערים שממתינים לאדם', value: interviews.gaps.length, href: '#/approvals' },
-    ];
-  }
-  return [
-    { label: 'המתנה חציונית לשיבוץ פיקוח (ימים)', value: lic.model.steps[0]?.medianWaitDays ?? 0, href: '#/demo' },
-    { label: 'תיקים פתוחים', value: lic.model.caseCount, href: '#/demo' },
-    { label: 'הצעות אוטומציה על התהליך', value: lic.proposals.length, href: '#/approvals' },
-  ];
+  return items.slice(0, 4);
+}
+function focusView(items) {
+  if (!items.length) return `<section class="card focus-empty"><div class="tick">✓</div><h2>אין דבר שממתין לך</h2><p>כל השאלות נענו וכל ההצעות טופלו. המערכת תחזור אליך כשיהיה משהו.</p></section>`;
+  return `<section class="focus">
+    <div class="focus-head"><h2>מה מחכה לך</h2><a href="#/approvals">לכל המשימות ←</a></div>
+    <p class="focus-basis">לפי התפקיד שלך, מהדחוף לרגיל</p>
+    <div class="focus-list">${items.map((item, i) => `<article class="focus-item">
+      <span class="rank">${i + 1}</span>
+      <div class="focus-body"><p class="reason">${escapeHtml(item.reason)}</p>
+        <h3>${escapeHtml(item.title)}</h3><p class="why">${escapeHtml(item.why)}</p>
+        <a class="btn ${i === 0 ? '' : 'quiet'}" href="${item.href}">${escapeHtml(item.cta)}</a></div>
+    </article>`).join('')}</div>
+  </section>`;
 }
 async function simpleHome() {
   const [overview, answer, org, lic, viewers, approvals, interviews] = await Promise.all([
     api('/api/overview'), api('/api/answer'), api('/api/org'), api('/api/process?service=LIC'),
     api('/api/viewers'), api('/api/approvals'), api('/api/interviews'),
   ]);
-  const roles = viewers.viewers;
-  const role = state.role && roles.some((r) => r.id === state.role) ? state.role : roles[0]?.id;
-  const roleLabel = roles.find((r) => r.id === role)?.label ?? '';
-  const tasks = tasksFor(roleLabel, { approvals, interviews, lic, answer });
+  const roleLabel = state.roleLabel ?? '';
+  const focus = focusFor(roleLabel, { approvals, interviews, lic, answer });
   const top = [...lic.proposals].sort((a, b) => b.annualDaysSaved - a.annualDaysSaved)[0];
   return `
     <p class="hello">שלום דנה,</p>
@@ -867,11 +879,7 @@ async function simpleHome() {
       </div>
     </form>
     <div id="answer-slot">${simpleAnswer(answer)}</div>
-    <section class="card mine">
-      <h2>המשימות שלי</h2>
-      <p class="sub">${escapeHtml(roleLabel)} · רק מה שממתין לכם, בלי גרפים</p>
-      ${tasks.map((t) => `<div class="task"><div><p>${escapeHtml(t.label)}</p></div><div style="display:flex;align-items:center;gap:14px"><span class="num">${num(t.value)}</span><a href="${t.href}">פתח</a></div></div>`).join('')}
-    </section>
+    ${focusView(focus)}
     <div class="home-grid">
       <article class="card mini"><h3>אנשים</h3><div class="val">${num(overview.graph.byType.person)}</div><p>${num(org.units.length)} יחידות · ${num(org.responsibilities.length)} אחריויות שזוהו</p><button class="engine-btn" type="button" data-engine="people">מה למדנו?</button></article>
       <article class="card mini"><h3>תהליכים</h3><div class="val">${num(lic.model.medianTotalDays)} יום</div><p>חציון רישיון עסק · ${num(lic.model.caseCount)} תיקים</p><button class="engine-btn" type="button" data-engine="mail">מה למדנו?</button></article>
