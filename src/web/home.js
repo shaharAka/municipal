@@ -568,28 +568,21 @@ function sharepointPane(documents, index) {
     </div>`;
 }
 async function workspaceView() {
-  const viewers = (await api('/api/viewers')).viewers;
-  const viewerId = state.ws?.viewer && viewers.some((v) => v.id === state.ws.viewer) ? state.ws.viewer : viewers[0]?.id ?? '';
+  const viewerId = state.role ?? '';
   const query = `?viewer=${encodeURIComponent(viewerId)}`;
   const [outlook, doclib] = await Promise.all([api('/api/outlook' + query), api('/api/doclib' + query)]);
   return `
     <h1>המערכות שהאנשים כבר מכירים</h1>
     <p class="lede">אותו מידע, במראה של הכלים שהמחלקה עובדת איתם. הקריאה משם לקריאה בלבד, והמערכת לומדת מהעותק שלה.</p>
-    <div class="ws-bar">
-      <label for="ws-viewer">צפייה בתור</label>
-      <select id="ws-viewer" data-ws-viewer>
-        ${viewers.map((v) => `<option value="${v.id}" ${v.id === viewerId ? 'selected' : ''}>${escapeHtml(v.label)}</option>`).join('')}
-      </select>
-      <span class="tiny muted">${escapeHtml(doclib.viewer)} רואה ${num(doclib.visible)} מתוך ${num(doclib.total)} מסמכים</span>
-    </div>
+    <div class="ms-strip"><span class="ms-logo" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i></span><strong>Microsoft 365</strong><span class="muted">תצוגת מקור · לקריאה בלבד · ${escapeHtml(doclib.viewer)} רואה ${num(doclib.visible)} מתוך ${num(doclib.total)} מסמכים</span></div>
     <div id="ws-graph" role="status"></div>
     <section class="section">
       <div class="section-head"><h2>דואר נכנס</h2><p>${escapeHtml(outlook.mailbox)} · ${num(outlook.messages.length)} הודעות</p></div>
-      ${outlookPane(outlook.messages, state.ws?.msg ?? 0)}
+      <div class="ms ms-outlook">${outlookPane(outlook.messages, state.ws?.msg ?? 0)}</div>
     </section>
     <section class="section">
       <div class="section-head"><h2>ספריית המסמכים</h2><p>${num(doclib.documents.length)} קבצים · תוויות הרגישות מגיעות מהמקור</p></div>
-      ${sharepointPane(doclib.documents, state.ws?.doc ?? 0)}
+      <div class="ms ms-sp">${sharepointPane(doclib.documents, state.ws?.doc ?? 0)}</div>
     </section>`;
 }
 
@@ -875,7 +868,6 @@ async function simpleHome() {
     </form>
     <div id="answer-slot">${simpleAnswer(answer)}</div>
     <section class="card mine">
-      <div class="role-row"><span>התצוגה שלי:</span>${roles.map((r) => `<button class="role-chip ${r.id === role ? 'active' : ''}" type="button" data-role="${r.id}">${escapeHtml(r.label.split('(')[0].trim())}</button>`).join('')}</div>
       <h2>המשימות שלי</h2>
       <p class="sub">${escapeHtml(roleLabel)} · רק מה שממתין לכם, בלי גרפים</p>
       ${tasks.map((t) => `<div class="task"><div><p>${escapeHtml(t.label)}</p></div><div style="display:flex;align-items:center;gap:14px"><span class="num">${num(t.value)}</span><a href="${t.href}">פתח</a></div></div>`).join('')}
@@ -1030,12 +1022,6 @@ function fromHash() {
   return TABS.some((t) => t.id === id) ? id : 'home';
 }
 
-document.addEventListener('change', (event) => {
-  const select = event.target.closest('[data-ws-viewer]');
-  if (!select) return;
-  state.ws = { ...(state.ws ?? {}), viewer: select.value };
-  render();
-});
 document.addEventListener('click', async (event) => {
   const accept = event.target.closest('[data-accept-candidate]');
   if (accept) {
