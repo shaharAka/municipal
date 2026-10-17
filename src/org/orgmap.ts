@@ -6,7 +6,6 @@
 // candidate: it is in no answer until a person confirms it, and it carries the
 // count of what it rests on rather than a made-up score.
 
-import type { Ontology } from '../ontology/compose.ts';
 import { Graph, refFor, stableId, type Provenance } from '../graph/graph.ts';
 import { ACTIVITY_LABELS } from '../cloud/fixtures.ts';
 

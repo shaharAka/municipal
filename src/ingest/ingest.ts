@@ -525,6 +525,50 @@ export async function ingest(deps: IngestDeps): Promise<IngestReport> {
     candidate.proposal.page_types = [...(typesByProperty.get(key) ?? [])];
   }
 
+  // A schema candidate is a page like everything else: it is in the graph, it
+  // is queryable, and it is in no answer until a person accepts it.
+  for (const candidate of merged.values()) {
+    const ref = refFor('knowledge_candidate', candidate.id);
+    graph.addPage({
+      ref,
+      type: 'knowledge_candidate',
+      title: `Proposed property: ${candidate.proposal.property}`,
+      properties: {},
+      createdAt: capturedAt,
+    });
+    const values: Record<string, unknown> = {
+      candidate_id: candidate.id,
+      candidate_kind: 'property',
+      subject_ref: (candidate.proposal.page_types ?? [candidate.proposal.page_type]).join(','),
+      proposal: {
+        property: candidate.proposal.property,
+        page_types: candidate.proposal.page_types ?? [candidate.proposal.page_type],
+        examples: candidate.proposal.examples,
+      },
+      evidence_summary: candidate.evidence_summary,
+      support_count: candidate.support_count,
+      status: 'open',
+      proposed_by: 'connector mapping v1',
+    };
+    for (const [property, value] of Object.entries(values)) {
+      graph.setProperty({
+        pageRef: ref,
+        property,
+        value,
+        status: 'candidate',
+        provenance: {
+          kind: 'extracted',
+          source: candidate.sources.join(', '),
+          method: 'column coverage check v1',
+          as_of: capturedAt,
+          evidence_class: 'attributed',
+          locator: `${candidate.sources[0]}.${candidate.proposal.property}`,
+        },
+        evidenceIds: [],
+      });
+    }
+  }
+
   const coverage: CoverageRow[] = [];
   for (const [name, spec] of Object.entries(ontology.pageTypes)) {
     for (const property of Object.keys(spec.properties)) {

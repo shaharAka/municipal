@@ -12,7 +12,7 @@ import { publicView, stats as ontologyStats } from './ontology/compose.ts';
 import { MAPPINGS } from './ontology/mappings.ts';
 import { PARAMS } from './process/discover.ts';
 import { whoHandles } from './org/orgmap.ts';
-import { refFor, stableId, type Viewer } from './graph/graph.ts';
+import { refFor, type Viewer } from './graph/graph.ts';
 
 const WEB = new URL('./web/', import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 4173);
@@ -280,6 +280,25 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       const candidate = platform.report.schemaCandidates.find((c) => c.id === candidateId);
       if (!candidate) return json(res, 404, { error: 'no such candidate' });
       candidate.status = 'accepted';
+      // The page is the record; the report is a view of it.
+      for (const page of platform.graph.ofType('knowledge_candidate')) {
+        if (String(page.properties.candidate_id) !== candidate.id) continue;
+        platform.graph.setProperty({
+          pageRef: page.ref,
+          property: 'status',
+          value: 'accepted',
+          status: 'confirmed',
+          provenance: {
+            kind: 'recorded',
+            source: 'workbench acceptance',
+            method: 'person decision',
+            as_of: new Date().toISOString(),
+            evidence_class: 'asserted',
+            confirmed_by_role: viewerName(platform, viewer),
+          },
+          evidenceIds: [],
+        });
+      }
       return json(res, 200, {
         ok: true,
         overlayDraft: {

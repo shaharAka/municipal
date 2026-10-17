@@ -5,7 +5,7 @@
 // the first and only the differences of the second are reported.
 
 import { createHash } from 'node:crypto';
-import { buildFixture, type Fixture } from './cloud/fixtures.ts';
+import { buildFixture, PROFILES, type Fixture } from './cloud/fixtures.ts';
 import { createMockCloud } from './cloud/mock-azure.ts';
 import { GraphClient, LocalSqlClient, OpenAIClient } from './cloud/clients.ts';
 import { composeBaseline, loadPacks, type Ontology } from './ontology/compose.ts';
@@ -14,7 +14,6 @@ import { ingest, type IngestReport } from './ingest/ingest.ts';
 import { buildOrgMap, type OrgMap } from './org/orgmap.ts';
 import { discoverProcess, persistProcess, type AutomationProposal, type ProcessModel } from './process/discover.ts';
 import { exportTemplate, diffAgainstTemplate, type OrgTemplate, type DiffReport } from './template/diff.ts';
-import { PROFILES } from './cloud/fixtures.ts';
 
 export const captureTime = '2026-10-17T08:00:00.000Z';
 
