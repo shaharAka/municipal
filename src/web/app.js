@@ -38,6 +38,7 @@ const list = (items, fallback = 'None.') =>
 const SECTIONS = [
   { id: 'overview', label: 'Overview' },
   { id: 'ask', label: 'Ask' },
+  { id: 'learn', label: 'Learn' },
   { id: 'mapping', label: 'Sources & Mapping' },
   { id: 'organization', label: 'Organization' },
   { id: 'workflows', label: 'Workflows' },
@@ -49,7 +50,7 @@ const state = {
   tab: 'overview', service: null, viewer: null, coverageFilter: 'all',
   search: { q: '', ran: false, loading: false, error: null, results: [], seq: 0 },
   approvals: new Map(), overlays: new Map(), focusService: null, focusViewer: false,
-  ask: { answer: null, error: null },
+  ask: { answer: null, error: null }, learn: { result: null },
 };
 const cache = new Map();
 async function fetchJson(path, params = {}) {
@@ -762,6 +763,7 @@ function onPanelClick(event) {
     if (action === 'coverage-filter') { state.coverageFilter = actionElement.dataset.filter; applyCoverageFilter(); return; }
     if (action === 'accept') { acceptCandidate(actionElement); return; }
     if (action === 'approve') { approveProposal(actionElement); return; }
+    if (action === 'open-interview') { openInterviewFor(actionElement.dataset.gap); return; }
     if (action === 'ask-suggestion') {
       const form = $('form[data-form="ask"]');
       if (!form) return;
@@ -786,6 +788,7 @@ function onPanelSubmit(event) {
   event.preventDefault();
   if (form.dataset.form === 'search') runSearch(form);
   if (form.dataset.form === 'ask') runAsk(form);
+  if (form.dataset.form === 'answer') submitInterview(form);
 }
 
 
@@ -895,7 +898,96 @@ function askView({ answer, rules }) {
     </section>`;
 }
 
+
+/* ------------------------------------------------------------------- learn */
+async function openInterviewFor(gapRef) {
+  if (!gapRef) return;
+  cache.clear();
+  try {
+    await postJson('/api/interviews/open', { gapRef });
+  } catch (error) {
+    state.learn.result = { error: error.message };
+  }
+  renderTab();
+}
+async function submitInterview(form) {
+  const ref = form.dataset.ref;
+  const answers = {};
+  for (const field of Array.from(form.querySelectorAll('[data-question]'))) {
+    if (field.value) answers[field.dataset.question] = field.value;
+  }
+  const button = $('button[type="submit"]', form);
+  if (button) button.disabled = true;
+  try {
+    const result = await postJson('/api/interviews/answer', { ref, answers });
+    state.learn.result = result;
+    cache.clear();
+    renderTab();
+  } catch (error) {
+    if (button) button.disabled = false;
+    const box = $('.action-error', form);
+    if (box) box.textContent = error.message;
+  }
+}
+function interviewCard(interview, last) {
+  const isOpen = interview.status === 'open';
+  const answer = last && last.interview?.ref === interview.ref ? last : null;
+  return h`<article class="card interview-card">
+    <div class="row-between">
+      <div><p class="eyebrow">${isOpen ? 'Open interview' : 'Answered'}</p><h3 class="card-title">${interview.gapSummary}</h3></div>
+      <div class="chips">${badge(interview.status, isOpen ? 'candidate' : 'ok')}${badge(interview.attentionCost + ' questions')}</div>
+    </div>
+    <p class="small muted">To ${heb(interview.personName)} · ${heb(interview.personTitle)} · delivered ${date(interview.deliveredAt)}</p>
+    ${isOpen ? h`<form class="answer-form" data-form="answer" data-ref="${interview.ref}">
+      ${interview.questions.map((question) => h`<div class="question">
+        <label for="q-${question.id}">${heb(question.prompt_he)}<span class="tiny muted"> ${question.prompt_en}</span></label>
+        <select id="q-${question.id}" data-question="${question.id}">
+          ${(question.options ?? []).map((option) => h`<option value="${option}" ${option === question.prefill ? 'selected' : ''}>${heb(option)}</option>`)}
+        </select>
+        <p class="tiny muted">Prefilled: ${heb(question.prefill ?? '')} · ${question.prefill_source ?? ''}</p>
+      </div>`)}
+      <div class="row-between"><button class="btn" type="submit">Send answers</button><span class="tiny muted">Answering is optional; declining is a valid answer.</span></div>
+      <p class="action-error" role="alert"></p>
+    </form>` : h`<dl class="proposal-metrics">
+      ${Object.entries(interview.answers).map(([key, value]) => h`<div><dt>${key.replaceAll('_', ' ')}</dt><dd>${heb(value)}</dd></div>`)}
+      <div><dt>Yield</dt><dd>${pct(interview.yieldRate)}</dd></div>
+      <div><dt>Answered</dt><dd>${date(interview.answeredAt)}</dd></div>
+    </dl>`}
+    ${answer?.contradiction ? h`<div class="banner warn" style="margin-top:12px"><div class="banner-body">
+      <p class="eyebrow">Contradiction recorded</p><h3>${answer.contradiction}</h3>
+      <p>What-if with the proposed policy: <strong>${n(answer.whatIf.eligible)}</strong> eligible · <strong>${n(answer.whatIf.notEligible)}</strong> not eligible · <strong>${n(answer.whatIf.unknown)}</strong> unknown. The rule owner still has to approve it.</p>
+    </div></div>` : ''}
+  </article>`;
+}
+function learnView(data) {
+  const interviews = data.interviews ?? [];
+  const open = interviews.filter((interview) => interview.status === 'open');
+  const answered = interviews.filter((interview) => interview.status !== 'open');
+  return h`
+    ${pageHead('Learn from people', 'The gap queue, and the shortest form that closes it',
+      'The system asks one person at most one open question at a time. Answers become evidence; an answer that contradicts a rule becomes a proposed rule change with its what-if counts, which a person still approves.')}
+    <div class="stats">
+      ${statTile('Open gaps', n((data.gaps ?? []).length), 'knowledge candidates')}
+      ${statTile('Open interviews', n(open.length), 'one per person')}
+      ${statTile('Answered', n(answered.length), 'answers kept as evidence')}
+      ${statTile('Attention budget', n(data.attention?.maxOpenPerPerson?.value ?? 1), 'open interview per person')}
+    </div>
+    <section class="section">
+      ${sectionHead('Gap queue', 'Every gap names what it blocks and what would close it.')}
+      <div class="candidate-grid">${(data.gaps ?? []).map((gap) => h`<article class="card">
+        <div class="row-between"><span class="badge candidate">${gap.proposal?.property ?? 'gap'}</span><span class="tiny muted">${n(gap.support)} blocked</span></div>
+        <p class="small">${gap.summary}</p>
+        <button class="btn ghost" type="button" data-action="open-interview" data-gap="${gap.ref}">Generate an interview</button>
+      </article>`)}</div>
+    </section>
+    <section class="section">
+      ${sectionHead('Interviews', 'Generated from the gap, never hand-written.')}
+      <div class="interview-list">${interviews.length ? interviews.map((interview) => interviewCard(interview, state.learn.result)) : h`<p class="tiny muted">No interviews yet. Generate one from a gap.</p>`}</div>
+    </section>`;
+}
+
 /* ----------------------------------------------------------------- loaders */
+
 
 async function loadWorkflows() {
   const overview = await fetchJson('/api/overview');
@@ -928,6 +1020,7 @@ async function loadAccess() {
 const LOADERS = {
   overview: () => fetchJson('/api/overview'),
   ask: loadAsk,
+  learn: () => fetchJson('/api/interviews'),
   mapping: () => fetchJson('/api/mapping'),
   organization: () => fetchJson('/api/org'),
   workflows: loadWorkflows,
@@ -936,7 +1029,7 @@ const LOADERS = {
   access: loadAccess,
 };
 const VIEWS = {
-  overview: overviewView, ask: askView, mapping: mappingView, organization: organizationView,
+  overview: overviewView, ask: askView, learn: learnView, mapping: mappingView, organization: organizationView,
   workflows: workflowsView, automations: automationsView, onboarding: onboardingView, access: accessView,
 };
 

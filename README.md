@@ -18,7 +18,7 @@ Nothing to install. Node 22.18+:
 ```bash
 npm run demo   # the whole loop, narrated in the terminal with real numbers
 npm start      # the workbench at http://127.0.0.1:4173
-npm test       # 27 tests over the pipeline, the ontology, eligibility, the API and the access rules
+npm test       # 32 tests over the pipeline, the ontology, eligibility, forms, interviews and access
 ```
 
 Then open <http://127.0.0.1:4173> and walk the tabs: **Sources & Mapping** (where the data lands in the ontology),
@@ -79,7 +79,16 @@ executor applies the rule version in force, per household, and returns three cou
 unknown. Counts below the declared minimum cell size are suppressed. Every answer is stored as a `query_answer` page
 with its plan, so it can be re-checked when the data or the rule changes. Unknowns become `knowledge_candidate` gaps.
 
-**7 · The next municipality is a diff.** ([src/template](src/template))
+**7 · Forms are generated, and gaps are closed by asking.** ([src/forms](src/forms), [src/interviews](src/interviews))
+A form is three documents derived from one page type: JSON Schema, UI schema and an Adaptive Card. Validation runs
+against the generated schema, so a form cannot drift from the model. The gap queue picks the person from the org map
+and generates at most five prefilled questions — one open interview per person, declining allowed. An answer becomes
+evidence, and an answer that contradicts the rule becomes a **proposed rule change with its what-if counts** (28
+eligible / 16 not eligible / 0 unknown, versus 28 / 10 / 6 today) that the rule owner still has to approve.
+
+![The gap queue and an interview](docs/screenshots/learn.png)
+
+**8 · The next municipality is a diff.** ([src/template](src/template))
 The learned graph exports a versioned template (units, roles, services, process
 shapes). Onboarding compares a new organization to it and reports matched,
 renamed, added and missing — with an overlay draft recording only the

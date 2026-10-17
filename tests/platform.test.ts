@@ -6,6 +6,8 @@ import { buildFixture } from '../src/cloud/fixtures.ts';
 import { Graph, refFor } from '../src/graph/graph.ts';
 import { answerQuestion, evaluateRule } from '../src/query/eligibility.ts';
 import { RULES } from '../src/seed/eligibility-rules.ts';
+import { generateForm, proposeValues, validateSubmission } from '../src/forms/generate.ts';
+import { answerInterview, openInterview } from '../src/interviews/engine.ts';
 
 let demo: Demo;
 
@@ -283,4 +285,103 @@ test('the sanitisation fee question is persisted as an answer page', () => {
   assert.equal(pages[0].properties.eligible, demo.primary.answer.counts.eligible);
   assert.equal(pages[0].properties.rule_version, 2);
   assert.equal(pages[0].properties.unknown_reasons.income_band_missing, demo.primary.answer.counts.unknown);
+});
+
+// --------------------------------------------------------------------- forms
+
+test('a form is generated from the ontology, not hand-written', () => {
+  const form = generateForm(demo.primary.ontology, 'household', 'application', {
+    only: ['household_size', 'income_band', 'discount_status'],
+  });
+  assert.equal(form.fields.length, 3);
+  assert.equal(form.direction, 'rtl');
+  assert.deepEqual(form.fields.find((f) => f.name === 'income_band')!.options, ['LOW', 'MID', 'HIGH']);
+  assert.equal(form.json_schema.type, 'object');
+  assert.deepEqual(form.json_schema.required, []);
+  assert.equal(form.adaptive_card.type, 'AdaptiveCard');
+  const cardBody = form.adaptive_card.body as { id?: string; type: string }[];
+  assert.ok(cardBody.some((node) => node.type === 'Input.ChoiceSet' && node.id === 'income_band'));
+});
+
+test('a submission is validated against the generated schema', () => {
+  const form = generateForm(demo.primary.ontology, 'household', 'application', { only: ['income_band', 'household_size'] });
+  const bad = validateSubmission(
+    demo.primary.ontology,
+    form,
+    { values: { income_band: 'HUGE', household_size: -2, invented: 'x' }, typed_by: 'test', prefilled: {} },
+    '2026-10-17T08:00:00.000Z',
+  );
+  assert.ok(bad.problems.some((p) => p.includes('income_band')));
+  assert.ok(bad.problems.some((p) => p.includes('invented')));
+  assert.equal(bad.facts.length, 0);
+
+  const good = validateSubmission(
+    demo.primary.ontology,
+    form,
+    { values: { income_band: 'LOW', household_size: 4 }, typed_by: 'הילה קורן', prefilled: {} },
+    '2026-10-17T08:00:00.000Z',
+  );
+  assert.deepEqual(good.problems, []);
+  assert.equal(good.facts.length, 2);
+  assert.equal(good.facts[0].provenance.evidence_class, 'asserted');
+});
+
+test('fill-with-AI proposes from linked records and never replaces a typed value', () => {
+  const form = generateForm(demo.primary.ontology, 'property', 'application', { only: ['street_name', 'city'] });
+  const household = demo.primary.graph.ofType('household')[0];
+  const proposals = proposeValues(demo.primary.graph, form, household.ref, { city: 'typed by a person' });
+  const cityProposal = proposals.find((p) => p.property === 'city');
+  assert.equal(cityProposal, undefined, 'a typed value must not be proposed over');
+  const street = proposals.find((p) => p.property === 'street_name');
+  assert.ok(street, 'the linked property should supply the street');
+  assert.match(street!.source, /linked by household_at|same record/);
+});
+
+// ---------------------------------------------------------------- interviews
+
+test('a gap becomes a short interview with the right respondent and prefills', () => {
+  const gap = demo.primary.graph
+    .ofType('knowledge_candidate')
+    .find((p) => String(p.properties.proposed_by) === 'eligibility gap detection v1')!;
+  const result = openInterview(demo.primary.graph, demo.primary.org, gap.ref, {
+    capturedAt: '2026-10-17T08:00:00.000Z',
+  });
+  assert.ok(result.interview);
+  const interview = result.interview!;
+  assert.match(interview.personTitle, /גזברות|finance/i);
+  assert.ok(interview.questions.length <= 5);
+  assert.ok(interview.questions.every((q) => q.prefill));
+  assert.equal(interview.status, 'open');
+
+  const again = openInterview(demo.primary.graph, demo.primary.org, gap.ref, {
+    capturedAt: '2026-10-17T08:00:00.000Z',
+  });
+  assert.equal(again.existing, true, 'one open interview per person');
+});
+
+test('an answer that contradicts the rule produces a rule-change proposal with what-if counts', () => {
+  const interview = demo.primary.graph.ofType('interview')[0];
+  const result = answerInterview(
+    demo.primary.graph,
+    interview.ref,
+    {
+      source_system: 'גזברות - מערכת חיובים',
+      missing_policy: 'להקצות ללא זכאות',
+      who_can_supply: 'משה טל, רכז גזברות',
+    },
+    'משה טל (רכז גזברות)',
+    '2026-10-17T08:00:00.000Z',
+  );
+  assert.equal(result.interview?.status, 'answered');
+  assert.equal(result.interview?.yieldRate, 1);
+  assert.ok(result.contradiction);
+  assert.ok(result.whatIf);
+  assert.equal(result.whatIf!.unknown, 0, 'the what-if shows the unknowns resolved');
+  assert.ok(result.whatIf!.notEligible > demo.primary.answer.counts.notEligible!);
+  assert.ok(result.proposalRef);
+
+  const proposal = demo.primary.graph.page(result.proposalRef!)!;
+  assert.equal(proposal.type, 'knowledge_candidate');
+  assert.equal(proposal.properties.candidate_kind, 'eligibility_rule');
+  assert.equal((proposal.properties.proposal as Record<string, unknown>).to, 'not_eligible');
 });

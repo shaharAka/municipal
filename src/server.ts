@@ -14,6 +14,8 @@ import { PARAMS } from './process/discover.ts';
 import { whoHandles } from './org/orgmap.ts';
 import { answerQuestion } from './query/eligibility.ts';
 import { REFERENCE_DATE, RULES, SUPPRESSION } from './seed/eligibility-rules.ts';
+import { generateForm, proposeValues, validateSubmission, type FormKind } from './forms/generate.ts';
+import { answerInterview, listInterviews, openInterview, ATTENTION } from './interviews/engine.ts';
 import { refFor, type Viewer } from './graph/graph.ts';
 
 const WEB = new URL('./web/', import.meta.url).pathname;
@@ -289,6 +291,58 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       sources: platform.report.sources.map((s) => ({ system: s.system, label: s.label })),
     });
     return json(res, 200, answer);
+  }
+  if (parts[1] === 'forms') {
+    const pageType = url.searchParams.get('type') ?? 'household';
+    const kind = (url.searchParams.get('kind') ?? 'application') as FormKind;
+    const only = url.searchParams.get('only')?.split(',').filter(Boolean);
+    try {
+      return json(res, 200, { form: generateForm(platform.ontology, pageType, kind, { only }) });
+    } catch (err) {
+      return json(res, 400, { error: String(err) });
+    }
+  }
+  if (parts[1] === 'form-proposals') {
+    const body = await readBody(req);
+    const form = generateForm(platform.ontology, String(body.type ?? 'household'), 'application', { only: body.only as string[] | undefined });
+    return json(res, 200, {
+      proposals: proposeValues(platform.graph, form, (body.subject as string) ?? null, (body.typed as Record<string, unknown>) ?? {}),
+    });
+  }
+  if (parts[1] === 'interviews') {
+    if (req.method === 'POST' && parts[2] === 'open') {
+      const body = await readBody(req);
+      const gapRef = String(body.gapRef ?? '');
+      const result = openInterview(platform.graph, platform.org, gapRef, { capturedAt: captureTime });
+      return json(res, result.interview ? 200 : 400, { ...result, attention: ATTENTION });
+    }
+    if (req.method === 'POST' && parts[2] === 'answer') {
+      const body = await readBody(req);
+      const result = answerInterview(
+        platform.graph,
+        String(body.ref ?? ''),
+        (body.answers ?? {}) as Record<string, string>,
+        viewerName(platform, viewer),
+        captureTime,
+      );
+      return json(res, result.interview ? 200 : 400, result);
+    }
+    const gaps = platform.graph
+      .ofType('knowledge_candidate')
+      .filter((p) => String(p.properties.status) === 'open' && String(p.properties.candidate_kind) === 'property')
+      .map((p) => ({
+        ref: p.ref,
+        summary: p.properties.evidence_summary,
+        support: p.properties.support_count,
+        proposal: p.properties.proposal,
+        proposed_by: p.properties.proposed_by,
+      }))
+      // A gap that blocks a real decision outranks a column nobody asked about.
+      .sort((a, b) => {
+        const weight = (gap: { proposed_by: unknown }) => (String(gap.proposed_by).includes('eligibility') ? 1 : 0);
+        return weight(b) - weight(a) || Number(b.support) - Number(a.support);
+      });
+    return json(res, 200, { interviews: listInterviews(platform.graph), gaps, attention: ATTENTION });
   }
   if (parts[1] === 'security') {
     const labelCounts: Record<string, number> = {};

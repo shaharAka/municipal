@@ -146,7 +146,7 @@ function evaluateCriterion(
 export function evaluateRule(
   graph: Graph,
   rule: RuleSeed,
-  opts: { referenceDate?: string; capturedAt: string },
+  opts: { referenceDate?: string; capturedAt: string; missingPolicy?: 'unknown' | 'not_eligible' },
 ): Evaluation {
   const referenceDate = opts.referenceDate ?? REFERENCE_DATE;
   const households = graph.ofType('household');
@@ -180,7 +180,7 @@ export function evaluateRule(
       continue;
     }
     const unknown = results.filter((r) => r.state === 'unknown');
-    if (unknown.length) {
+    if (unknown.length && (opts.missingPolicy ?? 'unknown') === 'unknown') {
       for (const u of unknown) {
         const existing = reasonTally.get(u.criterion.unknown_reason) ?? { count: 0, criterion: u.criterion };
         existing.count++;

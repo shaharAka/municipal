@@ -6,31 +6,91 @@
     "criterion": {
       "type": "object",
       "properties": {
-        "code": { "type": "string" },
-        "label_he": { "type": "string" },
-        "label_en": { "type": "string" },
-        "ground": { "type": "string", "enum": ["senior_age", "disability", "income"] },
-        "applies_to": { "type": "string", "enum": ["resident", "household"] },
-        "property": { "type": "string" },
+        "code": {
+          "type": "string"
+        },
+        "label_he": {
+          "type": "string"
+        },
+        "label_en": {
+          "type": "string"
+        },
+        "ground": {
+          "type": "string",
+          "enum": [
+            "senior_age",
+            "disability",
+            "income"
+          ]
+        },
+        "applies_to": {
+          "type": "string",
+          "enum": [
+            "resident",
+            "household"
+          ]
+        },
+        "property": {
+          "type": "string"
+        },
         "operator": {
           "type": "string",
-          "enum": ["age_gte", "valid_on", "equals", "lte"]
+          "enum": [
+            "age_gte",
+            "valid_on",
+            "equals",
+            "lte"
+          ]
         },
-        "value": { "type": ["number", "string", "boolean"] },
-        "unknown_reason": { "type": "string" }
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "boolean"
+          ]
+        },
+        "unknown_reason": {
+          "type": "string"
+        }
       },
-      "required": ["code", "ground", "property", "operator", "unknown_reason"],
+      "required": [
+        "code",
+        "ground",
+        "property",
+        "operator",
+        "unknown_reason"
+      ],
       "additionalProperties": false
     },
     "query_plan": {
       "type": "object",
       "properties": {
-        "metric": { "type": "string", "enum": ["count"] },
-        "entity": { "type": "string", "enum": ["household", "resident", "business", "case"] },
-        "rule_code": { "type": "string" },
-        "filter": { "type": "object" }
+        "metric": {
+          "type": "string",
+          "enum": [
+            "count"
+          ]
+        },
+        "entity": {
+          "type": "string",
+          "enum": [
+            "household",
+            "resident",
+            "business",
+            "case"
+          ]
+        },
+        "rule_code": {
+          "type": "string"
+        },
+        "filter": {
+          "type": "object"
+        }
       },
-      "required": ["metric", "entity"],
+      "required": [
+        "metric",
+        "entity"
+      ],
       "additionalProperties": false
     }
   },
@@ -38,51 +98,271 @@
     "eligibility_rule": {
       "description": "A declared rule with an owner, a citation and effective dates. Approval is a decision, not a field edit.",
       "properties": {
-        "rule_id": { "type": "string" },
-        "code": { "type": "string" },
-        "name_he": { "type": "string" },
-        "name_en": { "type": "string" },
-        "service_code": { "type": "string", "enum": ["LIC", "FEE", "CMP"] },
-        "status": { "type": "string", "enum": ["draft", "approved", "superseded"] },
-        "owner": { "type": "string" },
-        "citation": { "type": "string" },
-        "effective_from": { "type": "string", "format": "date" },
-        "effective_to": { "type": "string", "format": "date" },
-        "version": { "type": "integer", "minimum": 1 },
-        "logic": { "type": "string", "enum": ["any", "all"] },
-        "criteria": { "type": "array", "items": { "$ref": "#/defs/criterion" } },
-        "provenance": { "$ref": "#/defs/provenance" }
+        "rule_id": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "name_he": {
+          "type": "string"
+        },
+        "name_en": {
+          "type": "string"
+        },
+        "service_code": {
+          "type": "string",
+          "enum": [
+            "LIC",
+            "FEE",
+            "CMP"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "approved",
+            "superseded"
+          ]
+        },
+        "owner": {
+          "type": "string"
+        },
+        "citation": {
+          "type": "string"
+        },
+        "effective_from": {
+          "type": "string",
+          "format": "date"
+        },
+        "effective_to": {
+          "type": "string",
+          "format": "date"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "logic": {
+          "type": "string",
+          "enum": [
+            "any",
+            "all"
+          ]
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "$ref": "#/defs/criterion"
+          }
+        },
+        "provenance": {
+          "$ref": "#/defs/provenance"
+        }
       },
-      "required": ["rule_id", "code", "status", "owner", "citation", "version", "logic", "criteria"]
+      "required": [
+        "rule_id",
+        "code",
+        "status",
+        "owner",
+        "citation",
+        "version",
+        "logic",
+        "criteria"
+      ]
     },
     "query_answer": {
       "description": "One answered question, with the rule version, the three counts and the plan. Kept so the same question can be re-checked when the data or the rule changes.",
       "properties": {
-        "answer_id": { "type": "string" },
-        "question": { "type": "string" },
-        "rule_code": { "type": "string" },
-        "rule_version": { "type": "integer", "minimum": 1 },
-        "eligible": { "type": "integer", "minimum": 0 },
-        "not_eligible": { "type": "integer", "minimum": 0 },
-        "unknown": { "type": "integer", "minimum": 0 },
-        "total": { "type": "integer", "minimum": 0 },
-        "suppressed": { "type": "boolean" },
-        "computed_at": { "type": "string", "format": "date-time" },
-        "plan": { "$ref": "#/defs/query_plan" },
-        "unknown_reasons": { "type": "object" },
-        "provenance": { "$ref": "#/defs/provenance" }
+        "answer_id": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "rule_code": {
+          "type": "string"
+        },
+        "rule_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "eligible": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_eligible": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suppressed": {
+          "type": "boolean"
+        },
+        "computed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "plan": {
+          "$ref": "#/defs/query_plan"
+        },
+        "unknown_reasons": {
+          "type": "object"
+        },
+        "provenance": {
+          "$ref": "#/defs/provenance"
+        }
       },
-      "required": ["answer_id", "question", "rule_code", "eligible", "not_eligible", "unknown", "total", "computed_at", "plan"]
+      "required": [
+        "answer_id",
+        "question",
+        "rule_code",
+        "eligible",
+        "not_eligible",
+        "unknown",
+        "total",
+        "computed_at",
+        "plan"
+      ]
+    },
+    "interview": {
+      "description": "A short generated form sent to one person to close a gap. At most five questions, prefilled with the system's best guess, and answering is always optional.",
+      "properties": {
+        "interview_id": {
+          "type": "string"
+        },
+        "gap_ref": {
+          "type": "string"
+        },
+        "person_ref": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "answered",
+            "declined"
+          ]
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "prompt_he": {
+                "type": "string"
+              },
+              "prompt_en": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "choice",
+                  "text",
+                  "person"
+                ]
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "prefill": {
+                "type": "string"
+              },
+              "prefill_source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "prompt_he",
+              "prompt_en",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "answers": {
+          "type": "object"
+        },
+        "attention_cost": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "delivered_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "answered_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "yield": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provenance": {
+          "$ref": "#/defs/provenance"
+        }
+      },
+      "required": [
+        "interview_id",
+        "gap_ref",
+        "person_ref",
+        "status",
+        "questions",
+        "delivered_at"
+      ]
     }
   },
   "edge_kinds": {
     "rule_for": {
-      "from": ["eligibility_rule"],
-      "to": ["service"]
+      "from": [
+        "eligibility_rule"
+      ],
+      "to": [
+        "service"
+      ]
     },
     "answer_of": {
-      "from": ["query_answer"],
-      "to": ["eligibility_rule"]
+      "from": [
+        "query_answer"
+      ],
+      "to": [
+        "eligibility_rule"
+      ]
+    },
+    "interview_closes": {
+      "from": [
+        "interview"
+      ],
+      "to": [
+        "knowledge_candidate"
+      ]
+    },
+    "interview_for": {
+      "from": [
+        "interview"
+      ],
+      "to": [
+        "person"
+      ]
     }
   },
   "learning": {
@@ -90,7 +370,10 @@
       {
         "metric": "unknown_share",
         "subject": "query_answer",
-        "quantity": { "dimension": "fraction", "canonical_unit": "fraction" },
+        "quantity": {
+          "dimension": "fraction",
+          "canonical_unit": "fraction"
+        },
         "value": "unknown divided by total"
       }
     ],
@@ -98,9 +381,20 @@
       {
         "name": "undecidable_eligibility",
         "insight_kind": "gap",
-        "about": ["query_answer", "household"],
-        "from": ["unknown_share"],
-        "aggregates": [{ "name": "unknown_share_avg", "function": "mean", "metric": "unknown_share" }],
+        "about": [
+          "query_answer",
+          "household"
+        ],
+        "from": [
+          "unknown_share"
+        ],
+        "aggregates": [
+          {
+            "name": "unknown_share_avg",
+            "function": "mean",
+            "metric": "unknown_share"
+          }
+        ],
         "question": "Which missing attribute blocks the most eligibility decisions, and who can supply it?"
       }
     ]
