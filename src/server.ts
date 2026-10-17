@@ -119,14 +119,13 @@ function mappingView(platform: Platform) {
 
 function processView(platform: Platform, code: string) {
   const model = platform.models.find((m) => m.serviceCode === code) ?? platform.models[0];
-  const proposals = platform.proposals.filter((p) => p.id.includes(model.serviceCode));
+  const proposals = platform.proposals.filter((p) => p.serviceCode === model.serviceCode);
   return {
     model,
     proposals,
     params: PARAMS,
     automations: platform.graph
       .ofType('automation_proposal')
-      .filter((p) => String(p.properties.proposal_id ?? '').includes('AP-'))
       .map((p) => ({
         ref: p.ref,
         title: p.title,

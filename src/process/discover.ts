@@ -66,6 +66,9 @@ export type ProcessModel = {
 
 export type AutomationProposal = {
   id: string;
+  /** Page ref once the proposal is written to the graph. */
+  ref?: string;
+  serviceCode?: string;
   kind: 'routing' | 'sla_reminder' | 'document_request' | 'standard_letter';
   title: string;
   rationale: string;
@@ -350,6 +353,8 @@ export function persistProcess(
   const proposals = proposeAutomations(model);
   for (const proposal of proposals) {
     const ref = refFor('automation_proposal', proposal.id.replace('AP-', ''));
+    proposal.ref = ref;
+    proposal.serviceCode = model.serviceCode;
     graph.addPage({ ref, type: 'automation_proposal', title: proposal.title, properties: {}, createdAt: capturedAt });
     const p: Record<string, unknown> = {
       proposal_id: ref,
