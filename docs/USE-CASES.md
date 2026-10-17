@@ -8,7 +8,9 @@ that person. Each role has a different first block at home.
 
 The **סיור** button in the top bar (and **סיור מודרך** on the landing page) opens
 the four scenarios below. Each switches to the owning role and opens the real
-screen at the right place; nothing is a separate simulated walkthrough.
+screen at the right place. A three-step coach stays at the bottom; **הבא** and
+**חזור** move it and highlight the next target. Nothing is a separate simulated
+walkthrough.
 
 The main surface has five movements: **home** (a role-shaped first block and
 what needs attention), **decisions** (a queue and a detail pane), **department

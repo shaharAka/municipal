@@ -318,6 +318,7 @@ async function renderMain() {
 /* --------------------------------------------------------------- interaction */
 
 async function selectRole(id, label, { tab = 'home' } = {}) {
+  stopDemo();
   state.role = id;
   state.roleLabel = label || state.viewers?.find((v) => v.id === id)?.label || '';
   state.signedIn = true;
@@ -337,6 +338,7 @@ async function selectRole(id, label, { tab = 'home' } = {}) {
 }
 
 function exitRole() {
+  stopDemo();
   state.role = null;
   state.roleLabel = '';
   state.signedIn = false;
@@ -348,6 +350,7 @@ function exitRole() {
 }
 
 function openDemo() {
+  stopDemo();
   openSheet({
     title: 'סיור מודרך',
     eyebrow: 'ארבעה תרחישים · ארבעה מסכים אמיתיים',
@@ -393,7 +396,6 @@ async function startDemo(id) {
     return;
   }
   closeSheet();
-  state.demo = scenario.id;
   if (state.role !== viewer.id) {
     await selectRole(viewer.id, viewer.label, { tab: scenario.tab });
   } else if (state.tab !== scenario.tab) {
@@ -410,7 +412,72 @@ async function startDemo(id) {
     toast('התרחיש לא מצא את היעד במסך. נסו שוב מהסיור.', 'error');
     return;
   }
-  toast(`התרחיש התחיל · ${scenario.titleHe}`);
+  state.demo = { id: scenario.id, step: 0 };
+  renderDemoCoach();
+}
+
+function renderDemoCoach() {
+  const run = state.demo;
+  if (!run) return;
+  const scenario = demo.scenarioById(run.id);
+  const step = scenario?.steps?.[run.step];
+  if (!scenario || !step) {
+    stopDemo();
+    return;
+  }
+  let coach = document.getElementById('demo-coach');
+  if (!coach) {
+    coach = document.createElement('aside');
+    coach.id = 'demo-coach';
+    coach.className = 'demo-coach';
+    coach.setAttribute('aria-live', 'polite');
+    document.body.append(coach);
+  }
+  const last = run.step === scenario.steps.length - 1;
+  coach.innerHTML = `
+    <div class="demo-coach-top">
+      <span>${icon('spark')} סיור · ${esc(scenario.titleHe)}</span>
+      <button class="demo-coach-exit" type="button" data-demo-stop aria-label="יציאה מהסיור">${icon('close')}</button>
+    </div>
+    <div class="demo-coach-progress">
+      <b>שלב ${num(run.step + 1)} מתוך ${num(scenario.steps.length)}</b>
+      <span class="demo-dots" aria-hidden="true">${scenario.steps.map((_, index) => `<i class="${index <= run.step ? 'is-done' : ''}"></i>`).join('')}</span>
+    </div>
+    <p class="demo-coach-text">${esc(step.textHe)}</p>
+    <div class="demo-coach-actions">
+      ${run.step > 0 ? `<button class="btn btn-quiet btn-small" type="button" data-demo-back>${icon('arrowRight')} חזור</button>` : ''}
+      <button class="btn btn-small" type="button" data-demo-next>${last ? 'סיום' : 'השלב הבא'} ${last ? icon('check') : icon('arrowLeft')}</button>
+    </div>`;
+  document.querySelectorAll('.is-demo-focus').forEach((element) => element.classList.remove('is-demo-focus'));
+  const target = step.selector ? document.querySelector(step.selector) : null;
+  if (target) {
+    target.classList.add('is-demo-focus');
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
+
+function stopDemo() {
+  state.demo = null;
+  document.querySelectorAll('.is-demo-focus').forEach((element) => element.classList.remove('is-demo-focus'));
+  document.getElementById('demo-coach')?.remove();
+}
+
+function advanceDemo(delta) {
+  const run = state.demo;
+  if (!run) return;
+  const scenario = demo.scenarioById(run.id);
+  if (!scenario) {
+    stopDemo();
+    return;
+  }
+  const next = run.step + delta;
+  if (next < 0) return;
+  if (next >= scenario.steps.length) {
+    stopDemo();
+    return;
+  }
+  state.demo = { ...run, step: next };
+  renderDemoCoach();
 }
 
 function openRoleSheet() {
@@ -776,6 +843,18 @@ async function toggleSource(id, button) {
 /* ------------------------------------------------------------------- events */
 
 document.addEventListener('click', async (event) => {
+  if (event.target.closest('[data-demo-stop]')) {
+    stopDemo();
+    return;
+  }
+  if (event.target.closest('[data-demo-back]')) {
+    advanceDemo(-1);
+    return;
+  }
+  if (event.target.closest('[data-demo-next]')) {
+    advanceDemo(1);
+    return;
+  }
   if (event.target.closest('[data-demo-open]')) {
     openDemo();
     return;
@@ -975,6 +1054,7 @@ document.addEventListener('keydown', (event) => {
 
 window.addEventListener('hashchange', async () => {
   if (!state.role) return;
+  stopDemo();
   state.tab = tabFromHash();
   if (!allowedTab(state.tab)) state.tab = 'home';
   renderChrome();

@@ -66,9 +66,12 @@ customer-demo value pages — rights and meetings — are documented in
 A **סיור** button in the top bar, and **סיור מודרך** on the landing page, opens
 four guided scenarios. Each switches to the role that owns the work and opens
 the real screen: rights with Hila, meetings with Dana, the eligibility question,
-and the income gap with Michal. A scenario can be stopped at any point.
+and the income gap with Michal. A three-step coach stays at the bottom;
+**הבא** and **חזור** move it and highlight the next target. A scenario can be
+stopped at any point.
 
 ![The guided demo chooser](docs/screenshots/demo.png)
+![A guided scenario, step one](docs/screenshots/demo-coach.png)
 
 ![The front door](docs/screenshots/landing.png)
 ![Home: department health and what needs a person](docs/screenshots/home.png)
