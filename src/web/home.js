@@ -18,6 +18,7 @@ const TABS = [
   { id: 'map', label: 'מפת התהליך' },
   { id: 'workspace', label: 'דואר ומסמכים' },
   { id: 'learning', label: 'למידה' },
+  { id: 'approvals', label: 'אישורים' },
   { id: 'forms', label: 'טפסים' },
   { id: 'demo', label: 'סיור' },
   { id: 'people', label: 'אנשים' },
@@ -599,6 +600,30 @@ async function workspaceView() {
     </section>`;
 }
 
+/* --------------------------------------------------------------- approvals */
+async function approvalsView() {
+  const data = await api('/api/approvals');
+  const label = { suggestion: 'הצעת מחקר', automation: 'אוטומציה', candidate: 'שינוי מודל' };
+  return `
+    <h1>מה מחכה לאישור</h1>
+    <p class="lede">כל פריט כאן הוא הצעה של המערכת. שום דבר לא משתנה עד שמישהו מאשר, וכל אישור נרשם עם שמו.</p>
+    <div class="counts">
+      <div class="count"><b>${num(data.counts.suggestions)}</b><span>הצעות מחקר</span></div>
+      <div class="count"><b>${num(data.counts.automations)}</b><span>אוטומציות</span></div>
+      <div class="count"><b>${num(data.counts.candidates)}</b><span>שינויי מודל</span></div>
+      <div class="count good"><b>${num(data.pending.length)}</b><span>בסה״כ ממתין</span></div>
+    </div>
+    <section class="section">
+      ${data.pending.length ? `<div class="approval-list">${data.pending.map((item) => `<article class="card approval" data-approval="${escapeHtml(item.id)}" data-kind="${item.kind}">
+        <div class="row-between"><span class="badge">${label[item.kind] ?? item.kind}</span><button class="btn small" type="button" data-approve-kind="${item.kind}" data-approve-id="${escapeHtml(item.id)}">אישור</button></div>
+        <h3>${escapeHtml(item.titleHe)}</h3>
+        <p>${escapeHtml(item.whyHe)}</p>
+        ${item.evidenceHe?.length ? `<div class="chips evidence">${item.evidenceHe.slice(0, 3).map((e) => `<span class="chip static">${escapeHtml(e)}</span>`).join('')}</div>` : ''}
+        <div class="approval-out" role="status"></div>
+      </article>`).join('')}</div>` : '<p class="hello">אין פריטים שממתינים לאישור.</p>'}
+    </section>`;
+}
+
 /* ------------------------------------------------------------------ render */
 
 async function sourcesView() {
@@ -644,7 +669,7 @@ async function sourcesView() {
     </section>` : ''}`;
 }
 
-const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, workspace: workspaceView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
+const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, workspace: workspaceView, approvals: approvalsView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -735,6 +760,25 @@ document.addEventListener('click', async (event) => {
     });
     if (location.hash !== '#/sources') location.hash = '#/sources';
     else render();
+    return;
+  }
+  const approveItem = event.target.closest('[data-approve-kind]');
+  if (approveItem) {
+    const card = approveItem.closest('.approval');
+    const out = card?.querySelector('.approval-out');
+    approveItem.disabled = true;
+    try {
+      const kind = approveItem.dataset.approveKind;
+      const id = approveItem.dataset.approveId;
+      if (kind === 'suggestion') await api(`/api/suggestions/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+      else if (kind === 'automation') await api(`/api/automations/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+      else await api('/api/candidates/accept', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) });
+      if (out) out.innerHTML = '<p class="ok-note">אושר ונרשמה החלטה.</p>';
+      approveItem.remove();
+    } catch (error) {
+      approveItem.disabled = false;
+      if (out) out.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`;
+    }
     return;
   }
   const graphBtn = event.target.closest('[data-graph]');

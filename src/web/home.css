@@ -250,3 +250,6 @@ details ul { margin: 10px 0 0; padding-inline-start: 18px; font-size: 13px; colo
 .ws-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; font-size: 12.5px; color: var(--ink-2); }
 .ws-bar select { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12.5px; }
 .ws-learned { margin-top: 16px; }
+.approval-list { display: grid; gap: 12px; }
+.approval h3 { margin-top: 8px; }
+.approval .approval-out { margin-top: 10px; }

@@ -690,6 +690,22 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     });
   }
   if (parts[1] === 'tour') return json(res, 200, buildTour(platform));
+  if (parts[1] === 'approvals') {
+    const suggestions = [...connectors.suggestions.values()]
+      .filter((s) => s.status === 'new')
+      .map((s) => ({ kind: 'suggestion', id: s.id, titleHe: s.titleHe, whyHe: s.whyHe, evidenceHe: s.evidenceHe }));
+    const automations = platform.proposals
+      .filter((p) => p.ref && String(platform.graph.page(p.ref)?.properties.status ?? '') !== 'approved')
+      .map((p) => ({ kind: 'automation', id: p.ref!, titleHe: p.title, whyHe: p.rationale, evidenceHe: p.evidence }));
+    const candidates = platform.graph
+      .ofType('knowledge_candidate')
+      .filter((c) => String(c.properties.status) === 'open')
+      .map((c) => ({ kind: 'candidate', id: String(c.properties.candidate_id ?? ''), titleHe: c.title, whyHe: String(c.properties.evidence_summary ?? ''), evidenceHe: [] }));
+    return json(res, 200, {
+      pending: [...suggestions, ...automations, ...candidates],
+      counts: { suggestions: suggestions.length, automations: automations.length, candidates: candidates.length },
+    });
+  }
   if (parts[1] === 'replay') {
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
