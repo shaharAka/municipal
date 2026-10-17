@@ -485,3 +485,19 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); 
 .connected .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--ok); }
 .src-chip { background: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; color: var(--ink-2); font-size: 11.5px; }
 .connected a { margin-inline-start: auto; color: oklch(0.48 0.12 48); text-decoration: none; }
+
+/* approvals, modern rows */
+.page-slim { max-width: 860px; }
+.ap-group { margin-top: 26px; }
+.ap-group-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.ap-group-head h2 { margin: 0; font-size: 15px; }
+.ap-group-head span { font-size: 12px; color: var(--muted-foreground); }
+.ap-rows { display: grid; gap: 8px; }
+.ap-row { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: start; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
+.ap-row:hover { border-color: var(--line-strong); }
+.ap-main h3 { margin: 0 0 4px; font-size: 14.5px; font-weight: 600; }
+.ap-main p { margin: 0; font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+.ap-ev { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.ap-ev span { font-size: 11px; color: var(--muted-foreground); background: var(--muted); border-radius: 999px; padding: 3px 9px; }
+.ap-act { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ap-act .approval-out p { font-size: 11.5px; }

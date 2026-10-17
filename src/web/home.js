@@ -622,25 +622,30 @@ async function runFind(form) {
 /* --------------------------------------------------------------- approvals */
 async function approvalsView() {
   const data = await api('/api/approvals');
-  const label = { suggestion: 'הצעת מחקר', automation: 'אוטומציה', candidate: 'שינוי מודל' };
+  const kindHe = { suggestion: 'הצעת מחקר', automation: 'אוטומציה', candidate: 'שינוי מודל' };
+  const groups = ['automation', 'candidate', 'suggestion'].map((k) => ({ k, items: data.pending.filter((i) => i.kind === k) })).filter((g) => g.items.length);
   return `
-    <h1>מה מחכה לאישור</h1>
-    <p class="lede">כל פריט כאן הוא הצעה של המערכת. שום דבר לא משתנה עד שמישהו מאשר, וכל אישור נרשם עם שמו.</p>
-    <div class="counts">
-      <div class="count"><b>${num(data.counts.suggestions)}</b><span>הצעות מחקר</span></div>
-      <div class="count"><b>${num(data.counts.automations)}</b><span>אוטומציות</span></div>
-      <div class="count"><b>${num(data.counts.candidates)}</b><span>שינויי מודל</span></div>
-      <div class="count good"><b>${num(data.pending.length)}</b><span>בסה״כ ממתין</span></div>
-    </div>
-    <section class="section">
-      ${data.pending.length ? `<div class="approval-list">${data.pending.map((item) => `<article class="card approval" data-approval="${escapeHtml(item.id)}" data-kind="${item.kind}">
-        <div class="row-between"><span class="badge">${label[item.kind] ?? item.kind}</span><button class="btn small" type="button" data-approve-kind="${item.kind}" data-approve-id="${escapeHtml(item.id)}">אישור</button></div>
-        <h3>${escapeHtml(item.titleHe)}</h3>
-        <p>${escapeHtml(item.whyHe)}</p>
-        ${item.evidenceHe?.length ? `<div class="chips evidence">${item.evidenceHe.slice(0, 3).map((e) => `<span class="chip static">${escapeHtml(e)}</span>`).join('')}</div>` : ''}
-        <div class="approval-out" role="status"></div>
-      </article>`).join('')}</div>` : '<p class="hello">אין פריטים שממתינים לאישור.</p>'}
-    </section>`;
+    <div class="page-slim">
+      <h1>מה מחכה לך</h1>
+      <p class="lede">${num(data.pending.length)} פריטים. כל אחד עם הסיבה שלו, ופעולה אחת.</p>
+      ${groups.length ? groups.map((group) => `
+        <section class="ap-group">
+          <div class="ap-group-head"><h2>${kindHe[group.k]}ים</h2><span>${num(group.items.length)}</span></div>
+          <div class="ap-rows">${group.items.map((item) => `
+            <article class="ap-row" data-approval="${escapeHtml(item.id)}" data-kind="${item.kind}">
+              <div class="ap-main">
+                <h3>${escapeHtml(item.titleHe)}</h3>
+                <p>${escapeHtml(item.whyHe)}</p>
+                ${item.evidenceHe?.length ? `<div class="ap-ev">${item.evidenceHe.slice(0, 3).map((e) => `<span>${escapeHtml(e)}</span>`).join('')}</div>` : ''}
+              </div>
+              <div class="ap-act">
+                <button class="btn small" type="button" data-approve-kind="${item.kind}" data-approve-id="${escapeHtml(item.id)}">אישור</button>
+                <div class="approval-out" role="status"></div>
+              </div>
+            </article>`).join('')}</div>
+        </section>`).join('')
+        : '<section class="card focus-empty"><div class="tick">✓</div><h2>אין דבר שממתין</h2><p>הכל טופל. פריטים חדשים יופיעו כאן אחרי מחקר או שינוי בנתונים.</p></section>'}
+    </div>`;
 }
 
 /* ------------------------------------------------------------------ render */
