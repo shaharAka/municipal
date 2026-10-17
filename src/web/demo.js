@@ -12,7 +12,7 @@ export const SCENARIOS = [
     roleKind: 'secretary',
     roleLabelHe: 'הילה קורן · מזכירת מחלקה',
     tab: 'rights',
-    action: { kind: 'click', selector: '[data-v-letter]' },
+    action: { kind: 'focus', selector: '[data-v-letter]' },
     steps: [
       { textHe: 'השמות גלויים רק לתפקיד שמטפל בבקשות הנחה.', selector: '.v-list' },
       { textHe: 'המכתב נבנה מהשדות; אף רשומה לא נשלחת למודל.', selector: '[data-v-letter]' },
@@ -44,11 +44,11 @@ export const SCENARIOS = [
     roleKind: 'head',
     roleLabelHe: 'דנה לוי · מנהלת המחלקה',
     tab: 'home',
-    action: { kind: 'palette', question: 'כמה משקי בית זכאים להנחה באגרת תברואה?' },
+    action: { kind: 'focus', selector: '.search-trigger' },
     steps: [
       { textHe: 'השאלה עוברת למתכנן טיפוסים, לא ל-SQL חופשי.', selector: '.search-trigger' },
-      { textHe: 'התשובה נושאת את גרסת הכלל, הבעלים והמקור.', selector: '.answer-card' },
-      { textHe: '6 משקי בית נשארים "לא ידוע"; הם לא הופכים לאפס.', selector: '.answer-foot' },
+      { textHe: 'התשובה נושאת את גרסת הכלל, הבעלים והמקור.' },
+      { textHe: '6 משקי בית נשארים "לא ידוע"; הם לא הופכים לאפס.' },
     ],
   },
   {
@@ -64,7 +64,7 @@ export const SCENARIOS = [
     steps: [
       { textHe: 'הפער נבחר מהתשובה, לא מתוך רשימת משימות.', selector: '[data-gap-open]' },
       { textHe: 'השאלות מנוסחות מראש, עם הניחוש שלנו.', selector: '.focus-card' },
-      { textHe: 'רק האדם שאליו נשלחה השאלה יכול לענות.', selector: '.rail-personal' },
+      { textHe: 'רק האדם שאליו נשלחה השאלה יכול לענות.' },
     ],
   },
 ];

@@ -395,6 +395,7 @@ async function startDemo(id) {
     toast('לא נמצא תפקיד מתאים לתרחיש הזה.', 'error');
     return;
   }
+  stopDemo();
   closeSheet();
   if (state.role !== viewer.id) {
     await selectRole(viewer.id, viewer.label, { tab: scenario.tab });

@@ -89,10 +89,10 @@ understood and falls back to search. The landing page keeps one live answer as
 the flagship scenario; home does not.
 
 **Guided demo.** A **סיור** button in the top bar opens four scenarios. Each
-switches to the role that owns the work, navigates to the real screen and opens
-the first action or target in place (a letter, the meeting alerts, the answer,
-the gap). A small coach bar carries the three steps; **הבא** and **חזור** move it
-and highlight the next target. It is a launcher, not a second product: the same
+switches to the role that owns the work, navigates to the real screen and points
+at the first action (a letter, the meeting alerts, the answer, the gap). A small
+coach bar carries the three steps; **הבא** and **חזור** move it and highlight the
+next target. It is a launcher, not a second product: the same
 screens, data and permissions.
 
 ![Home on a phone](screenshots/mobile-home.png)
