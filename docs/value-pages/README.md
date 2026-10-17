@@ -203,4 +203,5 @@ it. They aren't in `value-pages.patch`.
    appears once on the meetings page. The rules are in `docs/UX.md` → "Less
    than what it replaces".
 
-The screenshots in `screens/` predate both changes.
+`screens/after/` and `screens/flows/` were refreshed on 18 Oct after both
+changes. `screens/before/` is kept as the historical pre-value-pages state.

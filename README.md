@@ -59,12 +59,14 @@ The experience decisions and the role-shaped information architecture are in
 [docs/UX.md](docs/UX.md). The four click-through scenarios are in
 [docs/USE-CASES.md](docs/USE-CASES.md). What changed after the product/UX review,
 and what is deliberately still open, is in
-[docs/REVIEW-product-ux-response.md](docs/REVIEW-product-ux-response.md).
+[docs/REVIEW-product-ux-response.md](docs/REVIEW-product-ux-response.md). The two
+customer-demo value pages — rights and meetings — are documented in
+[docs/value-pages/README.md](docs/value-pages/README.md).
 
 ![The front door](docs/screenshots/landing.png)
 ![Home: department health and what needs a person](docs/screenshots/home.png)
 ![The decision queue and its detail pane](docs/screenshots/decisions.png)
-![The measured process and the organisation](docs/screenshots/picture.png)
+![The measured process, its variants and its waits](docs/screenshots/picture.png)
 
 ## What it actually does
 
