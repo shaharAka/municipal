@@ -17,6 +17,7 @@ const TABS = [
   { id: 'sources', label: 'מקורות' },
   { id: 'map', label: 'מפת התהליך' },
   { id: 'learning', label: 'למידה' },
+  { id: 'forms', label: 'טפסים' },
   { id: 'people', label: 'אנשים' },
   { id: 'process', label: 'תהליכים' },
   { id: 'onboard', label: 'קליטה' },
@@ -344,6 +345,46 @@ async function learningView() {
     </section>`;
 }
 
+
+/* ------------------------------------------------------------------- forms */
+async function formsView() {
+  const data = await api('/api/learning');
+  const forms = data.forms ?? [];
+  const pick = state.formPick && forms.some((f) => f.ref === state.formPick) ? state.formPick : forms[0]?.ref;
+  const current = forms.find((f) => f.ref === pick);
+  const form = current ? (await api(`/api/forms?type=${encodeURIComponent(current.page_type)}&kind=${encodeURIComponent(current.kind)}`)).form : null;
+  return `
+    <h1>טפסים שנולדו מהמודל</h1>
+    <p class="lede">כל טופס נגזר מטיפוס באונטולוגיה. השדות, החוקים והשפה מגיעים ממנו — ולכן הטופס לא יכול לסתור את המודל.</p>
+    ${forms.length ? `
+      <div class="chips">${forms.map((f) => `<button class="chip ${f.ref === pick ? 'active' : ''}" type="button" data-form-pick="${f.ref}">${escapeHtml(f.name)}</button>`).join('')}</div>
+      <div class="grid-2" style="margin-top:18px">
+        <section class="card">
+          <p class="eyebrow">תצוגה מקדימה</p>
+          <h3>${escapeHtml(current.name)}</h3>
+          <p class="meta">${num(current.field_count)} שדות · ${current.kind === 'application' ? 'טופס בקשה' : 'טופס פנימי'} · ${escapeHtml(current.page_type)}</p>
+          <div class="form-preview">
+            ${form.fields.map((field) => `<label class="field">
+              <span>${escapeHtml(field.labelHe)}${field.required ? ' *' : ''}</span>
+              ${field.widget === 'select'
+                ? `<select disabled>${field.options.map((o) => `<option>${escapeHtml(o)}</option>`).join('')}</select>`
+                : field.widget === 'date' ? '<input type="date" disabled />'
+                : field.widget === 'checkbox' ? '<input type="checkbox" disabled />'
+                : `<input type="text" placeholder="${escapeHtml(field.description || field.labelEn)}" disabled />`}
+            </label>`).join('')}
+          </div>
+        </section>
+        <section class="card">
+          <p class="eyebrow">מאיפה זה מגיע</p>
+          <h3>השדות והחוקים</h3>
+          <p>הטופס נבנה מהטיפוס <strong>${escapeHtml(current.page_type)}</strong>, כולל סוגי ערכים, רשימות בחירה ושדות חובה. אין כאן קוד טופס.</p>
+          <p class="meta">נוצר ב־${escapeHtml(current.status === 'approved' ? 'אישור' : 'טיוטה')} · ${num(form.fields.filter((f) => f.required).length)} שדות חובה</p>
+          <details><summary>הצג את הסכימה</summary><pre class="code-block" style="direction:ltr;text-align:left">${escapeHtml(JSON.stringify(form.json_schema, null, 2).slice(0, 1200))}</pre></details>
+        </section>
+      </div>`
+    : `<section class="card"><h3>עדיין אין טפסים</h3><p>אשרו הצעה מסוג טופס בלשונית <a href="#/sources" style="color:var(--accent)">מקורות</a> — והטופס יופיע כאן, מוכן לשימוש.</p></section>`}`;
+}
+
 /* ------------------------------------------------------------------ render */
 
 async function sourcesView() {
@@ -389,7 +430,7 @@ async function sourcesView() {
     </section>` : ''}`;
 }
 
-const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, learning: learningView, people: peopleView, process: processView, onboard: onboardView };
+const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, learning: learningView, forms: formsView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -423,6 +464,20 @@ async function submitQuestion(event) {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question }),
     });
     if (answer.refused) {
+      const extra = answer.assistant;
+      if (extra?.kind === 'people') {
+        slot.innerHTML = `<section class="answer"><h2>${escapeHtml(extra.headline)}</h2>
+          <p class="rule">${escapeHtml(extra.hint)}</p>
+          <div class="grid-3">${(extra.people ?? []).map((person) => `<article class="card"><h3>${escapeHtml(person.name)}</h3><p>${escapeHtml(person.title)}</p><p class="meta">${num(person.support)} אירועים · ממתין לאישור</p></article>`).join('') || '<p class="hello">לא מצאתי אחראי מזוהה.</p>'}</div></section>`;
+        return;
+      }
+      if (extra?.kind === 'process') {
+        slot.innerHTML = `<section class="answer"><h2>${escapeHtml(extra.headline)}</h2>
+          <p class="rule">${escapeHtml(extra.detail)}</p>
+          <div class="grid-3">${(extra.steps ?? []).map((step) => `<article class="card"><h3>${escapeHtml(step.label)}</h3><div class="big">${num(step.days)} ימים</div><p>${escapeHtml(step.role)}</p></article>`).join('')}</div>
+          <p class="note">${escapeHtml(extra.hint)}</p></section>`;
+        return;
+      }
       slot.innerHTML = `<div class="err">${escapeHtml(answer.refused)}</div>`;
       return;
     }
@@ -460,6 +515,12 @@ document.addEventListener('click', async (event) => {
     });
     if (location.hash !== '#/sources') location.hash = '#/sources';
     else render();
+    return;
+  }
+  const pickForm = event.target.closest('[data-form-pick]');
+  if (pickForm) {
+    state.formPick = pickForm.dataset.formPick;
+    render();
     return;
   }
   const approve = event.target.closest('[data-approve-suggestion]');

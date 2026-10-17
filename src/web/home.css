@@ -149,3 +149,10 @@ details ul { margin: 10px 0 0; padding-inline-start: 18px; font-size: 13px; colo
 .legend .sw.proposed { background: var(--amber); }
 .legend .sw.gate { background: #fff; border: 1px dashed var(--accent-line); }
 .code-block { background: #0f2320; color: #dff3ec; padding: 16px; border-radius: 12px; overflow: auto; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+
+/* ------------------------------------------------------------------ forms */
+.form-preview { margin-top: 14px; display: grid; gap: 12px; }
+.field { display: grid; gap: 5px; font-size: 12.5px; color: var(--ink-2); }
+.field span { font-weight: 600; color: var(--ink); }
+.field input, .field select { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 13px; color: var(--ink-2); }
+.chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }

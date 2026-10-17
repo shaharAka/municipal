@@ -73,6 +73,32 @@ function viewerName(platform: Platform, viewer: Viewer): string {
   return user ? `${user.displayName} (${user.jobTitle})` : viewer.id;
 }
 
+function assist(platform: Platform, question: string) {
+  const keywords = ['פיקוח', 'רישיון', 'הנחה', 'קריאה', 'תעריף', 'ביקורת', 'מסמכים', 'בקשות'];
+  if (/(^|\s)(מי|who|אחראי|מטפל)/i.test(question)) {
+    const key = keywords.find((word) => question.includes(word)) ?? '';
+    return {
+      kind: 'people' as const,
+      headline: key ? `מי מטפל ב${key}?` : 'מי אחראי על זה?',
+      people: whoHandles(platform.org, key),
+      hint: 'אחריויות שזוהו מהעבודה עצמה. כל אחת נושאת את מספר האירועים שמאחוריה.',
+    };
+  }
+  if (/(למה|כמה זמן|מחכים|צוואר|why|how long)/i.test(question)) {
+    const model = platform.models.find((m) => m.serviceCode === 'LIC') ?? platform.models[0];
+    if (model) {
+      return {
+        kind: 'process' as const,
+        headline: `למה ${model.serviceName} ממתין`,
+        detail: `חציון ${model.medianTotalDays} יום לתיק, ${model.caseCount} תיקים.`,
+        steps: model.steps.slice(0, 3).map((step) => ({ label: step.labels, days: step.medianWaitDays, role: step.role })),
+        hint: 'הזמן נמדד בין אירועי התיק, לא הוערך.',
+      };
+    }
+  }
+  return null;
+}
+
 function overview(platform: Platform, demo: Demo) {
   const g = platform.graph;
   return {
@@ -297,7 +323,10 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       capturedAt: captureTime,
       sources: platform.report.sources.map((s) => ({ system: s.system, label: s.label })),
     });
-    return json(res, 200, answer);
+    // A data question the catalogue cannot answer may still be answerable from
+    // the org map or the discovered process — the assistant routes, it does not guess.
+    const assistant = answer.refused ? assist(platform, question) : null;
+    return json(res, 200, { ...answer, assistant });
   }
   if (parts[1] === 'connectors') {
     if (req.method === 'POST' && parts[3] === 'toggle') {
