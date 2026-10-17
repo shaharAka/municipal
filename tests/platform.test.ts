@@ -8,6 +8,7 @@ import { answerQuestion, evaluateRule } from '../src/query/eligibility.ts';
 import { RULES } from '../src/seed/eligibility-rules.ts';
 import { generateForm, proposeValues, validateSubmission } from '../src/forms/generate.ts';
 import { answerInterview, openInterview } from '../src/interviews/engine.ts';
+import { approveAutomation } from '../src/process/discover.ts';
 
 let demo: Demo;
 
@@ -201,21 +202,20 @@ test('the second municipality is built from the same packs, not a fork', async (
   assert.ok(second.graph.pages.size > 0);
 });
 
-test('approving an automation creates a decision page that records who decided', async () => {
+test('approving an automation creates a decision page that records who decided', () => {
   const p = demo.primary;
   const proposal = p.graph.ofType('automation_proposal')[0];
   const decisionsBefore = p.graph.ofType('decision').length;
-  const res = await fetch(`http://127.0.0.1:${serverPort()}/api/automations/${encodeURIComponent(proposal.ref)}/approve`, {
-    method: 'POST',
-  }).catch(() => null);
-  if (res) await res.text();
-  // The HTTP path is covered by the server smoke test; here the graph contract is enough.
-  assert.equal(p.graph.ofType('decision').length >= decisionsBefore, true);
-});
+  const result = approveAutomation(p.graph, proposal.ref, 'דנה לוי (מנהלת תברואה ובריאות)', '2026-10-17T08:00:00.000Z');
+  assert.ok(result);
+  assert.equal(p.graph.ofType('decision').length, decisionsBefore + 1);
 
-function serverPort(): number {
-  return Number(process.env.PORT ?? 4173);
-}
+  const decision = p.graph.page(result!.decisionRef)!;
+  assert.equal(decision.type, 'decision');
+  assert.equal(decision.properties.kind, 'automation_approved');
+  assert.match(String(decision.properties.decided_by), /דנה לוי/);
+  assert.equal(p.graph.page(proposal.ref)!.properties.status, 'approved');
+});
 
 // ---------------------------------------------------------------- eligibility
 

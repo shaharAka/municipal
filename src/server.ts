@@ -10,14 +10,17 @@ import { buildDemo, captureTime, type Demo, type Platform } from './platform.ts'
 import { CONNECTIONS } from './cloud/registry.ts';
 import { publicView, stats as ontologyStats } from './ontology/compose.ts';
 import { MAPPINGS } from './ontology/mappings.ts';
-import { PARAMS } from './process/discover.ts';
+import { PARAMS, approveAutomation } from './process/discover.ts';
 import { whoHandles } from './org/orgmap.ts';
+import { ACTIVITY_LABELS } from './cloud/fixtures.ts';
+import { SERVICES } from './seed/services.ts';
 import { answerQuestion } from './query/eligibility.ts';
 import { REFERENCE_DATE, RULES, SUPPRESSION } from './seed/eligibility-rules.ts';
 import { generateForm, proposeValues, validateSubmission, type FormKind } from './forms/generate.ts';
 import { answerInterview, listInterviews, openInterview, ATTENTION } from './interviews/engine.ts';
 import { SOURCES, research, approveSuggestion, type Suggestion, type SourceId } from './research/sources.ts';
 import { refFor, type Viewer } from './graph/graph.ts';
+import { handleValueApi } from './value/api.ts';
 
 const WEB = new URL('./web/', import.meta.url).pathname;
 
@@ -71,6 +74,80 @@ function viewerFor(platform: Platform, url: URL): Viewer {
 function viewerName(platform: Platform, viewer: Viewer): string {
   const user = platform.fixture.users.find((u) => u.id === viewer.id);
   return user ? `${user.displayName} (${user.jobTitle})` : viewer.id;
+}
+
+const SOURCE_LABELS_HE: Record<string, string> = {
+  entra: 'זהות העובדים',
+  exchange: 'דואר העבודה',
+  sharepoint: 'מסמכי המחלקה',
+  sql: 'מערכות הפעלה',
+};
+
+const SERVICE_LABELS_HE: Record<string, string> = {
+  LIC: 'רישוי עסק',
+  FEE: 'הנחה באגרת תברואה',
+  CMP: 'קריאות תברואה',
+};
+
+const RISK_HE: Record<string, string> = { low: 'נמוך', medium: 'בינוני', high: 'גבוה' };
+
+const SUGGESTION_AUDIENCE: Record<string, string[]> = {
+  workflow: ['head'],
+  form: ['clerk', 'rule'],
+  automation: ['head'],
+  responsibility: [],
+};
+
+function viewerKind(platform: Platform, viewer: Viewer): 'head' | 'clerk' | 'field' | 'secretary' | 'rule' | 'steward' {
+  const user = platform.fixture.users.find((u) => u.id === viewer.id);
+  const title = `${user?.jobTitle ?? ''} ${user?.jobTitleEn ?? ''}`;
+  if (/מנהל|מנהלת|head/i.test(title)) return 'head';
+  if (/אחראית נתונים|data steward|steward/i.test(title)) return 'steward';
+  if (/רכז גזברות|treasury|finance|rule owner/i.test(title)) return 'rule';
+  if (/מפקח|מפקחת|מדביר|inspector/i.test(title)) return 'field';
+  if (/מזכיר|secretary/i.test(title)) return 'secretary';
+  return 'clerk';
+}
+
+function suggestionAudience(kind: string): string[] {
+  return SUGGESTION_AUDIENCE[kind] ?? [];
+}
+
+const PROPERTY_LABELS_HE: Record<string, string> = {
+  income_band: 'הכנסה',
+  inspection_zone: 'אזור פיקוח',
+  preferredLanguage: 'שפת דיוור',
+  officeLocation: 'מיקום משרד',
+};
+
+/** The same permission check the document library uses, so search cannot leak. */
+function canReadDocument(platform: Platform, viewer: Viewer, itemId: string): boolean {
+  const permissions = platform.fixture.permissions[itemId] ?? [];
+  if (!permissions.length) return true;
+  const viewerUser = platform.fixture.users.find((u) => u.id === viewer.id);
+  const viewerGroups = viewerUser?.groupIds ?? [];
+  return permissions.some((perm) => {
+    const userId = perm.grantedToV2?.user?.id;
+    const groupId = perm.grantedToV2?.group?.id;
+    return Boolean((userId && userId === viewer.id) || (groupId && viewerGroups.includes(groupId)));
+  });
+}
+
+/** A source that is on has run its research, whichever screen asks first. */
+function refreshResearch(platform: Platform, viewer: Viewer): void {
+  for (const id of connectors.enabled) {
+    for (const suggestion of research(id as SourceId, {
+      graph: platform.graph,
+      ontology: platform.ontology,
+      org: platform.org,
+      models: platform.models,
+      proposals: platform.proposals,
+      capturedAt: captureTime,
+      actor: viewerName(platform, viewer),
+    })) {
+      if (!connectors.suggestions.has(suggestion.id)) connectors.suggestions.set(suggestion.id, suggestion);
+    }
+  }
 }
 
 /** The raw evidence behind a page, so a demo can show the source, not the conclusion. */
@@ -310,8 +387,51 @@ function buildReplay(platform: Platform) {
   ];
 }
 
+function caseSummary(platform: Platform, caseId: string) {
+  const graph = platform.graph;
+  const page = graph.page(refFor('case', caseId));
+  if (!page || page.type !== 'case') return null;
+  const events = graph.edges
+    .filter((edge) => edge.kind === 'event_of' && edge.to === page.ref)
+    .map((edge) => graph.page(edge.from))
+    .filter((event): event is NonNullable<typeof event> => Boolean(event))
+    .sort((a, b) => Date.parse(String(b.properties.occurred_at ?? '')) - Date.parse(String(a.properties.occurred_at ?? '')));
+  const latest = events[0];
+  const subjectRef = String(page.properties.subject_ref ?? '');
+  const subject =
+    graph.page(refFor('business', subjectRef)) ??
+    graph.page(refFor('resident', subjectRef)) ??
+    graph.page(refFor('property', subjectRef));
+  return {
+    ref: page.ref,
+    title: page.title,
+    status: String(page.properties.status ?? ''),
+    service: String(page.properties.service_code ?? ''),
+    serviceLabel: SERVICE_LABELS_HE[String(page.properties.service_code ?? '')] ?? String(page.properties.service_code ?? ''),
+    openedAt: page.properties.opened_at ?? null,
+    closedAt: page.properties.closed_at ?? null,
+    stage: String(latest?.properties.activity ?? ''),
+    stageLabel: ACTIVITY_LABELS[String(latest?.properties.activity ?? '')] ?? String(latest?.properties.activity ?? ''),
+    lastEventAt: latest?.properties.occurred_at ?? null,
+    subjectRef,
+    subjectName: subject?.title ?? subjectRef,
+  };
+}
+
 function assist(platform: Platform, question: string) {
   const keywords = ['פיקוח', 'רישיון', 'הנחה', 'קריאה', 'תעריף', 'ביקורת', 'מסמכים', 'בקשות'];
+  const caseId = /\b(CASE-\d+)/i.exec(question)?.[1];
+  if (caseId) {
+    const summary = caseSummary(platform, caseId);
+    if (summary) {
+      return {
+        kind: 'case' as const,
+        headline: `סטטוס תיק ${caseId}`,
+        case: summary,
+        hint: 'הנתונים נקראו מיומן התיק ומהמערכות שמזינות אותו.',
+      };
+    }
+  }
   if (/(^|\s)(מי|who|אחראי|מטפל)/i.test(question)) {
     const key = keywords.find((word) => question.includes(word)) ?? '';
     return {
@@ -326,7 +446,7 @@ function assist(platform: Platform, question: string) {
     if (model) {
       return {
         kind: 'process' as const,
-        headline: `למה ${model.serviceName} ממתין`,
+        headline: `למה ${SERVICE_LABELS_HE[model.serviceCode] ?? model.serviceName} ממתין`,
         detail: `חציון ${model.medianTotalDays} יום לתיק, ${model.caseCount} תיקים.`,
         steps: model.steps.slice(0, 3).map((step) => ({ label: step.labels, days: step.medianWaitDays, role: step.role })),
         hint: 'הזמן נמדד בין אירועי התיק, לא הוערך.',
@@ -336,7 +456,111 @@ function assist(platform: Platform, question: string) {
   return null;
 }
 
-function overview(platform: Platform, demo: Demo) {
+const DAY_MS = 86_400_000;
+
+/** The department's case queue, computed from the event log rather than a status table. */
+function buildCasesOverview(platform: Platform, viewer: Viewer) {
+  const graph = platform.graph;
+  const viewerUser = platform.fixture.users.find((u) => u.id === viewer.id);
+  const viewerTitle = String(viewerUser?.jobTitle ?? '');
+  const myPersonRef = refFor('person', viewer.id);
+  const openCases: {
+    ref: string;
+    title: string;
+    service: string;
+    serviceLabel: string;
+    stage: string;
+    stageLabel: string;
+    stageRole: string;
+    openedAt: string;
+    ageDays: number;
+    overdue: boolean;
+    subjectRef: string;
+    subjectName: string;
+  }[] = [];
+  const stageCounts = new Map<string, number>();
+  let closed = 0;
+  let total = 0;
+
+  const roleFor = (service: string, activity: string) =>
+    platform.models.find((model) => model.serviceCode === service)?.steps.find((step) => step.activity === activity)?.role ?? '';
+
+  for (const page of graph.ofType('case')) {
+    total++;
+    const status = String(page.properties.status ?? '');
+    if (status !== 'OPEN') {
+      closed++;
+      continue;
+    }
+    const service = String(page.properties.service_code ?? '');
+    const openedAt = String(page.properties.opened_at ?? '');
+    const events = graph.edges
+      .filter((edge) => edge.kind === 'event_of' && edge.to === page.ref)
+      .map((edge) => graph.page(edge.from))
+      .filter((event): event is NonNullable<typeof event> => Boolean(event))
+      .sort((a, b) => Date.parse(String(b.properties.occurred_at ?? '')) - Date.parse(String(a.properties.occurred_at ?? '')));
+    const stage = String(events[0]?.properties.activity ?? '');
+    const subjectRef = String(page.properties.subject_ref ?? '');
+    const subject =
+      graph.page(refFor('business', subjectRef)) ??
+      graph.page(refFor('resident', subjectRef)) ??
+      graph.page(refFor('property', subjectRef));
+    const openedMs = Date.parse(openedAt);
+    const ageDays = Number.isFinite(openedMs) ? Math.max(0, Math.floor((Date.parse(captureTime) - openedMs) / DAY_MS)) : 0;
+    const sla = SERVICES.find((entry) => entry.code === service)?.sla_days ?? 30;
+    const stageLabel = ACTIVITY_LABELS[stage] ?? stage;
+    stageCounts.set(stage, (stageCounts.get(stage) ?? 0) + 1);
+    openCases.push({
+      ref: page.ref,
+      title: page.title,
+      service,
+      serviceLabel: SERVICES.find((entry) => entry.code === service)?.name_he ?? service,
+      stage,
+      stageLabel,
+      stageRole: roleFor(service, stage),
+      openedAt,
+      ageDays,
+      overdue: ageDays > sla,
+      subjectRef,
+      subjectName: subject?.title ?? subjectRef,
+    });
+  }
+
+  let inspectionsDone = 0;
+  for (const event of graph.ofType('case_event')) {
+    const activity = String(event.properties.activity ?? '');
+    if (!['INSPECTION_DONE', 'REINSPECTION'].includes(activity)) continue;
+    if (graph.out('event_actor', event.ref)[0]?.to === myPersonRef) inspectionsDone++;
+  }
+
+  const openInspections = openCases.filter((entry) => ['INSPECTION_SCHEDULED', 'REINSPECTION'].includes(entry.stage));
+  const myCases = openCases.filter(
+    (entry) =>
+      (entry.stageRole && viewerTitle && entry.stageRole.includes(viewerTitle)) ||
+      (/רכזת רישוי/.test(viewerTitle) && entry.service === 'LIC'),
+  );
+  const sorted = [...openCases].sort((a, b) => Number(b.overdue) - Number(a.overdue) || b.ageDays - a.ageDays);
+
+  return {
+    total,
+    open: openCases.length,
+    closed,
+    overdue: openCases.filter((entry) => entry.overdue).length,
+    slaDays: 30,
+    stages: [...stageCounts.entries()]
+      .map(([activity, count]) => ({ activity, label: ACTIVITY_LABELS[activity] ?? activity, count }))
+      .sort((a, b) => b.count - a.count),
+    openCases: sorted,
+    myWork: {
+      title: viewerTitle,
+      inspectionsDone,
+      openInspections,
+      myCases,
+    },
+  };
+}
+
+function overview(platform: Platform, demo: Demo, viewer: Viewer) {
   const g = platform.graph;
   return {
     organization: {
@@ -355,9 +579,33 @@ function overview(platform: Platform, demo: Demo) {
     schemaCandidates: platform.report.schemaCandidates.length,
     findings: platform.report.findings,
     problems: platform.report.problems,
+    org: {
+      units: platform.org.units.length,
+      people: platform.org.people.length,
+      responsibilities: platform.org.responsibilities.length,
+      openResponsibilities: g
+        .ofType('knowledge_candidate')
+        .filter((p) => String(p.properties.candidate_kind) === 'responsibility' && String(p.properties.status) === 'open').length,
+      confirmedResponsibilities: g
+        .ofType('knowledge_candidate')
+        .filter((p) => String(p.properties.candidate_kind) === 'responsibility' && String(p.properties.status) === 'accepted').length,
+    },
+    cases: buildCasesOverview(platform, viewer),
+    decisions: g
+      .ofType('decision')
+      .map((p) => ({
+        ref: p.ref,
+        title: p.title,
+        kind: p.properties.kind ?? null,
+        decidedBy: p.properties.decided_by ?? null,
+        decidedAt: p.properties.decided_at ?? null,
+      }))
+      .slice(-4)
+      .reverse(),
     services: platform.models.map((m) => ({
       code: m.serviceCode,
       name: m.serviceName,
+      nameHe: SERVICE_LABELS_HE[m.serviceCode] ?? m.serviceName,
       cases: m.caseCount,
       medianDays: m.medianTotalDays,
       bottleneck: m.bottleneck?.activity ?? null,
@@ -394,9 +642,15 @@ function mappingView(platform: Platform) {
 
 function processView(platform: Platform, code: string) {
   const model = platform.models.find((m) => m.serviceCode === code) ?? platform.models[0];
-  const proposals = platform.proposals.filter((p) => p.serviceCode === model.serviceCode);
+  const proposals = platform.proposals
+    .filter((p) => p.serviceCode === model.serviceCode)
+    .map((p) => ({
+      ...p,
+      status: String(platform.graph.page(p.ref ?? '')?.properties.status ?? 'proposed'),
+    }));
+  const modelPage = platform.graph.page(refFor('process_model', model.serviceCode));
   return {
-    model,
+    model: { ...model, status: String(modelPage?.properties.status ?? 'discovered') },
     proposals,
     params: PARAMS,
     automations: platform.graph
@@ -412,11 +666,19 @@ function processView(platform: Platform, code: string) {
 }
 
 function orgView(platform: Platform) {
+  const statusOf = (candidateRef: string) =>
+    String(
+      (platform.graph.page(candidateRef) ?? platform.graph.page(refFor('knowledge_candidate', candidateRef)))?.properties.status ?? 'open',
+    );
+  const responsibilities = platform.org.responsibilities.map((r) => ({ ...r, status: statusOf(r.candidateRef) }));
   return {
     viewers: platform.viewers.map((v) => ({ ...v, label: viewerName(platform, v) })),
     units: platform.org.units,
-    people: platform.org.people,
-    responsibilities: platform.org.responsibilities,
+    people: platform.org.people.map((p) => ({
+      ...p,
+      responsibilities: responsibilities.filter((r) => r.personRef === p.ref),
+    })),
+    responsibilities,
   };
 }
 
@@ -424,7 +686,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
   const platform = demo.primary;
   const viewer = viewerFor(platform, url);
 
-  if (parts[1] === 'overview') return json(res, 200, overview(platform, demo));
+  if (parts[1] === 'overview') return json(res, 200, overview(platform, demo, viewer));
   if (parts[1] === 'connections') return json(res, 200, { connections: CONNECTIONS });
   if (parts[1] === 'ontology') {
     return json(res, 200, {
@@ -441,70 +703,63 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
   }
   if (parts[1] === 'org') return json(res, 200, orgView(platform));
   if (parts[1] === 'process') {
+    if (req.method === 'POST' && parts[3] === 'validate') {
+      const code = decodeURIComponent(parts[2] ?? '');
+      const model = platform.models.find((entry) => entry.serviceCode === code);
+      if (!model) return json(res, 404, { error: 'no such process' });
+      const modelRef = refFor('process_model', code);
+      const modelPage = platform.graph.page(modelRef);
+      if (!modelPage) return json(res, 404, { error: 'no process page' });
+      const at = new Date().toISOString();
+      const actor = viewerName(platform, viewer);
+      const provenance = {
+        kind: 'recorded' as const,
+        source: 'process validation',
+        method: 'person decision',
+        as_of: at,
+        evidence_class: 'asserted' as const,
+        confirmed_by_role: actor,
+      };
+      platform.graph.setProperty({
+        pageRef: modelRef,
+        property: 'status',
+        value: 'validated',
+        status: 'confirmed',
+        provenance,
+        evidenceIds: [],
+      });
+      const decisionRef = refFor('decision', 'validate-' + code);
+      if (!platform.graph.page(decisionRef)) {
+        platform.graph.addPage({
+          ref: decisionRef,
+          type: 'decision',
+          title: `אושר התהליך — ${SERVICE_LABELS_HE[code] ?? model.serviceName}`,
+          properties: {},
+          createdAt: at,
+        });
+        for (const [property, value] of Object.entries({
+          decision_id: decisionRef,
+          kind: 'process_validated',
+          status: 'approved',
+          decided_at: at,
+          decided_by: actor,
+          rationale: 'התהליך שאותר מהלוג אושר כמתאר את העבודה בפועל.',
+          subject_ref: modelRef,
+        })) {
+          platform.graph.setProperty({ pageRef: decisionRef, property, value, status: 'confirmed', provenance, evidenceIds: [] });
+        }
+        platform.graph.addEdge({ kind: 'approves', from: decisionRef, to: modelRef });
+      }
+      return json(res, 200, { ok: true, status: 'validated', decision: decisionRef });
+    }
     return json(res, 200, processView(platform, url.searchParams.get('service') ?? 'LIC'));
   }
   if (parts[1] === 'automations') {
     if (req.method === 'POST' && parts[2]) {
       const ref = decodeURIComponent(parts[2]);
-      const page = platform.graph.page(ref);
-      if (!page || page.type !== 'automation_proposal') return json(res, 404, { error: 'no such proposal' });
-      const decisionRef = refFor('decision', 'approve-' + page.ref.replace(/[^a-z0-9]/gi, '-'));
-      platform.graph.addPage({
-        ref: decisionRef,
-        type: 'decision',
-        title: 'Approved: ' + page.title,
-        properties: {},
-        createdAt: new Date().toISOString(),
-      });
-      const values: Record<string, unknown> = {
-        decision_id: decisionRef,
-        kind: 'automation_approved',
-        status: 'approved',
-        decided_at: new Date().toISOString(),
-        decided_by: viewerName(platform, viewer),
-        rationale: 'Approved in the workbench from the measured evidence.',
-        subject_ref: page.ref,
-      };
-      for (const [property, value] of Object.entries(values)) {
-        platform.graph.setProperty({
-          pageRef: decisionRef,
-          property,
-          value,
-          status: 'confirmed',
-          provenance: {
-            kind: 'recorded',
-            source: 'workbench approval',
-            method: 'person decision',
-            as_of: new Date().toISOString(),
-            evidence_class: 'asserted',
-            confirmed_by_role: viewerName(platform, viewer),
-          },
-          evidenceIds: [],
-        });
-      }
-      platform.graph.addEdge({ kind: 'approves', from: decisionRef, to: page.ref });
-      for (const [property, value] of Object.entries({
-        status: 'approved',
-        approved_by: viewerName(platform, viewer),
-        approved_at: new Date().toISOString(),
-      }) as [string, unknown][]) {
-        platform.graph.setProperty({
-          pageRef: page.ref,
-          property,
-          value,
-          status: 'confirmed',
-          provenance: {
-            kind: 'recorded',
-            source: 'workbench approval',
-            method: 'person decision',
-            as_of: new Date().toISOString(),
-            evidence_class: 'asserted',
-            confirmed_by_role: viewerName(platform, viewer),
-          },
-          evidenceIds: [],
-        });
-      }
-      return json(res, 200, { ok: true, decision: decisionRef, status: 'approved' });
+      const result = approveAutomation(platform.graph, ref, viewerName(platform, viewer), new Date().toISOString());
+      if (!result) return json(res, 404, { error: 'no such proposal' });
+      return json(res, 200, { ok: true, decision: result.decisionRef, status: 'approved' });
     }
     return json(res, 200, processView(platform, platform.models[0].serviceCode));
   }
@@ -572,24 +827,25 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       if (!SOURCES.some((s) => s.id === id)) return json(res, 404, { error: 'unknown source' });
       if (body.enabled) connectors.enabled.add(id); else connectors.enabled.delete(id);
     }
-    for (const id of connectors.enabled) {
-      for (const suggestion of research(id as SourceId, {
-        graph: platform.graph, ontology: platform.ontology, org: platform.org,
-        models: platform.models, proposals: platform.proposals,
-        capturedAt: captureTime, actor: viewerName(platform, viewer),
-      })) {
-        if (!connectors.suggestions.has(suggestion.id)) connectors.suggestions.set(suggestion.id, suggestion);
-      }
-    }
+    refreshResearch(platform, viewer);
     return json(res, 200, {
       sources: SOURCES.map((source) => ({
         ...source,
         enabled: connectors.enabled.has(source.id),
-        suggestions: [...connectors.suggestions.values()].filter((s) => s.source === source.id),
+        suggestions: [...connectors.suggestions.values()]
+          .filter((s) => s.source === source.id && s.action.type !== 'approve_automation')
+          .map((s) => ({
+            ...s,
+            audience: suggestionAudience(s.kind),
+            covered:
+              s.action.type === 'validate_process' &&
+              String(platform.graph.page(refFor('process_model', s.action.processCode))?.properties.status ?? '') === 'validated',
+          })),
       })),
       forms: platform.graph.ofType('form_definition').map((p) => ({
         ref: p.ref, name: p.title, page_type: p.properties.page_type,
         kind: p.properties.kind, field_count: p.properties.field_count, status: p.properties.status,
+        fields: p.properties.fields ?? [],
       })),
     });
   }
@@ -608,6 +864,16 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     return json(res, 200, { suggestion });
   }
   if (parts[1] === 'outlook') {
+    if (!connectors.enabled.has('exchange')) {
+      return json(res, 200, {
+        connected: false,
+        source: 'exchange',
+        viewer: viewerName(platform, viewer),
+        shared: true,
+        mailbox: null,
+        messages: [],
+      });
+    }
     const messages = platform.fixture.messages.map((m) => ({
       graphRef: refFor('message', m.id),
       id: m.id,
@@ -620,25 +886,28 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       body: m.body.content,
     }));
     return json(res, 200, {
-      mailbox: platform.fixture.users[0]?.mail ?? '',
+      connected: true,
+      source: 'exchange',
+      shared: true,
+      mailbox: 'תיבת דואר משותפת · תברואה ובריאות',
       viewer: viewerName(platform, viewer),
       messages,
     });
   }
   if (parts[1] === 'doclib') {
-    const drive = platform.fixture.drives[0];
-    const viewerUser = platform.fixture.users.find((u) => u.id === viewer.id);
-    const viewerGroups = viewerUser?.groupIds ?? [];
-    const canRead = (itemId: string) => {
-      const permissions = platform.fixture.permissions[itemId] ?? [];
-      if (!permissions.length) return true;
-      return permissions.some((perm) => {
-        const userId = perm.grantedToV2?.user?.id;
-        const groupId = perm.grantedToV2?.group?.id;
-        return (userId && userId === viewer.id) || (groupId && viewerGroups.includes(groupId));
+    if (!connectors.enabled.has('sharepoint')) {
+      return json(res, 200, {
+        connected: false,
+        source: 'sharepoint',
+        library: null,
+        viewer: viewerName(platform, viewer),
+        visible: 0,
+        total: 0,
+        documents: [],
       });
-    };
-    const documents = drive.items.filter((d) => canRead(d.id)).map((d) => ({
+    }
+    const drive = platform.fixture.drives[0];
+    const documents = drive.items.filter((d) => canReadDocument(platform, viewer, d.id)).map((d) => ({
       graphRef: refFor('document', d.id),
       id: d.id,
       name: d.name,
@@ -650,6 +919,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       text: d.contentText.slice(0, 900),
     }));
     return json(res, 200, {
+      connected: true,
+      source: 'sharepoint',
       library: drive.name,
       webUrl: drive.webUrl,
       viewer: viewerName(platform, viewer),
@@ -693,43 +964,216 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     const query = String(url.searchParams.get('q') ?? '').trim();
     if (!query) return json(res, 200, { q: '', groups: [] });
     const lower = query.toLowerCase();
-    const messages = platform.fixture.messages
-      .filter((m) => m.subject.includes(query) || m.body.content.includes(query))
-      .slice(0, 6)
-      .map((m) => ({ kind: 'הודעה', id: m.id, ref: refFor('message', m.id), title: m.subject, snippet: m.body.content.slice(0, 130), where: 'Exchange' }));
-    const documents = platform.fixture.drives[0].items
+    // A source that is off cannot be searched either: the same rule as Systems.
+    const messages = connectors.enabled.has('exchange')
+      ? platform.fixture.messages
+          .filter((m) => m.subject.includes(query) || m.body.content.includes(query))
+          .slice(0, 6)
+          .map((m) => ({ kind: 'הודעה', id: m.id, ref: refFor('message', m.id), title: m.subject, snippet: m.body.content.slice(0, 130), where: 'Exchange' }))
+      : [];
+    // Search must never be a side door around the source's access list.
+    const readableDocuments = connectors.enabled.has('sharepoint')
+      ? platform.fixture.drives[0].items.filter((d) => canReadDocument(platform, viewer, d.id))
+      : [];
+    const documents = readableDocuments
       .filter((d) => d.name.includes(query) || d.contentText.includes(query))
       .slice(0, 6)
       .map((d) => ({ kind: 'מסמך', id: d.id, ref: refFor('document', d.id), title: d.name, snippet: d.contentText.slice(0, 130), where: 'SharePoint' }));
     const pages = [...platform.graph.pages.values()]
       .filter((p) => p.title.includes(query) && p.type !== 'message' && p.type !== 'document')
+      .filter((p) => Boolean(platform.graph.view(viewer, p.ref)))
       .slice(0, 8)
       .map((p) => ({ kind: 'רשומה', id: p.ref, ref: p.ref, title: p.title, snippet: p.type, where: 'גרף הידע' }));
     const rules = RULES
       .filter((r) => r.name_he.includes(query) || r.code.toLowerCase().includes(lower))
       .map((r) => ({ kind: 'כלל', id: `${r.code}-v${r.version}`, ref: refFor('eligibility_rule', `${r.code}-v${r.version}`), title: `${r.name_he} · גרסה ${r.version}`, snippet: r.citation, where: 'קטלוג כללים' }));
-    return json(res, 200, { q: query, groups: [
-      { source: 'דואר', items: messages },
-      { source: 'מסמכים', items: documents },
-      { source: 'גרף הידע', items: pages },
-      { source: 'כללים', items: rules },
-    ].filter((g) => g.items.length) });
+    return json(res, 200, {
+      q: query,
+      hiddenDocuments: connectors.enabled.has('sharepoint') ? platform.fixture.drives[0].items.length - readableDocuments.length : 0,
+      groups: [
+        { source: 'דואר', items: messages },
+        { source: 'מסמכים', items: documents },
+        { source: 'גרף הידע', items: pages },
+        { source: 'כללים', items: rules },
+      ].filter((g) => g.items.length),
+    });
   }
   if (parts[1] === 'tour') return json(res, 200, buildTour(platform));
   if (parts[1] === 'approvals') {
+    refreshResearch(platform, viewer);
+    const kind = viewerKind(platform, viewer);
+    const includeAll = url.searchParams.get('scope') === 'all';
+    const openProposals = platform.proposals.filter(
+      (p) => p.ref && String(platform.graph.page(p.ref)?.properties.status ?? '') !== 'approved',
+    );
+    const coveredAutomations = new Set(platform.proposals.map((p) => p.ref).filter(Boolean));
+    // The sql source proposes "approve the top automation" while the automation
+    // itself is already waiting. One decision, not two rows for the same thing.
     const suggestions = [...connectors.suggestions.values()]
-      .filter((s) => s.status === 'new')
-      .map((s) => ({ kind: 'suggestion', id: s.id, titleHe: s.titleHe, whyHe: s.whyHe, evidenceHe: s.evidenceHe }));
-    const automations = platform.proposals
-      .filter((p) => p.ref && String(platform.graph.page(p.ref)?.properties.status ?? '') !== 'approved')
-      .map((p) => ({ kind: 'automation', id: p.ref!, titleHe: p.title, whyHe: p.rationale, evidenceHe: p.evidence }));
-    const candidates = platform.graph
+      .filter((s) => s.status === 'new' && connectors.enabled.has(s.source))
+      .filter((s) => !(s.action.type === 'approve_automation' && coveredAutomations.has(s.action.proposalRef)))
+      .filter(
+        (s) =>
+          !(
+            s.action.type === 'validate_process' &&
+            String(platform.graph.page(refFor('process_model', s.action.processCode))?.properties.status ?? '') === 'validated'
+          ),
+      )
+      .map((s) => ({
+        kind: 'suggestion',
+        id: s.id,
+        subkind: s.kind,
+        titleHe: s.titleHe,
+        whyHe: s.whyHe,
+        evidenceHe: s.evidenceHe,
+        sourceHe: SOURCE_LABELS_HE[s.source] ?? s.source,
+        metaHe: `הצעת מחקר · ${SOURCE_LABELS_HE[s.source] ?? s.source}`,
+        impactHe: s.kind === 'form' ? 'טופס חדש' : s.kind === 'workflow' ? 'אישור תהליך' : s.kind === 'automation' ? 'אוטומציה' : 'אחריויות',
+        audience: suggestionAudience(s.kind),
+      }));
+
+    const automations = openProposals.map((p) => ({
+      kind: 'automation',
+      audience: ['head'],
+      id: p.ref!,
+      titleHe: p.titleHe,
+      whyHe: p.rationaleHe,
+      evidenceHe: p.evidenceHe,
+      impactHe: `${p.annualDaysSaved} ימי המתנה של תיקים בשנה`,
+      metaHe: `${p.expectedCasesPerYear} מקרים בשנה · סיכון ${RISK_HE[p.risk] ?? p.risk} · ${SERVICE_LABELS_HE[p.serviceCode ?? ''] ?? ''}`,
+      annualDaysSaved: p.annualDaysSaved,
+      risk: p.risk,
+      basisHe: p.basisHe,
+      formulaHe: p.formulaHe,
+      assumptionHe: p.assumptionHe,
+      riskReasonHe: p.riskReasonHe,
+      waitSamples: p.waitSamples,
+      waitMedian: p.waitMedian,
+      waitP90: p.waitP90,
+      waitCount: p.waitCount,
+      whatHappensHe:
+        'האישור רושם החלטה ומסמן את האוטומציה כמאושרת. בהדגמה הזו אין מנוע הרצה המחובר לתור אמיתי, ולכן לא נשלחת הודעה בפועל; אין כתיבה חזרה למערכות המקור.',
+    }));
+
+    const openCandidates = platform.graph
       .ofType('knowledge_candidate')
-      .filter((c) => String(c.properties.status) === 'open')
-      .map((c) => ({ kind: 'candidate', id: String(c.properties.candidate_id ?? ''), titleHe: c.title, whyHe: String(c.properties.evidence_summary ?? ''), evidenceHe: [] }));
+      .filter((c) => String(c.properties.status) === 'open');
+    const responsibilityCandidates = openCandidates.filter((c) => String(c.properties.candidate_kind) === 'responsibility');
+
+    const gapCandidates = openCandidates.filter(
+      (c) => String(c.properties.proposed_by ?? '').includes('eligibility') && String(c.properties.candidate_kind) === 'property',
+    );
+    const propertyCandidates = openCandidates.filter(
+      (c) => String(c.properties.candidate_kind) === 'property' && !String(c.properties.proposed_by ?? '').includes('eligibility'),
+    );
+
+    const answer = platform.answer;
+    const gaps = gapCandidates.map((c) => {
+      const proposal = (c.properties.proposal ?? {}) as Record<string, unknown>;
+      const property = String(proposal.property ?? '');
+      const reason = answer.unknownReasons.find((r) => r.property === property);
+      const blocked = Number(proposal.blocked_decisions ?? c.properties.support_count ?? 0);
+      const labelHe = reason?.property_label_he ?? reason?.label_he ?? property;
+      const openInterview = platform.graph
+        .ofType('interview')
+        .find((interview) => String(interview.properties.gap_ref) === c.ref && String(interview.properties.status) === 'open');
+      const respondent = openInterview ? platform.graph.page(String(openInterview.properties.person_ref)) : null;
+      // The sender may know a question is waiting; only the respondent can answer it.
+      const interview = openInterview
+        ? {
+            ref: openInterview.ref,
+            personName: respondent?.title ?? '',
+            personRef: String(openInterview.properties.person_ref ?? ''),
+            isMine: String(openInterview.properties.person_ref ?? '') === refFor('person', viewer.id),
+          }
+        : null;
+      return {
+        kind: 'gap',
+        audience: ['clerk', 'rule'],
+        id: String(c.properties.candidate_id ?? ''),
+        ref: c.ref,
+        titleHe: `פער מידע: ${labelHe}`,
+        whyHe: `${blocked} מתוך ${answer.counts.total ?? 0} החלטות זכאות לא ניתנות להכרעה כי חסר ${labelHe}. אפשר לסגור את הפער בשאלה קצרה למי שמחזיק את הנתון.`,
+        evidenceHe: [`חוסם ${blocked} החלטות`, `כלל ${String(proposal.rule ?? answer.rule?.code ?? '')}`],
+        impactHe: `${blocked} החלטות חסומות`,
+        metaHe: interview
+          ? `ממתין לתשובה מ${interview.personName}`
+          : 'פער פתוח · דורש אדם, לא אישור',
+        blocked,
+        interview,
+      };
+    });
+
+    const properties = propertyCandidates.map((c) => {
+      const proposal = (c.properties.proposal ?? {}) as Record<string, unknown>;
+      const property = String(proposal.property ?? '');
+      const labelHe = PROPERTY_LABELS_HE[property] ?? property;
+      const pageTypes = (proposal.page_types as string[] | undefined) ?? [];
+      const support = Number(c.properties.support_count ?? 0);
+      return {
+        kind: 'property',
+        audience: ['steward'],
+        id: String(c.properties.candidate_id ?? ''),
+        field: property,
+        titleHe: `מאפיין מוצע: ${labelHe}`,
+        whyHe: `${labelHe} (${property}) מופיע ב-${support} רשומות ואין לו מקום באונטולוגיה. הוספה מאושרת נכנסת כשכבת הרחבה של העיר, לא כעריכת המודל המשותף.`,
+        evidenceHe: [`${support} רשומות`, ...(pageTypes.length ? [`טיפוסים: ${pageTypes.join(', ')}`] : [])],
+        impactHe: `${support} רשומות`,
+        metaHe: 'שינוי מודל · מוסיף, לא משנה',
+        support,
+      };
+    });
+
+    // An interview can propose a rule change. It carries its what-if counts and
+    // waits for the rule owner — it is not an overlay candidate we can accept.
+    const ruleChanges = openCandidates
+      .filter((c) => String(c.properties.candidate_kind) === 'eligibility_rule')
+      .map((c) => {
+        const proposal = (c.properties.proposal ?? {}) as Record<string, unknown>;
+        const whatIf = (proposal.what_if ?? {}) as { eligible?: number; not_eligible?: number; unknown?: number };
+        const property = String(proposal.property ?? '');
+        const labelHe =
+          answer.unknownReasons.find((r) => r.property === property)?.property_label_he ?? property;
+        const target = String(proposal.to ?? 'unknown') === 'not_eligible' ? 'אינו זכאי' : 'לא ידוע';
+        return {
+          kind: 'rule',
+          audience: ['rule'],
+          id: String(c.properties.candidate_id ?? ''),
+          titleHe: `שינוי כלל מוצע: חסר ${labelHe} → ${target}`,
+          whyHe: `התשובה בשאלה מציעה לקבוע מה קורה כשחסר ${labelHe}. החלת השינוי תכריע ${answer.counts.unknown ?? 0} משקי בית שהיום אינם ניתנים להכרעה — אבל היא טעונה את אישור בעל הכלל.`,
+          evidenceHe: [
+            `מה יקרה אם: ${whatIf.eligible ?? 0} זכאים · ${whatIf.not_eligible ?? 0} לא זכאים · ${whatIf.unknown ?? 0} לא ידוע`,
+          ],
+          impactHe: `${answer.counts.unknown ?? 0} החלטות יוכרעו`,
+          metaHe: 'שינוי כלל · ממתין לבעל הכלל',
+          whatIf,
+        };
+      });
+
+    const allPending = [...automations, ...suggestions, ...gaps, ...properties, ...ruleChanges];
+    // scope=all is the landing count, not a directory of everyone's decisions.
+    // It returns totals only; the item details stay with their owners.
+    const pending = includeAll ? [] : allPending.filter((item) => item.audience?.includes(kind));
+    const counted = includeAll ? allPending : pending;
+    const countKind = (value: string) => counted.filter((item) => item.kind === value).length;
     return json(res, 200, {
-      pending: [...suggestions, ...automations, ...candidates],
-      counts: { suggestions: suggestions.length, automations: automations.length, candidates: candidates.length },
+      viewerKind: kind,
+      scope: includeAll ? 'all' : 'mine',
+      pending,
+      counts: {
+        total: counted.length,
+        automations: countKind('automation'),
+        suggestions: countKind('suggestion'),
+        gaps: countKind('gap'),
+        properties: countKind('property'),
+        rules: countKind('rule'),
+        responsibilities: responsibilityCandidates.length,
+      },
+      responsibilities: {
+        count: responsibilityCandidates.length,
+        people: new Set(responsibilityCandidates.map((c) => String(c.properties.subject_ref ?? ''))).size,
+        note: 'אחריויות מאושרות על ידי האדם שהן מתארות, לא על ידי מנהל.',
+      },
     });
   }
   if (parts[1] === 'replay') {
@@ -800,25 +1244,49 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     });
   }
   if (parts[1] === 'interviews') {
+    const myPersonRef = refFor('person', viewer.id);
+    const kind = viewerKind(platform, viewer);
     if (req.method === 'POST' && parts[2] === 'open') {
+      // The coordinator owns the gap conversation. A manager or a rule owner
+      // cannot send a question on her behalf.
+      if (kind !== 'clerk') {
+        return json(res, 403, { error: 'שליחת שאלה על פער היא של רכזת הרישוי, לא של התפקיד הזה.' });
+      }
       const body = await readBody(req);
       const gapRef = String(body.gapRef ?? '');
       const result = openInterview(platform.graph, platform.org, gapRef, { capturedAt: captureTime });
-      return json(res, result.interview ? 200 : 400, { ...result, attention: ATTENTION });
+      if (!result.interview) return json(res, 400, { ...result, attention: ATTENTION });
+      const isMine = result.interview.personRef === myPersonRef;
+      return json(res, 200, {
+        ...result,
+        sent: !isMine,
+        interview: isMine ? result.interview : { ...result.interview, questions: [] },
+        attention: ATTENTION,
+      });
     }
     if (req.method === 'POST' && parts[2] === 'answer') {
       const body = await readBody(req);
+      const ref = String(body.ref ?? '');
+      const interview = platform.graph.page(ref);
+      if (!interview || interview.type !== 'interview') return json(res, 404, { error: 'לא נמצאה שאלה.' });
+      if (String(interview.properties.person_ref ?? '') !== myPersonRef) {
+        const respondent = platform.graph.page(String(interview.properties.person_ref ?? ''));
+        return json(res, 403, {
+          error: `השאלה מיועדת ל${respondent?.title ?? 'אדם אחר'}; רק האדם שאליו נשלחה יכול לענות.`,
+        });
+      }
       const result = answerInterview(
         platform.graph,
-        String(body.ref ?? ''),
+        ref,
         (body.answers ?? {}) as Record<string, string>,
         viewerName(platform, viewer),
         captureTime,
+        { policyOwner: viewerKind(platform, viewer) === 'rule' },
       );
       return json(res, result.interview ? 200 : 400, result);
     }
-    const gaps = platform.graph
-      .ofType('knowledge_candidate')
+    const gapAudience = kind === 'clerk' || kind === 'rule';
+    const gaps = (gapAudience ? platform.graph.ofType('knowledge_candidate') : [])
       .filter((p) => String(p.properties.status) === 'open' && String(p.properties.candidate_kind) === 'property')
       .map((p) => ({
         ref: p.ref,
@@ -832,7 +1300,8 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
         const weight = (gap: { proposed_by: unknown }) => (String(gap.proposed_by).includes('eligibility') ? 1 : 0);
         return weight(b) - weight(a) || Number(b.support) - Number(a.support);
       });
-    return json(res, 200, { interviews: listInterviews(platform.graph), gaps, attention: ATTENTION });
+    const interviews = listInterviews(platform.graph).filter((interview) => interview.personRef === myPersonRef);
+    return json(res, 200, { viewerKind: kind, interviews, gaps, attention: ATTENTION });
   }
   if (parts[1] === 'security') {
     const labelCounts: Record<string, number> = {};
@@ -860,6 +1329,76 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       exampleHidden: documents.filter((d) => !d.visible),
     });
   }
+  if (parts[1] === 'responsibilities' && parts[2] && parts[3] === 'confirm') {
+    if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+    const candidateRef = decodeURIComponent(parts[2]);
+    const page = platform.graph.page(candidateRef) ?? platform.graph.page(refFor('knowledge_candidate', candidateRef));
+    if (!page || page.type !== 'knowledge_candidate' || String(page.properties.candidate_kind) !== 'responsibility') {
+      return json(res, 404, { error: 'no such responsibility' });
+    }
+    const pageRef = page.ref;
+    const body = await readBody(req);
+    const accept = body.accept !== false;
+    const status = accept ? 'accepted' : 'rejected';
+    const at = new Date().toISOString();
+    const actor = viewerName(platform, viewer);
+    for (const [property, value] of Object.entries({ status, reviewed_at: at, reviewed_by: actor })) {
+      platform.graph.setProperty({
+        pageRef,
+        property,
+        value,
+        status: 'confirmed',
+        provenance: {
+          kind: 'recorded',
+          source: 'responsibility review',
+          method: 'person decision',
+          as_of: at,
+          evidence_class: 'asserted',
+          confirmed_by_role: actor,
+        },
+        evidenceIds: [],
+      });
+    }
+    const decisionRef = refFor('decision', 'resp-' + pageRef.replace(/[^a-z0-9]/gi, '-'));
+    if (!platform.graph.page(decisionRef)) {
+      platform.graph.addPage({
+        ref: decisionRef,
+        type: 'decision',
+        title: `${accept ? 'אושרה' : 'נדחתה'} אחריות — ${page.title}`,
+        properties: {},
+        createdAt: at,
+      });
+      for (const [property, value] of Object.entries({
+        decision_id: decisionRef,
+        kind: accept ? 'responsibility_confirmed' : 'responsibility_rejected',
+        status: 'approved',
+        decided_at: at,
+        decided_by: actor,
+        rationale: accept
+          ? 'האדם שהאחריות מתארת אישר שהיא מדויקת.'
+          : 'האדם שהאחריות מתארת אמר שהיא אינה מדויקת.',
+        subject_ref: pageRef,
+      })) {
+        platform.graph.setProperty({
+          pageRef: decisionRef,
+          property,
+          value,
+          status: 'confirmed',
+          provenance: {
+            kind: 'recorded',
+            source: 'responsibility review',
+            method: 'person decision',
+            as_of: at,
+            evidence_class: 'asserted',
+            confirmed_by_role: actor,
+          },
+          evidenceIds: [],
+        });
+      }
+      platform.graph.addEdge({ kind: 'approves', from: decisionRef, to: pageRef });
+    }
+    return json(res, 200, { ok: true, status, decision: decisionRef });
+  }
   if (parts[1] === 'candidates') {
     if (req.method === 'POST' && parts[2] === 'accept') {
       const body = await readBody(req);
@@ -868,8 +1407,10 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       if (!candidate) return json(res, 404, { error: 'no such candidate' });
       candidate.status = 'accepted';
       // The page is the record; the report is a view of it.
+      let subjectRef = refFor('knowledge_candidate', candidate.id);
       for (const page of platform.graph.ofType('knowledge_candidate')) {
         if (String(page.properties.candidate_id) !== candidate.id) continue;
+        subjectRef = page.ref;
         platform.graph.setProperty({
           pageRef: page.ref,
           property: 'status',
@@ -885,6 +1426,42 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
           },
           evidenceIds: [],
         });
+      }
+      const decisionRef = refFor('decision', 'accept-' + candidate.id);
+      if (!platform.graph.page(decisionRef)) {
+        platform.graph.addPage({
+          ref: decisionRef,
+          type: 'decision',
+          title: 'אושרה הוספת מאפיין: ' + (PROPERTY_LABELS_HE[candidate.proposal.property] ?? candidate.proposal.property),
+          properties: {},
+          createdAt: new Date().toISOString(),
+        });
+        for (const [property, value] of Object.entries({
+          decision_id: decisionRef,
+          kind: 'schema_candidate_accepted',
+          status: 'approved',
+          decided_at: new Date().toISOString(),
+          decided_by: viewerName(platform, viewer),
+          rationale: 'אושרה הוספה כשכבת הרחבה של העיר; החבילות המשותפות לא נערכו.',
+          subject_ref: subjectRef,
+        })) {
+          platform.graph.setProperty({
+            pageRef: decisionRef,
+            property,
+            value,
+            status: 'confirmed',
+            provenance: {
+              kind: 'recorded',
+              source: 'workbench acceptance',
+              method: 'person decision',
+              as_of: new Date().toISOString(),
+              evidence_class: 'asserted',
+              confirmed_by_role: viewerName(platform, viewer),
+            },
+            evidenceIds: [],
+          });
+        }
+        platform.graph.addEdge({ kind: 'approves', from: decisionRef, to: subjectRef });
       }
       return json(res, 200, {
         ok: true,
@@ -905,6 +1482,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     }
     return json(res, 200, { candidates: platform.report.schemaCandidates });
   }
+  if ((parts[1] === 'rights' || parts[1] === 'meetings') && (await handleValueApi(req, res, platform, viewer, url, parts, viewerName(platform, viewer)))) return;
   return json(res, 404, { error: 'unknown endpoint', path: url.pathname });
 }
 

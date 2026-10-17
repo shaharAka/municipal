@@ -17,21 +17,66 @@ Nothing to install. Node 22.18+:
 
 ```bash
 npm run demo   # the whole loop, narrated in the terminal with real numbers
-npm start      # the workbench at http://127.0.0.1:4173
-npm test       # 32 tests over the pipeline, the ontology, eligibility, forms, interviews and access
+npm start      # the product at http://127.0.0.1:4173
+npm test       # 40 tests over the pipeline, the ontology, eligibility, forms, interviews and access
 ```
 
-Then open <http://127.0.0.1:4173> and walk the tabs: **Sources & Mapping** (where the data lands in the ontology),
-**Organization** (units, heads, inferred responsibilities), **Workflows** (variants, waits, bottleneck),
-**Automations** (proposals with their evidence), **Onboarding** (the template diff) and **Access**
-(the same documents seen by a head and by a clerk).
+Open <http://127.0.0.1:4173> and choose one of the seven people from the
+directory. The signed-in product has five movements:
 
-**Ask** answers the brief's question — *how many households are eligible for the sanitation-fee discount?* — with
-28 eligible, 10 not eligible and **6 unknown**, the approved rule version and its citation, and the missing attribute
-(household income) already turned into a gap. Unknown is never folded into zero.
+- **Home** — a role-shaped first block: the head sees department health against
+  SLA and three findings, the coordinator her case queue, the food inspector her
+  food inspections, the field inspector the record the source does not assign to
+  her, the rule owner the questions sent to him, the data steward the model
+  additions. Then the few things that actually need the person. One
+  question surface lives in the top bar (`⌘K`), so the fee-discount answer is a
+  scenario, not everyone's opening screen.
+- **Decisions** — a queue and a detail pane, filtered by owner: automations and
+  process validation to the department head, form research to the coordinator
+  and the rule owner, gaps to the coordinator and the rule owner, rule changes
+  to the rule owner, model additions only to the data steward. One decision, one
+  approver, one recorded decision; the detail carries the formula, the wait
+  distribution, the assumption and its owner, and what approval actually does.
+- **Department picture** — the measured licence process, its variants and
+  bottleneck, the organisation map, and automation proposals in place.
+- **Sources** — each source is a permission. A staff-data source opens a consent
+  sheet first (scope, legal/IT approvers, DPIA status, staff opt-out). Connecting
+  it runs research; suggestions route to their owner's decisions, never a second
+  approve button. A generated form opens, prefills from the chosen record, and
+  saves with provenance.
+- **Source viewer** — Outlook and a SharePoint library as the department knows
+  them, only when the source is connected, with a Hebrew gloss on source labels
+  and source access preserved. A fact's "show in source" deep-links back to the
+  message or document.
 
-![Sources and mapping](docs/screenshots/mapping.png)
-![Ask the record](docs/screenshots/ask.png)
+The eligibility question — *how many households are eligible for the
+sanitation-fee discount?* — answers with 28 eligible, 10 not eligible and
+**6 unknown**, the approved rule version and its citation, and the missing
+attribute (household income) already turned into a gap and an interview. Unknown
+is never folded into zero.
+
+The experience decisions and the role-shaped information architecture are in
+[docs/UX.md](docs/UX.md). The four click-through scenarios are in
+[docs/USE-CASES.md](docs/USE-CASES.md). What changed after the product/UX review,
+and what is deliberately still open, is in
+[docs/REVIEW-product-ux-response.md](docs/REVIEW-product-ux-response.md). The two
+customer-demo value pages — rights and meetings — are documented in
+[docs/value-pages/README.md](docs/value-pages/README.md).
+
+A **סיור** button in the top bar, and **סיור מודרך** on the landing page, opens
+four guided scenarios. Each switches to the role that owns the work and opens
+the real screen: rights with Hila, meetings with Dana, the eligibility question,
+and the income gap with Michal. A three-step coach stays at the bottom;
+**הבא** and **חזור** move it and highlight the next target. A scenario can be
+stopped at any point.
+
+![The guided demo chooser](docs/screenshots/demo.png)
+![A guided scenario, step one](docs/screenshots/demo-coach.png)
+
+![The front door](docs/screenshots/landing.png)
+![Home: department health and what needs a person](docs/screenshots/home.png)
+![The decision queue and its detail pane](docs/screenshots/decisions.png)
+![The measured process, its variants and its waits](docs/screenshots/picture.png)
 
 ## What it actually does
 
@@ -86,7 +131,7 @@ and generates at most five prefilled questions — one open interview per person
 evidence, and an answer that contradicts the rule becomes a **proposed rule change with its what-if counts** (28
 eligible / 16 not eligible / 0 unknown, versus 28 / 10 / 6 today) that the rule owner still has to approve.
 
-![The gap queue and an interview](docs/screenshots/learn.png)
+![The gap on a clerk's home, and the responsibilities the system inferred about her](docs/screenshots/home-clerk.png)
 
 **8 · The next municipality is a diff.** ([src/template](src/template))
 The learned graph exports a versioned template (units, roles, services, process
@@ -94,16 +139,19 @@ shapes). Onboarding compares a new organization to it and reports matched,
 renamed, added and missing — with an overlay draft recording only the
 differences. See [ADR-0007](docs/decisions/0007-reuse-the-graph-for-the-next-municipality.md).
 
+![Sources: each one a permission with its own research](docs/screenshots/sources.png)
+![The source viewer with the shared mailbox and sensitivity gloss, after Exchange is connected](docs/screenshots/systems.png)
+
 ## Numbers from the demo data
 
 | | |
 |---|---|
-| Pages / edges / facts | 1,578 / 2,640 / 8,123 |
-| Facts confirmed by rule / candidate | 7,508 / 615 |
+| Pages / edges / facts | 1,578 / 2,640 / 8,182 |
+| Facts confirmed by rule / candidate | 7,508 / 674 |
 | Licence cases analysed | 62 over 547 days, 3 variants |
 | Median licence case | 26 days (p90 35) |
 | Bottleneck | inspection scheduling, 12-day median wait |
-| Proposed automations | 4, led by an SLA reminder (295 days/yr) |
+| Proposed automations | 4, led by an SLA reminder (295 applicant waiting days/yr) |
 | Template diff | units 80%, roles 38%, process steps 73% |
 
 ## Layout
@@ -117,10 +165,13 @@ src/
   org/          units, heads, inferred responsibilities
   process/      variants, waits, bottlenecks, automation proposals
   template/     export, diff, overlay draft
-  web/          the workbench (vanilla, no build)
+  web/          the product (home.js, views.js, ui.js) and the analyst workbench (app.js)
   server.ts     HTTP API + static
   demo.ts       the loop in a terminal
 ```
+
+The experience itself — information architecture, visual system, RTL rules and
+states — is specified in [docs/UX.md](docs/UX.md).
 
 ## Honest limits
 
@@ -129,11 +180,35 @@ src/
   not been called from this repo.
 - **The local model is a stand-in.** Behind the Azure OpenAI protocol, extraction
   is rule-based and deterministic so evals can assert exact output. It says
-  nothing about model quality; that is the role benchmark's job (slice 10), not
-  done here.
+  nothing about model quality; the role benchmark is a P2 task, not done here.
 - **Discovery is variant-based, not a full inductive miner.** Traces are collapsed
   and grouped; fitness/precision against a holdout log is not computed yet.
 - **No writes back.** Read-only, per the brief. The only writes are to the POC's
   own graph.
-- **Not yet built from the brief:** the eligibility/question slice (9), the form
-  engine (5), interviewing (6), and the assistant (10). The board tracks them.
+- **Identity is a demo control, not a sign-in.** `?role=<id>` restores a session
+  and the API enforces the viewer's source access; there is no OIDC flow, session
+  token or audit of the actor's real identity. Slice 0 owns that.
+- **The interface is the POC's argument, not a shipped product.** Mobile, RTL and
+  keyboard paths are covered by the screens and the `prefers-reduced-motion`
+  rules; there is no browser-matrix run in CI.
+- **The assistant is a router.** Questions without a declared metric fall back to
+  search over mail, documents, the graph and rules. It does not write free SQL
+  and it does not call a general model for prose. A question with an
+  unsupported filter is refused with the interpretation shown; the planner does
+  not silently drop the filter. Case status and complaint counts are supported;
+  complaint filters (month, pest type) are not.
+- **Automation approval records a decision; it does not run a production job.**
+  The detail pane says so. There is no queue consumer or outbound reminder in the
+  POC; the execution engine is a later slice.
+- **Source consent is a POC gate, not a legal signature.** The consent sheet
+  shows the scope, named approvers, DPIA status and staff opt-out, and blocks the
+  toggle; no approval record is signed or persisted as a legal artefact.
+- **The field inspector has no assigned inspections in the fixture.** The
+  licence cases name the food inspectors as actors; the sanitation side has no
+  per-inspector assignment. The field home says that instead of inventing a
+  queue, so it opens on zero. This is a data gap a real deployment would close
+  with the assignment field the source does not have.
+- **The source viewer is read-only and connection-gated.** A disconnected mail
+  or document source shows a gate, and search does not return its items. The
+  mailbox is labelled as the department's shared mailbox, because the fixtures
+  model a shared mailbox, not a personal one.

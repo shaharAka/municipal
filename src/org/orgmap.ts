@@ -21,6 +21,8 @@ export type Responsibility = {
   share: number;
   signal: 'case-events' | 'mail';
   summary: string;
+  /** The same inference in the language the person reads. */
+  summaryHe: string;
 };
 
 export type OrgMap = {
@@ -62,6 +64,21 @@ const PROVENANCE = (asOf: string): Provenance => ({
   as_of: asOf,
   evidence_class: 'attributed',
 });
+
+const SERVICE_LABELS_HE: Record<string, string> = {
+  LIC: 'רישוי עסק',
+  FEE: 'אגרת תברואה',
+  CMP: 'קריאות תברואה',
+};
+
+const TOPIC_LABELS_HE: Record<string, string> = {
+  'licensing applications': 'בקשות רישוי',
+  'inspection scheduling': 'שיבוץ פיקוח',
+  'missing documents': 'מסמכים חסרים',
+  'fee discounts': 'הנחות באגרת תברואה',
+  'sanitation complaints': 'קריאות תברואה',
+  'tariffs and billing': 'תעריפים וחיובים',
+};
 
 export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
   const people = graph.ofType('person');
@@ -207,6 +224,7 @@ export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
     share: number,
     signal: Responsibility['signal'],
     summary: string,
+    summaryHe: string,
     examples: string[],
   ) => {
     const ref = stableId('KC', personRef, activity, subject);
@@ -231,6 +249,7 @@ export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
         examples,
       },
       evidence_summary: summary,
+      evidence_summary_he: summaryHe,
       support_count: support,
       status: 'open',
       proposed_by: 'org inference v1',
@@ -256,8 +275,14 @@ export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
       share,
       signal,
       summary,
+      summaryHe,
     });
   };
+
+  const activityTotals = new Map<string, number>();
+  for (const map of activityCounts.values()) {
+    for (const [key, count] of map) activityTotals.set(key, (activityTotals.get(key) ?? 0) + count);
+  }
 
   for (const [personRef, map] of activityCounts) {
     const total = [...map.values()].reduce((a, b) => a + b, 0);
@@ -265,16 +290,24 @@ export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
       const [activity, service] = key.split('|');
       if (count < 3) continue;
       const share = count / total;
+      const activityLabel = ACTIVITY_LABELS[activity] ?? activity;
+      const personName = graph.page(personRef)?.title ?? '';
+      const activityTotal = activityTotals.get(key) ?? count;
+      const summaryHe =
+        count === activityTotal
+          ? `כל ${count} הפעולות של ״${activityLabel}״ בתיקי ${SERVICE_LABELS_HE[service] ?? service} בוצעו על ידי ${personName}.`
+          : `${count} מתוך ${activityTotal} פעולות של ״${activityLabel}״ בתיקי ${SERVICE_LABELS_HE[service] ?? service} בוצעו על ידי ${personName}.`;
       addCandidate(
         personRef,
         activity,
-        ACTIVITY_LABELS[activity] ?? activity,
+        activityLabel,
         service || null,
         `activity:${activity}`,
         count,
         share,
         'case-events',
         `${count} of ${total} recorded actions by this person are "${activity}" on ${service} cases.`,
+        summaryHe,
         [`${count} case events`],
       );
     }
@@ -285,6 +318,8 @@ export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
     for (const [key, count] of map) {
       const [topic, service] = key.split('|');
       if (count < 2) continue;
+      const topicHe = TOPIC_LABELS_HE[topic] ?? topic;
+      const personName = graph.page(personRef)?.title ?? '';
       addCandidate(
         personRef,
         '',
@@ -295,6 +330,7 @@ export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
         count / total,
         'mail',
         `Appears on ${count} threads about ${topic}.`,
+        `${count} שרשורי דואר בנושא ${topicHe} מזכירים את ${personName}.`,
         [`${count} threads`],
       );
     }
@@ -324,17 +360,32 @@ export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
 }
 
 /** "Who handles this?" — the query the org map exists to answer. */
-export function whoHandles(org: OrgMap, query: string): { personRef: string; name: string; title: string; support: number; summary: string }[] {
+const TOPIC_EXPANSIONS: { test: RegExp; terms: string[] }[] = [
+  { test: /פיקוח|ביקורת|inspection/i, terms: ['ביקורת', 'שיבוץ פיקוח'] },
+  { test: /רישיון|רישוי|licen[cs]e/i, terms: ['רישוי', 'רישיון'] },
+  { test: /הנחה|זכאות|discount/i, terms: ['הנחה', 'זכאות'] },
+  { test: /קריאה|תלונה|complaint/i, terms: ['קריאה', 'תלונה'] },
+];
+
+export function whoHandles(org: OrgMap, query: string): { personRef: string; name: string; title: string; support: number; summary: string; summaryHe: string }[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  return org.responsibilities
-    .filter(
-      (r) =>
-        r.subject.toLowerCase().includes(q) ||
-        r.activityLabel.toLowerCase().includes(q) ||
-        r.summary.toLowerCase().includes(q),
+  const terms = [q, ...TOPIC_EXPANSIONS.filter((entry) => entry.test.test(q)).flatMap((entry) => entry.terms)];
+  const matched = org.responsibilities
+    .filter((r) =>
+      terms.some(
+        (term) =>
+          r.subject.toLowerCase().includes(term) ||
+          r.activityLabel.toLowerCase().includes(term) ||
+          r.summary.toLowerCase().includes(term),
+      ),
     )
-    .sort((a, b) => b.support - a.support)
+    .sort((a, b) => b.support - a.support);
+  // One card per person: a person can hold two activities on the same topic,
+  // and a duplicate card would crowd out another person in a five-card answer.
+  const seen = new Set<string>();
+  return matched
+    .filter((r) => (seen.has(r.personRef) ? false : (seen.add(r.personRef), true)))
     .slice(0, 5)
     .map((r) => {
       const person = org.people.find((p) => p.ref === r.personRef);
@@ -344,6 +395,7 @@ export function whoHandles(org: OrgMap, query: string): { personRef: string; nam
         title: person?.title ?? '',
         support: r.support,
         summary: r.summary,
+        summaryHe: r.summaryHe,
       };
     });
 }

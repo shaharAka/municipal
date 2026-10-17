@@ -1,0 +1,2055 @@
+diff --git a/src/cloud/fixtures.ts b/src/cloud/fixtures.ts
+index be8a9f1..99ade69 100644
+--- a/src/cloud/fixtures.ts
++++ b/src/cloud/fixtures.ts
+@@ -315,13 +315,13 @@ const LABELS: LabelDef[] = [
+ 
+ const STREETS = ['הרצל', 'בן גוריון', 'רוטשילד', 'העצמאות', 'הגנים', 'החרושת', 'המלאכה', 'אלון', 'שקמה', 'התאנה'] as const;
+ const BUSINESS_KINDS = [
+-  { he: 'מסעדה', en: 'Restaurant', risk: 'high' },
+-  { he: 'פיצריה', en: 'Pizzeria', risk: 'high' },
+-  { he: 'מכולת', en: 'Grocery', risk: 'medium' },
+-  { he: 'קונדיטוריה', en: 'Patisserie', risk: 'high' },
+-  { he: 'מזנון', en: 'Snack bar', risk: 'medium' },
+-  { he: 'מאפייה', en: 'Bakery', risk: 'medium' },
+-  { he: 'חנות פירות וירקות', en: 'Produce shop', risk: 'low' },
++  { he: 'מסעדה', of: 'מסעדת', en: 'Restaurant', risk: 'high' },
++  { he: 'פיצריה', of: 'פיצריית', en: 'Pizzeria', risk: 'high' },
++  { he: 'מכולת', of: 'מכולת', en: 'Grocery', risk: 'medium' },
++  { he: 'קונדיטוריה', of: 'קונדיטוריית', en: 'Patisserie', risk: 'high' },
++  { he: 'מזנון', of: 'מזנון', en: 'Snack bar', risk: 'medium' },
++  { he: 'מאפייה', of: 'מאפיית', en: 'Bakery', risk: 'medium' },
++  { he: 'חנות פירות וירקות', of: 'ירקניית', en: 'Produce shop', risk: 'low' },
+ ] as const;
+ 
+ const FIRST = ['דנה', 'יוסי', 'מיכל', 'אמיר', 'נועה', 'רבקה', 'איתן', 'סיגל', 'עומר', 'ליאור', 'טלי', 'הילה', 'רונית', 'גלית', 'משה', 'שירה', 'אביבה', 'יצחק', 'סימה', 'אליהו', 'ורד', 'בנימין'] as const;
+@@ -506,7 +506,7 @@ export function buildFixture(profileId: string): Fixture {
+     businesses.push({
+       business_id: businessId,
+       registry_number: String(int(rng, 510000000, 519999999)),
+-      business_name: kind.he + ' ' + pick(rng, ['השכונה', 'המרכז', 'הגן', 'הוותיק', 'החדש']),
++      business_name: kind.of + ' ' + pick(rng, ['השכונה', 'המרכז', 'הגן', 'הכיכר', 'השוק']),
+       category: kind.en,
+       risk_level: kind.risk,
+       address_raw: property.address_raw,
+diff --git a/src/ontology/packs/00-core.json b/src/ontology/packs/00-core.json
+index 3a200d8..1611f3b 100644
+--- a/src/ontology/packs/00-core.json
++++ b/src/ontology/packs/00-core.json
+@@ -136,7 +136,7 @@
+         "decision_id": { "type": "string" },
+         "kind": {
+           "type": "string",
+-          "enum": ["automation_approved", "process_validated", "schema_candidate_accepted", "responsibility_confirmed", "eligibility_rule_approved"]
++          "enum": ["automation_approved", "process_validated", "schema_candidate_accepted", "responsibility_confirmed", "eligibility_rule_approved", "outreach_approved", "meeting_tasks_created"]
+         },
+         "status": { "type": "string", "enum": ["proposed", "approved", "rejected", "superseded"] },
+         "decided_at": { "type": "string", "format": "date-time" },
+diff --git a/src/process/discover.ts b/src/process/discover.ts
+index 68efcb4..840031c 100644
+--- a/src/process/discover.ts
++++ b/src/process/discover.ts
+@@ -294,10 +294,10 @@ export function proposeAutomations(model: ProcessModel): AutomationProposal[] {
+           : kind === 'standard_letter'
+             ? 'הפקת מכתב התיקונים מתוך ממצאי הביקורת'
+             : 'תזכורת לרכזת הרישוי לפני חריגה מזמן שיבוץ הפיקוח',
+-      rationaleHe: `${step.labels} ממתין חציון של ${step.medianWaitDays} ימים מרגע היצירה (${step.occurrences} מקרים). זה ${sharePct}% מתוך חציון של ${model.medianTotalDays} ימים לתיק.`,
++      rationaleHe: `בשלב "${step.labels}" תיק ממתין בחציון ${step.medianWaitDays} ימים (${step.occurrences} מקרים), כלומר ${sharePct}% מ־${model.medianTotalDays} הימים שתיק נמשך בחציון.`,
+       evidenceHe: [
+         `${step.occurrences} אירועים מתוך ${model.caseCount} תיקים`,
+-        `חציון המתנה ${step.medianWaitDays} ימים, p90 ${step.p90WaitDays} ימים`,
++        `חציון המתנה ${step.medianWaitDays} ימים, 90% עד ${step.p90WaitDays} ימים`,
+         `הנחה מוצהרת: ${reductionPct}% מההמתנה מוסרת`,
+       ],
+       step: step.activity,
+diff --git a/src/research/sources.ts b/src/research/sources.ts
+index d5aa9dc..6269ab5 100644
+--- a/src/research/sources.ts
++++ b/src/research/sources.ts
+@@ -188,8 +188,8 @@ export function research(source: SourceId, ctx: ResearchContext): Suggestion[] {
+         source,
+         kind: 'form',
+         titleHe: 'טופס השלמת נתון הכנסה למשקי בית',
+-        whyHe: `${missingIncome} משקי בית לא ניתנים להכרעה כי חסר נתון הכנסה. טופס קצר, שנגזר מהמודל, יכול לאסוף בדיוק את השדה הזה.`,
+-        evidenceHe: [`${missingIncome} משקי בית חסרים`, 'השדה income_band', 'נגזר מטיפוס household'],
++        whyHe: `ל־${missingIncome} משקי בית אין נתון הכנסה, ובחלקם זה מונע הכרעה בזכאות. טופס קצר, שנגזר מהמודל, יכול לאסוף בדיוק את השדה הזה.`,
++        evidenceHe: [`${missingIncome} משקי בית בלי נתון הכנסה`, 'השדה: רמת הכנסה של משק הבית', 'נגזר מהמודל של משק בית'],
+         action: {
+           type: 'create_form',
+           pageType: 'household',
+diff --git a/src/server.ts b/src/server.ts
+index f9c2742..7719315 100644
+--- a/src/server.ts
++++ b/src/server.ts
+@@ -20,6 +20,7 @@ import { generateForm, proposeValues, validateSubmission, type FormKind } from '
+ import { answerInterview, listInterviews, openInterview, ATTENTION } from './interviews/engine.ts';
+ import { SOURCES, research, approveSuggestion, type Suggestion, type SourceId } from './research/sources.ts';
+ import { refFor, type Viewer } from './graph/graph.ts';
++import { handleValueApi } from './value/api.ts';
+ 
+ const WEB = new URL('./web/', import.meta.url).pathname;
+ 
+@@ -1051,7 +1052,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo,
+       waitP90: p.waitP90,
+       waitCount: p.waitCount,
+       whatHappensHe:
+-        'האישור רושם החלטה ומסמן את האוטומציה כמאושרת. ב-POC אין מנוע הרצה המחובר לתור אמיתי, ולכן לא נשלחת הודעה בפועל; אין כתיבה חזרה למערכות המקור.',
++        'האישור רושם החלטה ומסמן את האוטומציה כמאושרת. בהדגמה הזו אין מנוע הרצה המחובר לתור אמיתי, ולכן לא נשלחת הודעה בפועל; אין כתיבה חזרה למערכות המקור.',
+     }));
+ 
+     const openCandidates = platform.graph
+@@ -1481,6 +1482,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo,
+     }
+     return json(res, 200, { candidates: platform.report.schemaCandidates });
+   }
++  if ((parts[1] === 'rights' || parts[1] === 'meetings') && (await handleValueApi(req, res, platform, viewer, url, parts, viewerName(platform, viewer)))) return;
+   return json(res, 404, { error: 'unknown endpoint', path: url.pathname });
+ }
+ 
+diff --git a/src/value/api.ts b/src/value/api.ts
+new file mode 100644
+index 0000000..93047be
+--- /dev/null
++++ b/src/value/api.ts
+@@ -0,0 +1,157 @@
++// HTTP for the two value pages: /api/rights/* and /api/meetings/*.
++// server.ts hands these paths here; the state below is the POC's own store,
++// never the source systems (read-only, as everywhere else).
++
++import type { IncomingMessage, ServerResponse } from 'node:http';
++import type { Viewer } from '../graph/graph.ts';
++import { refFor, stableId } from '../graph/graph.ts';
++import type { Platform } from '../platform.ts';
++import { evaluateHouseholds, outreachLetter, rightsView, type Outreach } from './rights.ts';
++import { createTasks, meetingsView, minutesDocument, type Task } from './meetings.ts';
++
++const outreach = new Map<string, Outreach>();
++const tasks = new Map<string, Task>();
++const assigned = new Map<string, { ownerId: string; ownerName: string }>();
++
++const send = (res: ServerResponse, status: number, body: unknown) => {
++  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
++  res.end(JSON.stringify(body));
++};
++
++const body = (req: IncomingMessage): Promise<Record<string, unknown>> =>
++  new Promise((resolve) => {
++    let raw = '';
++    req.on('data', (c) => (raw += c));
++    req.on('end', () => {
++      try {
++        resolve(raw ? JSON.parse(raw) : {});
++      } catch {
++        resolve({});
++      }
++    });
++  });
++
++const userOf = (platform: Platform, viewer: Viewer) => platform.fixture.users.find((u) => u.id === viewer.id);
++
++// Who handles discount requests sees names; the rule owner too. Everyone else
++// sees counts. A clearance level is not a reason to see a resident's name.
++function rightsAccess(platform: Platform, viewer: Viewer) {
++  const title = userOf(platform, viewer)?.jobTitle ?? '';
++  const canSeeNames = /מזכיר|רכז גזברות/.test(title);
++  return {
++    canSeeNames,
++    whyHe: canSeeNames
++      ? 'השמות גלויים לך כי התפקיד שלך כולל טיפול בבקשות הנחה.'
++      : 'שמות וכתובות גלויים רק לתפקידים שמטפלים בבקשות הנחה: מזכירות המחלקה ורכז הגזברות.'
++  };
++}
++
++const isHead = (platform: Platform, viewer: Viewer) => /מנהל/.test(userOf(platform, viewer)?.jobTitle ?? '') && !/סגן/.test(userOf(platform, viewer)?.jobTitle ?? '');
++
++function recordDecision(platform: Platform, kind: string, title: string, actor: string, at: string, subjectRef: string, rationale: string): string {
++  const graph = platform.graph;
++  const ref = refFor('decision', stableId('DEC', kind, subjectRef, at).replace('DEC-', ''));
++  graph.addPage({ ref, type: 'decision', title, properties: {}, createdAt: at });
++  const values: Record<string, unknown> = {
++    decision_id: ref,
++    kind,
++    status: 'approved',
++    decided_at: at,
++    decided_by: actor,
++    rationale,
++    subject_ref: subjectRef,
++  };
++  for (const [property, value] of Object.entries(values)) {
++    graph.setProperty({
++      pageRef: ref,
++      property,
++      value,
++      status: 'confirmed',
++      provenance: {
++        kind: 'recorded',
++        source: kind === 'outreach_approved' ? 'proactive rights' : 'meetings to tasks',
++        method: 'person approval',
++        as_of: at,
++        evidence_class: 'asserted',
++        confirmed_by_role: actor,
++      },
++      evidenceIds: [],
++    });
++  }
++  if (graph.page(subjectRef)) graph.addEdge({ kind: 'approves', from: ref, to: subjectRef });
++  return ref;
++}
++
++export async function handleValueApi(
++  req: IncomingMessage,
++  res: ServerResponse,
++  platform: Platform,
++  viewer: Viewer,
++  url: URL,
++  parts: string[],
++  actor: string,
++): Promise<boolean> {
++  const now = new Date().toISOString();
++
++  if (parts[1] === 'rights') {
++    const access = rightsAccess(platform, viewer);
++    if (!parts[2]) return send(res, 200, rightsView(platform.fixture, access, outreach)), true;
++    if (!access.canSeeNames) return send(res, 403, { error: 'שמות התושבים גלויים רק לתפקידים שמטפלים בבקשות הנחה.' }), true;
++    const id = parts[2] === 'letter' ? url.searchParams.get('household') : String((await body(req)).household ?? '');
++    const household = evaluateHouseholds(platform.fixture).find((h) => h.householdId === id && h.qualifiers.length && !h.receiving);
++    if (!household) return send(res, 404, { error: 'משק הבית לא נמצא ברשימת הזכאים שעדיין לא מקבלים הנחה.' }), true;
++    const letter = outreachLetter(household, actor.split(' (')[0]);
++    if (!letter) return send(res, 404, { error: 'לא נמצאה עילת זכאות לפנייה.' }), true;
++    if (parts[2] === 'letter') return send(res, 200, { household, letter }), true;
++    if (parts[2] === 'outreach' && req.method === 'POST') {
++      if (outreach.has(household.householdId)) return send(res, 200, { outreach: outreach.get(household.householdId) }), true;
++      const record: Outreach = { by: actor, at: now, letter: letter.text, residentId: letter.residentId };
++      outreach.set(household.householdId, record);
++      const decision = recordDecision(
++        platform,
++        'outreach_approved',
++        'פנייה יזומה לתושב: הנחה בארנונה',
++        actor,
++        now,
++        refFor('household', household.householdId),
++        `${household.householdId} עומד בכלל ARNONA-RELIEF ואינו מקבל הנחה. ${household.unclaimedAnnual} ₪ בשנה.`,
++      );
++      return send(res, 200, { outreach: record, decision }), true;
++    }
++  }
++
++  if (parts[1] === 'meetings') {
++    if (!parts[2]) {
++      return send(res, 200, meetingsView(platform.fixture, viewer.id, tasks, assigned, (url.searchParams.get('q') ?? '').slice(0, 200))), true;
++    }
++    if (parts[2] === 'minutes') {
++      const minutes = minutesDocument(url.searchParams.get('id') ?? '');
++      return minutes ? send(res, 200, { minutes }) : send(res, 404, { error: 'הסיכום לא נמצא.' }), true;
++    }
++    if (req.method !== 'POST') return send(res, 405, { error: 'method not allowed' }), true;
++    if (!isHead(platform, viewer)) return send(res, 403, { error: 'רק מנהלת המחלקה קובעת אחראים ויוצרת משימות.' }), true;
++    if (parts[2] === 'assign') {
++      const input = await body(req);
++      const person = platform.fixture.users.find((u) => u.id === String(input.owner ?? ''));
++      if (!person) return send(res, 400, { error: 'האחראי לא נמצא בספרייה.' }), true;
++      assigned.set(String(input.decision ?? ''), { ownerId: person.id, ownerName: person.displayName });
++      return send(res, 200, { ok: true }), true;
++    }
++    if (parts[2] === 'tasks') {
++      const created = createTasks(platform.fixture, tasks, assigned, actor, now);
++      const decision = created.length
++        ? recordDecision(
++            platform,
++            'meeting_tasks_created',
++            `${created.length} משימות מסיכומי ישיבות ההנהלה`,
++            actor,
++            now,
++            refFor('org_unit', 'department'),
++            created.map((t) => `${t.ownerName}: ${t.decisionId}`).join('; '),
++          )
++        : null;
++      return send(res, 200, { created, decision }), true;
++    }
++  }
++  return false;
++}
+diff --git a/src/value/meetings.ts b/src/value/meetings.ts
+new file mode 100644
+index 0000000..b8beae7
+--- /dev/null
++++ b/src/value/meetings.ts
+@@ -0,0 +1,231 @@
++// From the meeting to the work: decisions are read out of management-meeting
++// minutes, matched to people in the directory, checked against later minutes,
++// and turned into tasks only when a person approves.
++//
++// Extraction is declared, not generated: a line that starts "הוחלט:" is a
++// decision, "אחראי/ת:" names its owner and "עד:" its date; "בוצע:" in a later
++// meeting closes the decision it shares the most words with. Every decision
++// keeps the document and the line it came from.
++
++import type { Fixture } from '../cloud/fixtures.ts';
++import { REFERENCE_DATE } from '../seed/eligibility-rules.ts';
++
++export type Minutes = { id: string; title: string; date: string; path: string; lines: string[] };
++
++export const MINUTES: Minutes[] = [
++  {
++    id: 'MIN-2026-09-15',
++    title: 'סיכום ישיבת הנהלת המחלקה',
++    date: '2026-09-15',
++    path: 'מסמכי המחלקה › ישיבות הנהלה › 2026-09-15.docx',
++    lines: [
++      'משתתפים: דנה לוי, יוסי כהן, מיכל ברק, הילה קורן, רונית דיין',
++      'נושא: עומס בשיבוץ ביקורות לרישוי עסקים',
++      'הוחלט: לפתוח יומן שיבוץ משותף למפקחי המזון | אחראית: מיכל ברק | עד: 2026-10-01',
++      'הוחלט: לבחון תוספת מפקח במשרה חלקית לעונת הקיץ | אחראי: יוסי כהן | עד: 2026-11-15',
++      'נושא: קריאות מזיקים באזור התעשייה',
++      'הוחלט: לרכז את קריאות המזיקים מהרבעון האחרון לדוח אחד למועצת העיר | עד: 2026-09-30',
++      'הוחלט: לזמן את קבלן ההדברה לפגישת תיאום | אחראי: ליאור אשכנזי',
++    ],
++  },
++  {
++    id: 'MIN-2026-10-14',
++    title: 'סיכום ישיבת הנהלת המחלקה',
++    date: '2026-10-14',
++    path: 'מסמכי המחלקה › ישיבות הנהלה › 2026-10-14.docx',
++    lines: [
++      'משתתפים: דנה לוי, יוסי כהן, מיכל ברק, הילה קורן, משה טל',
++      'נושא: מעקב החלטות מהישיבה הקודמת',
++      'בוצע: יומן שיבוץ משותף למפקחי המזון הופעל | 2026-09-28',
++      'נושא: הנחות לתושבים',
++      'הוחלט: להכין רשימת משקי בית שזכאים להנחה בארנונה ולא מימשו אותה | אחראית: הילה קורן | עד: 2026-10-31',
++      'הוחלט: לבקש מהגזברות את נתוני ההכנסה החסרים | עד: 2026-10-25',
++      'נושא: ביקורות לפני החורף',
++      'הוחלט: לשלוח לבעלי מסעדות תזכורת לנקות מפרידי שומן לפני עונת הגשמים | אחראי: אמיר חדאד | עד: 2026-10-20',
++      'הוחלט: להציג לראש העיר את צוואר הבקבוק בשיבוץ הפיקוח | אחראית: דנה לוי | עד: 2026-11-05',
++    ],
++  },
++];
++
++export type MeetingDecision = {
++  id: string;
++  text: string;
++  meetingId: string;
++  meetingDate: string;
++  topic: string;
++  line: number;
++  path: string;
++  ownerName: string | null;
++  ownerId: string | null;
++  ownerTitle: string | null;
++  due: string | null;
++  status: 'done' | 'open' | 'overdue' | 'due_soon';
++  doneAt: string | null;
++  doneLine: { meetingId: string; line: number } | null;
++  flags: ('no_owner' | 'no_date' | 'owner_not_in_directory')[];
++  linksTo: 'rights' | null;
++};
++
++export type Task = { decisionId: string; ownerId: string; ownerName: string; due: string | null; remindOn: string | null; createdBy: string; createdAt: string };
++
++// Hebrew prefixes (ו, ה, ב, ל, מ, ש) are stripped so "המזון" meets "מזון".
++const words = (text: string) =>
++  new Set(
++    text
++      .replace(/[^֐-׿a-zA-Z0-9 ]/g, ' ')
++      .split(/\s+/)
++      .map((w) => w.replace(/^[והבלמש](?=[֐-׿]{3,})/, ''))
++      .filter((w) => w.length > 2),
++  );
++
++const overlap = (a: string, b: string) => {
++  const A = words(a);
++  let n = 0;
++  for (const w of words(b)) if (A.has(w)) n++;
++  return n;
++};
++
++const field = (parts: string[], keys: RegExp) => parts.find((p) => keys.test(p))?.replace(keys, '').trim() || null;
++
++const addDays = (iso: string, days: number) => new Date(Date.parse(iso) + days * 86_400_000).toISOString().slice(0, 10);
++
++export function extractDecisions(fixture: Fixture): MeetingDecision[] {
++  const people = fixture.users.map((u) => ({ id: u.id, name: u.displayName, title: u.jobTitle }));
++  const decisions: MeetingDecision[] = [];
++  const done: { text: string; at: string; meetingId: string; line: number }[] = [];
++
++  for (const m of MINUTES) {
++    let topic = '';
++    m.lines.forEach((raw, i) => {
++      const line = i + 1;
++      if (raw.startsWith('נושא:')) topic = raw.replace('נושא:', '').trim();
++      if (raw.startsWith('בוצע:')) {
++        const [text, at] = raw.replace('בוצע:', '').split('|').map((s) => s.trim());
++        done.push({ text, at: at || m.date, meetingId: m.id, line });
++      }
++      if (!raw.startsWith('הוחלט:')) return;
++      const parts = raw.replace('הוחלט:', '').split('|').map((s) => s.trim());
++      const ownerName = field(parts, /^אחראי(ת)?:/);
++      const due = field(parts, /^עד:/);
++      const owner = ownerName ? people.find((p) => p.name === ownerName) : undefined;
++      const flags: MeetingDecision['flags'] = [];
++      if (!ownerName) flags.push('no_owner');
++      else if (!owner) flags.push('owner_not_in_directory');
++      if (!due) flags.push('no_date');
++      decisions.push({
++        id: `${m.id}-L${line}`,
++        text: parts[0],
++        meetingId: m.id,
++        meetingDate: m.date,
++        topic,
++        line,
++        path: m.path,
++        ownerName,
++        ownerId: owner?.id ?? null,
++        ownerTitle: owner?.title ?? null,
++        due,
++        status: 'open',
++        doneAt: null,
++        doneLine: null,
++        flags,
++        linksTo: /משקי בית.*הנחה|הנחה.*משקי בית/.test(parts[0]) ? 'rights' : null,
++      });
++    });
++  }
++
++  // A later "בוצע:" closes the earlier decision it shares the most words with.
++  for (const d of done) {
++    const best = decisions
++      .filter((x) => x.meetingDate <= d.at || x.meetingDate < REFERENCE_DATE)
++      .map((x) => ({ x, n: overlap(x.text, d.text) }))
++      .sort((a, b) => b.n - a.n)[0];
++    if (best && best.n >= 2) {
++      best.x.status = 'done';
++      best.x.doneAt = d.at;
++      best.x.doneLine = { meetingId: d.meetingId, line: d.line };
++    }
++  }
++
++  for (const d of decisions) {
++    if (d.status === 'done' || !d.due) continue;
++    if (d.due < REFERENCE_DATE) d.status = 'overdue';
++    else if (d.due <= addDays(REFERENCE_DATE, 7)) d.status = 'due_soon';
++  }
++  return decisions;
++}
++
++/** "What was decided about X?" — the decisions that share the most words with the question. */
++export function recall(decisions: MeetingDecision[], question: string) {
++  return decisions
++    .map((d) => ({ d, n: overlap(`${d.topic} ${d.text}`, question) }))
++    .filter((x) => x.n > 0)
++    .sort((a, b) => b.n - a.n || b.d.meetingDate.localeCompare(a.d.meetingDate))
++    .slice(0, 5)
++    .map((x) => x.d);
++}
++
++export function meetingsView(
++  fixture: Fixture,
++  viewerId: string,
++  tasks: Map<string, Task>,
++  assigned: Map<string, { ownerId: string; ownerName: string }>,
++  question: string,
++) {
++  const decisions = extractDecisions(fixture).map((d) => {
++    const a = assigned.get(d.id);
++    return a ? { ...d, ownerId: a.ownerId, ownerName: a.ownerName, flags: d.flags.filter((f) => f !== 'no_owner'), assignedLater: true } : { ...d, assignedLater: false };
++  });
++  const open = decisions.filter((d) => d.status !== 'done');
++  return {
++    asOf: REFERENCE_DATE,
++    meetings: MINUTES.map((m) => ({ id: m.id, title: m.title, date: m.date, path: m.path, decisions: decisions.filter((d) => d.meetingId === m.id).length })),
++    decisions: decisions.map((d) => ({ ...d, task: tasks.get(d.id) ?? null })),
++    alerts: open.filter((d) => d.status === 'overdue' || d.flags.includes('no_owner')),
++    mine: decisions.filter((d) => d.ownerId === viewerId && d.status !== 'done').map((d) => ({ ...d, task: tasks.get(d.id) ?? null })),
++    counts: {
++      total: decisions.length,
++      done: decisions.filter((d) => d.status === 'done').length,
++      open: open.length,
++      overdue: open.filter((d) => d.status === 'overdue').length,
++      noOwner: open.filter((d) => d.flags.includes('no_owner')).length,
++      tasks: tasks.size,
++      readyForTasks: open.filter((d) => d.ownerId && !tasks.has(d.id)).length,
++    },
++    question,
++    recalled: question ? recall(decisions, question).map((d) => d.id) : [],
++    people: fixture.users
++      .filter((u) => (u as { employeeType?: string }).employeeType !== 'Contractor')
++      .map((u) => ({ id: u.id, name: u.displayName, title: u.jobTitle })),
++  };
++}
++
++export function createTasks(
++  fixture: Fixture,
++  tasks: Map<string, Task>,
++  assigned: Map<string, { ownerId: string; ownerName: string }>,
++  actor: string,
++  at: string,
++): Task[] {
++  const created: Task[] = [];
++  for (const d of extractDecisions(fixture)) {
++    if (d.status === 'done' || tasks.has(d.id)) continue;
++    const owner = assigned.get(d.id) ?? (d.ownerId ? { ownerId: d.ownerId, ownerName: d.ownerName ?? '' } : null);
++    if (!owner) continue;
++    const task: Task = {
++      decisionId: d.id,
++      ownerId: owner.ownerId,
++      ownerName: owner.ownerName,
++      due: d.due,
++      remindOn: d.due ? (d.due < REFERENCE_DATE ? REFERENCE_DATE : addDays(d.due, -3)) : null,
++      createdBy: actor,
++      createdAt: at,
++    };
++    tasks.set(d.id, task);
++    created.push(task);
++  }
++  return created;
++}
++
++export function minutesDocument(id: string) {
++  return MINUTES.find((m) => m.id === id) ?? null;
++}
+diff --git a/src/value/rights.ts b/src/value/rights.ts
+new file mode 100644
+index 0000000..5e42424
+--- /dev/null
++++ b/src/value/rights.ts
+@@ -0,0 +1,284 @@
++// Proactive rights: which households meet a declared discount rule and are not
++// receiving it. This is the turn from "how many are eligible?" to "who is
++// eligible, and are they getting it?".
++//
++// The rule engine reads the resident records here, in the platform. No record
++// is sent to a model: the calculation is declared criteria over columns, and
++// the outreach letter is a declared template. Names and addresses leave this
++// module only for a viewer whose role handles discount requests; everyone else
++// gets counts, suppressed below the declared minimum cell size.
++
++import type { Fixture } from '../cloud/fixtures.ts';
++import { REFERENCE_DATE, SUPPRESSION } from '../seed/eligibility-rules.ts';
++
++type Row = Record<string, unknown>;
++
++export type GroundCode = 'DISABILITY' | 'SENIOR_LOW_INCOME' | 'RESERVIST';
++
++export type Ground = {
++  code: GroundCode;
++  label_he: string;
++  reads: string[];
++  /** Share of the annual charge the ground removes. Declared for the demo, not quoted from law. */
++  rate: number;
++  connected: boolean;
++  source_he: string;
++};
++
++export const ARNONA_RULE = {
++  code: 'ARNONA-RELIEF',
++  version: 1,
++  name_he: 'הנחה בארנונה למגורים',
++  owner: 'משה טל, רכז גזברות',
++  citation: 'תקנות הסדרים במשק המדינה (הנחה מארנונה), התשנ״ג–1993',
++  status_he: 'כלל להדגמה · השיעורים טעונים אישור של היועצת המשפטית',
++  effective_from: '2026-01-01',
++  grounds: [
++    {
++      code: 'DISABILITY',
++      label_he: 'תעודת נכות בתוקף',
++      reads: ['dbo.residents.disability_certificate_expiry'],
++      rate: 0.4,
++      connected: true,
++      source_he: 'מערכות הפעלה · מרשם התושבים',
++    },
++    {
++      code: 'SENIOR_LOW_INCOME',
++      label_he: 'אזרח ותיק, בן 67 ומעלה, במשק בית עם הכנסה נמוכה',
++      reads: ['dbo.residents.birth_date', 'dbo.households.income_band'],
++      rate: 0.25,
++      connected: true,
++      source_he: 'מערכות הפעלה · מרשם התושבים',
++    },
++    {
++      code: 'RESERVIST',
++      label_he: 'שירות מילואים פעיל',
++      reads: ['אישורי שירות מילואים'],
++      rate: 0.05,
++      connected: false,
++      source_he: 'אישורי שירות מילואים · לא מחובר',
++    },
++  ] as Ground[],
++};
++
++/** Declared, owned: every number this page multiplies by. */
++export const RIGHTS_PARAMS = {
++  tariffPerSqm: {
++    value: 58,
++    owner: 'משה טל, רכז גזברות',
++    reason: 'תעריף ארנונה שנתי למ״ר מגורים. ערך להדגמה, לא התעריף של העירייה.',
++  },
++  reservistAgeRange: {
++    value: [21, 45] as const,
++    owner: 'משה טל, רכז גזברות',
++    reason: 'טווח הגילים שבו אי אפשר לשלול שירות מילואים בלי המקור.',
++  },
++};
++
++export type Outreach = { by: string; at: string; letter: string; residentId: string };
++
++// The billing system's discount flag is read-only and lives outside the graph.
++// It is derived from the household id, so it never disturbs the fixture's
++// random stream (and the numbers every other screen shows).
++const hash = (text: string) => {
++  let h = 2166136261;
++  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
++  return (h >>> 0) % 100;
++};
++
++export function arnonaBilling(householdId: string): { discountApplied: boolean } {
++  return { discountApplied: hash(`arnona|${householdId}`) < 30 };
++}
++
++const ageOn = (birth: unknown, on: string) => {
++  if (typeof birth !== 'string' || !birth) return null;
++  const b = new Date(birth);
++  const d = new Date(on);
++  let age = d.getUTCFullYear() - b.getUTCFullYear();
++  if (d.getUTCMonth() < b.getUTCMonth() || (d.getUTCMonth() === b.getUTCMonth() && d.getUTCDate() < b.getUTCDate())) age--;
++  return age;
++};
++
++export type Qualifier = {
++  residentId: string;
++  name: string;
++  firstName: string;
++  ground: GroundCode;
++  groundHe: string;
++  evidence: { table: string; row: string; column: string; value: string; sourceHe: string; columnHe: string }[];
++};
++
++export type HouseholdResult = {
++  householdId: string;
++  address: string;
++  street: string;
++  city: string;
++  annualArnona: number;
++  qualifiers: Qualifier[];
++  bestGround: GroundCode | null;
++  unclaimedAnnual: number;
++  receiving: boolean;
++  cannotCheck: ('income_band_missing' | 'reservist_source_not_connected')[];
++};
++
++export function evaluateHouseholds(fixture: Fixture): HouseholdResult[] {
++  const rows = (name: string) => (fixture.tables[name]?.rows ?? []) as Row[];
++  const properties = new Map(rows('properties').map((p) => [String(p.property_id), p]));
++  const residents = rows('residents');
++  const [minAge, maxAge] = RIGHTS_PARAMS.reservistAgeRange.value;
++  const ground = (code: GroundCode) => ARNONA_RULE.grounds.find((g) => g.code === code)!;
++
++  return rows('households').map((hh) => {
++    const id = String(hh.household_id);
++    const property = properties.get(String(hh.property_id)) ?? {};
++    const area = Number(property.floor_area_sqm ?? 0);
++    const annualArnona = Math.round(area * RIGHTS_PARAMS.tariffPerSqm.value);
++    const members = residents.filter((r) => String(r.household_id) === id);
++    const qualifiers: Qualifier[] = [];
++    const cannotCheck = new Set<HouseholdResult['cannotCheck'][number]>();
++
++    for (const r of members) {
++      const name = `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim();
++      const base = { residentId: String(r.resident_id), name, firstName: String(r.first_name ?? '') };
++      const expiry = r.disability_certificate_expiry;
++      if (typeof expiry === 'string' && expiry >= REFERENCE_DATE) {
++        qualifiers.push({
++          ...base,
++          ground: 'DISABILITY',
++          groundHe: ground('DISABILITY').label_he,
++          evidence: [{ table: 'dbo.residents', row: base.residentId, column: 'disability_certificate_expiry', value: expiry.slice(0, 10), sourceHe: 'מרשם התושבים', columnHe: 'תוקף תעודת נכות' }],
++        });
++      }
++      const age = ageOn(r.birth_date, REFERENCE_DATE);
++      if (age !== null && age >= 67) {
++        if (hh.income_band === 'LOW') {
++          qualifiers.push({
++            ...base,
++            ground: 'SENIOR_LOW_INCOME',
++            groundHe: ground('SENIOR_LOW_INCOME').label_he,
++            evidence: [
++              { table: 'dbo.residents', row: base.residentId, column: 'birth_date', value: String(r.birth_date).slice(0, 10), sourceHe: 'מרשם התושבים', columnHe: 'תאריך לידה' },
++              { table: 'dbo.households', row: id, column: 'income_band', value: 'נמוכה', sourceHe: 'משקי בית', columnHe: 'רמת הכנסה' },
++            ],
++          });
++        } else if (hh.income_band == null) {
++          cannotCheck.add('income_band_missing');
++        }
++      }
++      if (age !== null && age >= minAge && age <= maxAge) cannotCheck.add('reservist_source_not_connected');
++    }
++
++    // One discount per household: the largest ground applies.
++    const best = qualifiers.reduce<Qualifier | null>(
++      (acc, q) => (!acc || ground(q.ground).rate > ground(acc.ground).rate ? q : acc),
++      null,
++    );
++    const receiving = arnonaBilling(id).discountApplied;
++    return {
++      householdId: id,
++      address: String(property.address_raw ?? ''),
++      street: String(property.street_name ?? ''),
++      city: String(property.city ?? ''),
++      annualArnona,
++      qualifiers,
++      bestGround: best?.ground ?? null,
++      unclaimedAnnual: best && !receiving ? Math.round(annualArnona * ground(best.ground).rate) : 0,
++      receiving,
++      cannotCheck: [...cannotCheck],
++    };
++  });
++}
++
++const suppress = (n: number) => (n > 0 && n < SUPPRESSION.minCellSize ? null : n);
++
++export function rightsView(
++  fixture: Fixture,
++  access: { canSeeNames: boolean; whyHe: string },
++  outreach: Map<string, Outreach>,
++) {
++  const all = evaluateHouseholds(fixture);
++  const eligible = all.filter((h) => h.qualifiers.length);
++  const notReceiving = eligible.filter((h) => !h.receiving);
++  const open = notReceiving.filter((h) => !outreach.has(h.householdId));
++  const unclaimed = notReceiving.reduce((a, h) => a + h.unclaimedAnnual, 0);
++  const shown = (n: number) => (access.canSeeNames ? n : suppress(n));
++
++  const grounds = ARNONA_RULE.grounds.map((g) => {
++    const hit = eligible.filter((h) => h.bestGround === g.code);
++    const missing = hit.filter((h) => !h.receiving);
++    return {
++      code: g.code,
++      labelHe: g.label_he,
++      sourceHe: g.source_he,
++      connected: g.connected,
++      rate: g.rate,
++      eligible: access.canSeeNames ? hit.length : suppress(hit.length),
++      notReceiving: access.canSeeNames ? missing.length : suppress(missing.length),
++      unclaimedAnnual: missing.reduce((a, h) => a + h.unclaimedAnnual, 0),
++      unchecked:
++        g.code === 'RESERVIST'
++          ? all.filter((h) => h.cannotCheck.includes('reservist_source_not_connected')).length
++          : g.code === 'SENIOR_LOW_INCOME'
++            ? all.filter((h) => h.cannotCheck.includes('income_band_missing')).length
++            : 0,
++    };
++  });
++
++  return {
++    rule: ARNONA_RULE,
++    params: RIGHTS_PARAMS,
++    suppression: SUPPRESSION,
++    asOf: REFERENCE_DATE,
++    access,
++    totals: {
++      households: all.length,
++      eligible: shown(eligible.length),
++      receiving: shown(eligible.length - notReceiving.length),
++      notReceiving: shown(notReceiving.length),
++      outreachSent: notReceiving.length - open.length,
++      unclaimedAnnual: unclaimed,
++      incomeMissing: all.filter((h) => h.cannotCheck.includes('income_band_missing')).length,
++      reservistUnchecked: all.filter((h) => h.cannotCheck.includes('reservist_source_not_connected')).length,
++    },
++    grounds,
++    worklist: access.canSeeNames
++      ? notReceiving
++          .sort((a, b) => b.unclaimedAnnual - a.unclaimedAnnual)
++          .map((h) => ({ ...h, outreach: outreach.get(h.householdId) ?? null }))
++      : [],
++    boundary: {
++      engineRead: [
++        { he: 'תוקף תעודת נכות', code: 'dbo.residents.disability_certificate_expiry' },
++        { he: 'תאריך לידה', code: 'dbo.residents.birth_date' },
++        { he: 'רמת הכנסה של משק הבית', code: 'dbo.households.income_band' },
++        { he: 'שטח הנכס', code: 'dbo.properties.floor_area_sqm' },
++        { he: 'האם רשומה הנחה בארנונה', code: 'billing.arnona_discount' },
++      ],
++      rowsProcessed: all.length,
++      rowsSentToModel: 0,
++    },
++  };
++}
++
++export function outreachLetter(h: HouseholdResult, clerk: string): { residentId: string; text: string } | null {
++  const best = h.qualifiers.find((q) => q.ground === h.bestGround);
++  if (!best) return null;
++  const amount = h.unclaimedAnnual.toLocaleString('he-IL');
++  const text = [
++    'הנדון: ייתכן שמגיעה לך הנחה בארנונה',
++    '',
++    `שלום ${best.name},`,
++    '',
++    `לפי הנתונים שבידי העירייה, ייתכן שמשק הבית שלך ברחוב ${h.address.split(',')[0]} זכאי להנחה בארנונה על בסיס: ${best.groundHe}.`,
++    `לפי החיוב הנוכחי, ההנחה שווה כ־${amount} ₪ בשנה.`,
++    '',
++    'אין צורך למלא טופס: אפשר להשיב למכתב זה או לפנות למוקד העירוני, ואנחנו נשלים את הבדיקה מול המסמכים.',
++    '',
++    `פנינו אליך ביוזמתנו, לפי ${ARNONA_RULE.name_he} (${ARNONA_RULE.citation}).`,
++    '',
++    'בברכה,',
++    clerk,
++    `עיריית ${h.city}`,
++  ].join('\n');
++  return { residentId: best.residentId, text };
++}
+diff --git a/src/web/home.js b/src/web/home.js
+index 3eead25..c631ba3 100644
+--- a/src/web/home.js
++++ b/src/web/home.js
+@@ -15,6 +15,7 @@ import {
+   NAV,
+ } from './ui.js';
+ import * as views from './views.js';
++import * as value from './value.js';
+ 
+ const $ = (selector, root = document) => root.querySelector(selector);
+ 
+@@ -134,14 +135,16 @@ async function renderLanding() {
+   if (!main) return;
+   main.innerHTML = `<div class="landing-loading"><span class="mark">${icon('building')}</span><p>טוען את מפת העיר…</p></div>`;
+   try {
+-    const [viewers, answer, overview, approvals] = await Promise.all([
++    const [viewers, answer, overview, approvals, rights, meetings] = await Promise.all([
+       api('/api/viewers').catch(() => ({ viewers: state.viewers ?? [] })),
+       api('/api/answer').catch(() => null),
+       api('/api/overview').catch(() => null),
+       api('/api/approvals?scope=all').catch(() => null),
++      api('/api/rights').catch(() => null),
++      api('/api/meetings').catch(() => null),
+     ]);
+     state.viewers = viewers.viewers ?? [];
+-    main.innerHTML = views.landingView({ viewers: state.viewers, answer, overview, approvals });
++    main.innerHTML = views.landingView({ viewers: state.viewers, answer, overview, approvals, rights, meetings });
+     document.title = 'כניסה · מערכת המידע העירונית';
+     const sidebar = $('#sidebar');
+     if (sidebar) sidebar.innerHTML = '';
+@@ -183,7 +186,7 @@ function renderChrome() {
+     <nav class="side-nav" aria-label="ניווט ראשי">
+       <p class="side-label">העבודה שלי</p>
+       ${tabs
+-        .filter((id) => ['home', 'approvals', 'insights'].includes(id))
++        .filter((id) => ['home', 'rights', 'meetings', 'approvals', 'insights'].includes(id))
+         .map(
+           (id) => `<a class="nav-item ${state.tab === id ? 'is-active' : ''}" href="#/${id}" aria-label="${NAV[id].label}" title="${NAV[id].label}" ${state.tab === id ? 'aria-current="page"' : ''}>
+             ${icon(NAV[id].icon)}<span>${NAV[id].label}</span>
+@@ -241,12 +244,13 @@ async function renderMain() {
+   try {
+     let html = '';
+     if (state.tab === 'home') {
+-      const [overview, answer, org, process, interviews] = await Promise.all([
++      const [overview, answer, org, process, interviews, valueStrip] = await Promise.all([
+         api('/api/overview'),
+         api('/api/answer'),
+         api('/api/org'),
+         api('/api/process?service=LIC'),
+         api('/api/interviews'),
++        value.homeStrip({ api, kind }).catch(() => ''),
+       ]);
+       state.answer = answer;
+       const approvals = state.shell.approvals;
+@@ -262,6 +266,7 @@ async function renderMain() {
+         interviews,
+         connectors: state.shell.connectors,
+         gap,
++        valueStrip,
+       });
+     } else if (state.tab === 'approvals') {
+       const approvals = await api('/api/approvals');
+@@ -286,6 +291,9 @@ async function renderMain() {
+       const connectors = await api('/api/connectors');
+       state.shell = { ...state.shell, connectors };
+       html = views.sourcesView({ connectors, showInsights: navFor(kind).includes('insights'), kind });
++    } else if (state.tab === 'rights' || state.tab === 'meetings') {
++      value.bind({ api, kind, refresh: async () => { invalidate(); await render(); } });
++      html = state.tab === 'rights' ? await value.rightsPage() : await value.meetingsPage();
+     } else if (state.tab === 'workspace') {
+       const [outlook, doclib] = await Promise.all([api('/api/outlook'), api('/api/doclib')]);
+       html = views.workspaceView({ outlook, doclib, ws: state.ws, kind });
+@@ -760,7 +768,7 @@ document.addEventListener('click', async (event) => {
+       await renderMain();
+     } catch (error) {
+       validateProcess.disabled = false;
+-      validateProcess.textContent = 'אשר שהתהליך הזה נכון';
++      validateProcess.textContent = 'אישור התהליך כפי שנמדד';
+       toast(error.message, 'error');
+     }
+     return;
+diff --git a/src/web/index.html b/src/web/index.html
+index 427dd20..a59fbbe 100644
+--- a/src/web/index.html
++++ b/src/web/index.html
+@@ -7,6 +7,7 @@
+     <meta name="description" content="מערכת המידע העירונית של גבעת רימון — מחלקת תברואה ובריאות." />
+     <title>גבעת רימון · מערכת המידע העירונית</title>
+     <link rel="stylesheet" href="./home.css" />
++    <link rel="stylesheet" href="./value.css" />
+   </head>
+   <body data-mode="landing">
+     <a class="skip" href="#main">דלג לתוכן</a>
+diff --git a/src/web/ui.js b/src/web/ui.js
+index fc9142a..013a88c 100644
+--- a/src/web/ui.js
++++ b/src/web/ui.js
+@@ -27,8 +27,9 @@ export const sensitivityHe = (label) =>
+ export const ltr = (v, cls = '') => `<span class="ltr${cls ? ` ${cls}` : ''}" dir="ltr">${esc(v)}</span>`;
+ 
+ /** Escape a Hebrew sentence and isolate the Latin tokens inside it. */
++// Latin runs are isolated LTR; the lookbehind keeps entities such as &quot; intact.
+ export const mixed = (v) =>
+-  esc(v).replace(/([A-Za-z][A-Za-z0-9_.\-]*)/g, '<span class="ltr" dir="ltr">$1</span>');
++  esc(v).replace(/(?<![&#\w])([A-Za-z][A-Za-z0-9_.\-]*)/g, '<span class="ltr" dir="ltr">$1</span>');
+ 
+ export const initials = (name) =>
+   String(name ?? '')
+@@ -105,6 +106,8 @@ export const roleKind = (label) => {
+ 
+ export const NAV = {
+   home: { label: 'בית', icon: 'home' },
++  rights: { label: 'מיצוי זכויות', icon: 'users' },
++  meetings: { label: 'מהישיבה למשימות', icon: 'flow' },
+   approvals: { label: 'מרכז הכרעות', icon: 'decisions' },
+   insights: { label: 'תמונת המחלקה', icon: 'chart' },
+   sources: { label: 'מקורות', icon: 'database' },
+@@ -112,12 +115,12 @@ export const NAV = {
+ };
+ 
+ export const NAV_BY_ROLE = {
+-  head: ['home', 'approvals', 'insights', 'sources', 'workspace'],
+-  clerk: ['home', 'approvals', 'insights', 'sources', 'workspace'],
+-  secretary: ['home', 'approvals', 'sources', 'workspace'],
+-  field: ['home', 'insights', 'workspace'],
+-  rule: ['home', 'approvals', 'sources'],
+-  steward: ['home', 'approvals', 'sources'],
++  head: ['home', 'rights', 'meetings', 'approvals', 'insights', 'sources', 'workspace'],
++  clerk: ['home', 'meetings', 'approvals', 'insights', 'sources', 'workspace'],
++  secretary: ['home', 'rights', 'meetings', 'approvals', 'sources', 'workspace'],
++  field: ['home', 'meetings', 'insights', 'workspace'],
++  rule: ['home', 'rights', 'approvals', 'sources'],
++  steward: ['home', 'meetings', 'approvals', 'sources'],
+ };
+ 
+ export const navFor = (kind) => NAV_BY_ROLE[kind] ?? NAV_BY_ROLE.clerk;
+diff --git a/src/web/value.css b/src/web/value.css
+new file mode 100644
+index 0000000..7203cf7
+--- /dev/null
++++ b/src/web/value.css
+@@ -0,0 +1,258 @@
++/* The two value pages: proactive rights and meetings to tasks.
++   Same tokens as home.css; every class here starts with v-. */
++
++.value-view { display: grid; gap: 20px; }
++
++.v-card {
++  background: var(--surface);
++  border: 1px solid var(--line);
++  border-radius: var(--radius);
++  padding: 22px 24px;
++  box-shadow: var(--shadow-sm);
++}
++.v-card h2 { font-size: 17px; margin: 0; }
++.v-quiet { background: var(--surface-2); box-shadow: none; }
++
++/* --- tiles */
++.v-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
++.v-tile {
++  background: var(--surface);
++  border: 1px solid var(--line);
++  border-radius: var(--radius-md);
++  padding: 16px 18px;
++  display: grid;
++  gap: 4px;
++}
++.v-tile span { font-size: 12px; color: var(--muted); }
++.v-tile b { font-size: 30px; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
++.v-tile small { font-size: 12px; color: var(--ink-2); }
++.v-tile.is-key { background: var(--primary); border-color: var(--primary); color: #fff; }
++.v-tile.is-key span, .v-tile.is-key small { color: rgba(255, 255, 255, 0.78); }
++.v-suppressed { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
++.v-tile.is-key .v-suppressed { color: rgba(255, 255, 255, 0.85); }
++
++/* --- grounds */
++.v-grounds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
++.v-ground {
++  border: 1px solid var(--ok-line);
++  background: var(--ok-soft);
++  border-radius: var(--radius-md);
++  padding: 16px;
++  display: grid;
++  gap: 6px;
++  align-content: start;
++}
++.v-ground header { display: flex; align-items: center; gap: 8px; color: var(--ok); }
++.v-ground h3 { font-size: 14px; margin: 0; color: var(--ink); }
++.v-ground p { margin: 0; font-size: 13px; color: var(--ink-2); }
++.v-ground-big { font-size: 26px !important; font-weight: 700; color: var(--ink) !important; font-variant-numeric: tabular-nums; }
++.v-ground-big span { font-size: 13px; font-weight: 500; color: var(--muted); }
++.v-ground-foot { padding-top: 8px; border-top: 1px solid var(--ok-line); display: flex; gap: 6px; align-items: start; }
++.v-ground-foot .icon { flex: none; width: 16px; height: 16px; margin-top: 2px; }
++.v-ground-foot.is-amber { color: var(--amber) !important; }
++.v-ground.is-locked { background: var(--surface-2); border-style: dashed; border-color: var(--line-strong); }
++.v-ground.is-locked header { color: var(--muted); }
++.v-ground.is-locked .v-ground-foot { border-top-color: var(--line); }
++.v-rule-line { margin: 14px 0 0; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
++.v-rule-line .icon { width: 14px; height: 14px; }
++.v-demo-flag { color: var(--amber); }
++
++/* --- worklist */
++.v-list { display: grid; }
++.v-row {
++  display: grid;
++  grid-template-columns: auto minmax(0, 1fr) auto auto;
++  gap: 14px;
++  align-items: center;
++  padding: 14px 0;
++  border-top: 1px solid var(--line);
++}
++.v-row:first-child { border-top: 0; }
++.v-avatar {
++  width: 38px; height: 38px; border-radius: 50%;
++  display: grid; place-items: center;
++  background: var(--primary-soft); color: var(--primary); font-weight: 700; font-size: 13px;
++}
++.v-row-main { display: grid; gap: 4px; min-width: 0; }
++.v-row-main h3 { margin: 0; font-size: 15px; }
++.v-row-main p { margin: 0; }
++.v-row-sub { font-weight: 400; color: var(--muted); font-size: 13px; margin-inline-start: 6px; }
++.v-evidence { display: flex; flex-wrap: wrap; gap: 6px; }
++.v-evidence .evidence-chip { font-size: 11px; }
++.v-row-figures { text-align: end; display: grid; }
++.v-row-figures b { font-size: 18px; color: var(--primary); font-variant-numeric: tabular-nums; }
++.v-row-figures span { font-size: 12px; color: var(--muted); }
++.v-row-action { justify-self: end; }
++
++.v-locked-list { display: flex; gap: 14px; align-items: start; background: var(--surface-2); }
++.v-locked-list > .icon { width: 22px; height: 22px; color: var(--muted); flex: none; margin-top: 2px; }
++.v-locked-list p { margin: 6px 0 0; color: var(--ink-2); font-size: 14px; }
++
++/* --- data boundary */
++.v-boundary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
++.v-boundary-grid > div {
++  border: 1px solid var(--line);
++  border-radius: var(--radius-md);
++  padding: 16px;
++}
++.v-boundary-grid h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
++.v-boundary-grid ul { margin: 8px 0 0; padding-inline-start: 18px; font-size: 13px; color: var(--ink-2); }
++.v-boundary-grid p { margin: 0; font-size: 13px; color: var(--ink-2); }
++.v-boundary-grid .is-model { background: var(--primary-soft); border-color: var(--primary-line); }
++.v-boundary-big { font-size: 28px !important; font-weight: 700; color: var(--ink) !important; margin-bottom: 4px !important; font-variant-numeric: tabular-nums; }
++.v-boundary-big span { font-size: 13px; font-weight: 500; color: var(--muted); }
++.v-deploy { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
++.v-deploy span {
++  font-size: 12px; color: var(--muted);
++  border: 1px solid var(--line); border-radius: var(--radius-sm);
++  padding: 10px 12px; display: grid; gap: 2px;
++}
++.v-deploy b { color: var(--ink); font-size: 13px; }
++.v-deploy .is-here { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
++
++.v-params { margin: 10px 0 0; padding-inline-start: 18px; font-size: 13px; color: var(--ink-2); display: grid; gap: 6px; }
++.v-params span { color: var(--muted); font-size: 12px; margin-inline-start: 6px; }
++.v-projection { margin: 14px 0 0; font-size: 13px; color: var(--ink-2); display: flex; gap: 6px; align-items: start; }
++.v-projection .icon { flex: none; width: 16px; height: 16px; margin-top: 2px; }
++
++/* --- letter */
++.v-letter { display: grid; gap: 12px; }
++.v-letter-text {
++  white-space: pre-wrap; font-family: var(--font); font-size: 15px; line-height: 1.7;
++  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-md);
++  padding: 18px 20px; margin: 0;
++}
++.v-letter-meta { margin: 0; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
++.v-letter-meta .icon { width: 14px; height: 14px; flex: none; }
++
++/* --- meetings */
++.v-recall {
++  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
++  padding: 20px 24px; display: grid; gap: 10px;
++}
++.v-recall label { font-weight: 700; font-size: 15px; }
++.v-recall-row { display: flex; gap: 8px; }
++.v-recall-row input {
++  flex: 1; min-width: 0; font: inherit; padding: 10px 14px;
++  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface);
++}
++.v-recall-row input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
++.v-recall-chips { display: flex; gap: 6px; flex-wrap: wrap; }
++.v-recall .chip-btn {
++  font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px;
++  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); cursor: pointer;
++}
++.v-recall .chip-btn:hover { border-color: var(--primary-line); color: var(--primary); }
++.v-recall-results { border-top: 1px solid var(--line); margin-top: 4px; }
++.v-recall-empty { margin: 0; font-size: 13px; color: var(--muted); }
++
++.v-alerts { border-color: var(--danger-line); background: linear-gradient(var(--danger-soft), var(--surface) 70%); }
++.v-alerts h2 { display: flex; gap: 8px; align-items: center; color: var(--danger); }
++.v-alert {
++  display: flex; gap: 16px; align-items: center; justify-content: space-between;
++  padding: 12px 0; border-top: 1px solid var(--danger-line); flex-wrap: wrap;
++}
++.v-alert:first-of-type { border-top: 0; }
++.v-assign { display: flex; gap: 6px; align-items: center; }
++.v-assign select {
++  font: inherit; font-size: 13px; padding: 7px 10px; max-width: 260px;
++  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface);
++}
++
++.v-meeting-title {
++  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
++  margin: 18px 0 4px; font-weight: 600;
++}
++.v-meeting-title .icon { width: 15px; height: 15px; }
++.v-meeting-title .text-link { margin-inline-start: auto; font-size: 12px; background: none; border: 0; cursor: pointer; }
++.v-decision {
++  display: flex; gap: 14px; align-items: start; justify-content: space-between;
++  padding: 12px 0; border-top: 1px solid var(--line);
++}
++.v-decision-main { min-width: 0; display: grid; gap: 4px; }
++.v-decision-text { margin: 0; font-size: 15px; }
++.v-decision-meta { margin: 0; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
++.v-decision-meta .icon { width: 13px; height: 13px; vertical-align: -2px; }
++.v-decision-meta .is-amber { color: var(--amber); }
++.v-decision-meta .is-danger { color: var(--danger); font-weight: 600; }
++.v-owner { color: var(--ink-2); font-weight: 600; }
++.v-owner small { font-weight: 400; color: var(--primary); }
++.v-owner.is-missing { color: var(--danger); }
++.v-source {
++  font: inherit; font-size: 12px; color: var(--primary); background: none; border: 0; padding: 0; cursor: pointer;
++  display: inline-flex; gap: 4px; align-items: center;
++}
++.v-source:hover { text-decoration: underline; }
++.v-decision-side { display: grid; gap: 6px; justify-items: end; flex: none; }
++.status-pill.tone-ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
++.status-pill.tone-danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-line); }
++.status-pill.tone-amber { background: var(--amber-soft); color: var(--amber); border-color: var(--amber-line); }
++.v-task { font-size: 12px; color: var(--primary); display: inline-flex; gap: 4px; align-items: center; }
++.v-task .icon { width: 13px; height: 13px; }
++
++.v-tasks-bar {
++  margin-top: 16px; padding: 14px 16px; border-radius: var(--radius-md);
++  background: var(--primary-soft); border: 1px solid var(--primary-line);
++  display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;
++}
++.v-tasks-bar p { margin: 0; font-size: 14px; color: var(--ink-2); }
++.v-tasks-note { margin: 16px 0 0; font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
++
++.v-minutes { margin: 12px 0 0; padding-inline-start: 28px; display: grid; gap: 2px; font-size: 14px; }
++.v-minutes li { padding: 6px 10px; border-radius: var(--radius-sm); }
++.v-minutes li::marker { color: var(--muted); font-size: 12px; }
++.v-minutes li.is-hit { background: var(--sand-soft); box-shadow: inset 3px 0 0 var(--sand-strong); }
++.v-confirm-list { margin: 10px 0; padding-inline-start: 18px; display: grid; gap: 6px; font-size: 14px; }
++
++.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
++
++@media (max-width: 900px) {
++  .v-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
++  .v-grounds, .v-boundary-grid, .v-deploy { grid-template-columns: 1fr; }
++  .v-row { grid-template-columns: auto minmax(0, 1fr); }
++  .v-row-figures, .v-row-action { grid-column: 2; justify-self: start; text-align: start; }
++  .v-card { padding: 18px 16px; }
++  .v-recall { padding: 18px 16px; }
++  .v-recall-row { flex-direction: column; }
++  .v-decision { flex-direction: column; }
++  .v-decision-side { justify-items: start; }
++}
++
++/* --- home: initiatives strip */
++.v-strip { display: grid; gap: 8px; margin: 4px 0 4px; }
++.v-strip > .eyebrow { margin: 0; }
++.v-strip-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
++.v-strip-card {
++  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center;
++  padding: 16px 18px; border-radius: var(--radius-md);
++  background: var(--surface); border: 1px solid var(--primary-line);
++  color: inherit; text-decoration: none; box-shadow: var(--shadow-sm);
++  transition: border-color 120ms ease, box-shadow 120ms ease;
++}
++.v-strip-card:hover { border-color: var(--primary); box-shadow: var(--shadow-md); }
++.v-strip-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
++.v-strip-icon {
++  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
++  background: var(--primary-soft); color: var(--primary);
++}
++.v-strip-card.is-alert { border-color: var(--danger-line); }
++.v-strip-card.is-alert .v-strip-icon { background: var(--danger-soft); color: var(--danger); }
++.v-strip-copy { display: grid; gap: 2px; min-width: 0; }
++.v-strip-label { font-size: 12px; color: var(--muted); font-weight: 600; }
++.v-strip-copy strong { font-size: 15px; }
++.v-strip-copy > span:last-child { font-size: 13px; color: var(--ink-2); }
++.v-strip-go { font-size: 13px; font-weight: 600; color: var(--primary); display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
++.v-strip-go .icon { width: 14px; height: 14px; }
++.v-col { font-size: 11px; color: var(--muted); margin-inline-start: 6px; }
++
++/* --- department picture: activities grouped per person */
++.resp-acts { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
++.resp-act {
++  font-size: 12px; padding: 2px 10px; border-radius: 999px;
++  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2);
++}
++
++@media (max-width: 900px) {
++  .v-strip-card { grid-template-columns: auto minmax(0, 1fr); }
++  .v-strip-go { grid-column: 2; }
++}
+diff --git a/src/web/value.js b/src/web/value.js
+new file mode 100644
+index 0000000..647594a
+--- /dev/null
++++ b/src/web/value.js
+@@ -0,0 +1,481 @@
++// Two pages that show the value in one look: proactive rights (who is eligible
++// and not receiving) and meetings to tasks (what was decided, by whom, and what
++// is stuck). They own their clicks; home.js only routes to them.
++
++import { esc, num, icon, ltr, mixed, shortDate, chip, emptyBox, toast, openSheet, setSheetBody, closeSheet, initials, navFor } from './ui.js';
++
++let ctx = { api: null, refresh: async () => {}, kind: 'clerk' };
++export const bind = (next) => {
++  ctx = { ...ctx, ...next };
++};
++
++const shekel = (n) => `${num(Math.round(Number(n) || 0))} ₪`;
++const cell = (n) => (n === null || n === undefined ? '<span class="v-suppressed" title="מספר קטן מ־5 מוסתר">פחות מ־5</span>' : num(n));
++
++// ---------------------------------------------------------------- home strip
++
++/** The initiatives on a person's home: what the two value pages want from them, if anything. */
++export async function homeStrip({ api, kind }) {
++  const tabs = navFor(kind);
++  const [rights, meetings] = await Promise.all([
++    tabs.includes('rights') ? api('/api/rights').catch(() => null) : null,
++    tabs.includes('meetings') ? api('/api/meetings').catch(() => null) : null,
++  ]);
++  const cards = [];
++  if (rights) {
++    const t = rights.totals;
++    const open = t.notReceiving === null ? null : t.notReceiving - t.outreachSent;
++    cards.push(`
++      <a class="v-strip-card" href="#/rights">
++        <span class="v-strip-icon">${icon('users')}</span>
++        <span class="v-strip-copy">
++          <span class="v-strip-label">מיצוי זכויות</span>
++          <strong>${shekel(t.unclaimedAnnual)} בשנה בהנחות ארנונה שלא מומשו</strong>
++          <span>${
++            rights.access.canSeeNames
++              ? open
++                ? `${num(open)} תושבים זכאים ממתינים לפנייה${kind === 'secretary' ? ' ממך' : ''}.`
++                : 'כל הזכאים קיבלו פנייה.'
++              : `${open === null ? 'משקי בית' : `${num(t.notReceiving)} משקי בית`} זכאים ולא מקבלים. השמות אצל מי שמטפל בבקשות הנחה.`
++          }</span>
++        </span>
++        <span class="v-strip-go">${rights.access.canSeeNames && open ? 'לרשימה' : 'לפרטים'} ${icon('arrowLeft')}</span>
++      </a>`);
++  }
++  if (meetings) {
++    const c = meetings.counts;
++    const mine = meetings.mine ?? [];
++    const next = mine.slice().sort((a, b) => String(a.due ?? '9').localeCompare(String(b.due ?? '9')))[0];
++    if (kind === 'head') {
++      cards.push(`
++        <a class="v-strip-card ${c.overdue || c.noOwner ? 'is-alert' : ''}" href="#/meetings">
++          <span class="v-strip-icon">${icon('flow')}</span>
++          <span class="v-strip-copy">
++            <span class="v-strip-label">מהישיבה למשימות</span>
++            <strong>${num(c.open)} החלטות הנהלה פתוחות</strong>
++            <span>${[c.noOwner ? `${num(c.noOwner)} בלי אחראי` : '', c.overdue ? `${num(c.overdue)} באיחור` : '', c.readyForTasks ? `${num(c.readyForTasks)} מוכנות להפוך למשימות` : ''].filter(Boolean).join(' · ') || 'הכל משויך ובזמן.'}</span>
++          </span>
++          <span class="v-strip-go">לטיפול ${icon('arrowLeft')}</span>
++        </a>`);
++    } else if (next) {
++      cards.push(`
++        <a class="v-strip-card ${next.status === 'overdue' || next.status === 'due_soon' ? 'is-alert' : ''}" href="#/meetings">
++          <span class="v-strip-icon">${icon('flow')}</span>
++          <span class="v-strip-copy">
++            <span class="v-strip-label">${mine.length === 1 ? 'משימה מישיבת ההנהלה' : `${num(mine.length)} משימות מישיבות ההנהלה`}</span>
++            <strong>${mixed(next.text)}</strong>
++            <span>${next.due ? `עד ${esc(shortDate(next.due))}` : 'ללא מועד'} · מישיבת ${esc(shortDate(next.meetingDate))}</span>
++          </span>
++          <span class="v-strip-go">לפרטים ${icon('arrowLeft')}</span>
++        </a>`);
++    }
++  }
++  if (!cards.length) return '';
++  return `
++    <section class="v-strip" aria-label="יוזמות">
++      <p class="eyebrow">יוזמות · המערכת מצאה</p>
++      <div class="v-strip-cards">${cards.join('')}</div>
++    </section>`;
++}
++
++// ---------------------------------------------------------------- rights
++
++export async function rightsPage() {
++  const data = await ctx.api('/api/rights');
++  const t = data.totals;
++  const share = t.households ? t.notReceiving / t.households : 0;
++  const perHousehold = t.notReceiving ? t.unclaimedAnnual / t.households : 0;
++  return `
++    <div class="view value-view">
++      <header class="page-head">
++        <div>
++          <p class="eyebrow">מיצוי זכויות · יוזמה של העירייה</p>
++          <h1>מי זכאי להנחה בארנונה ולא מקבל אותה</h1>
++          <p class="page-sub">המערכת מצליבה את מרשם התושבים עם נתוני גביית הארנונה לפי כלל מוצהר, ומציגה את מי שזכאי ועדיין לא מימש את זכותו. במקום לחכות שהתושב יבקש, העירייה פונה אליו.</p>
++        </div>
++        <div class="head-figure"><b>${shekel(t.unclaimedAnnual)}</b><span>בשנה, בהנחות שלא מומשו</span></div>
++      </header>
++
++      <section class="v-tiles" aria-label="תמונת מצב">
++        <div class="v-tile"><span>משקי בית שנבדקו</span><b>${num(t.households)}</b></div>
++        <div class="v-tile"><span>עומדים בתנאי הזכאות</span><b>${cell(t.eligible)}</b></div>
++        <div class="v-tile"><span>כבר מקבלים הנחה</span><b>${cell(t.receiving)}</b></div>
++        <div class="v-tile is-key"><span>זכאים ולא מקבלים</span><b>${cell(t.notReceiving)}</b><small>${t.outreachSent ? `${num(t.outreachSent)} כבר קיבלו פנייה מהעירייה` : 'עדיין לא נשלחה פנייה'}</small></div>
++      </section>
++
++      <section class="v-card">
++        <div class="section-head"><h2>לפי עילת זכאות</h2><span class="section-count">${esc(data.rule.name_he)} · גרסה ${num(data.rule.version)}</span></div>
++        <div class="v-grounds">
++          ${data.grounds.map((g) => groundCard(g, data)).join('')}
++        </div>
++        <p class="v-rule-line">${icon('doc')} ${esc(data.rule.citation)} · בעל הכלל: ${esc(data.rule.owner)} · <span class="v-demo-flag">${esc(data.rule.status_he)}</span></p>
++      </section>
++
++      ${data.access.canSeeNames ? worklist(data) : aggregateNotice(data)}
++
++      ${boundaryPanel(data)}
++
++      <section class="v-card v-quiet">
++        <h2>המספרים שעליהם החישוב נשען</h2>
++        <ul class="v-params">
++          <li><b>${shekel(data.params.tariffPerSqm.value)} למ״ר בשנה</b> — ${esc(data.params.tariffPerSqm.reason)} <span>בעלים: ${esc(data.params.tariffPerSqm.owner)}</span></li>
++          ${data.rule.grounds.filter((g) => g.connected).map((g) => `<li><b>${Math.round(g.rate * 100)}%</b> — שיעור ההנחה בעילה "${esc(g.label_he)}". <span>שיעור להדגמה</span></li>`).join('')}
++          <li><b>פחות מ־${num(data.suppression.minCellSize)}</b> — מספר קטן מזה מוסתר ממי שאינו מטפל בבקשות הנחה. <span>בעלים: ${esc(data.suppression.owner)}</span></li>
++        </ul>
++        <p class="v-projection">${icon('info')} בנתוני ההדגמה: ${num(t.notReceiving)} מתוך ${num(t.households)} משקי בית (${Math.round(share * 100)}%). באותו שיעור, בעיר של 10,000 משקי בית היו כ־${num(Math.round(share * 10000))} משקי בית וכ־${shekel(Math.round(perHousehold * 10000))} בשנה. זו הכפלה פשוטה של המדגם, לא תחזית.</p>
++      </section>
++    </div>`;
++}
++
++function groundCard(g, data) {
++  if (!g.connected) {
++    return `
++      <article class="v-ground is-locked">
++        <header>${icon('lock')}<h3>${esc(g.labelHe)}</h3></header>
++        <p class="v-ground-big">${num(g.unchecked)} <span>משקי בית שלא ניתן לבדוק</span></p>
++        <p>אין לעירייה מקור מחובר על שירות מילואים. בכל אחד ממשקי הבית האלה גר תושב בין ${num(data.params.reservistAgeRange.value[0])} ל־${num(data.params.reservistAgeRange.value[1])}, ולכן אי אפשר לשלול זכאות.</p>
++        <p class="v-ground-foot">${icon('key')} חיבור מקור של אישורי שירות מילואים ישלים את הבדיקה. מאיזה גוף יגיע המידע עדיין לא סוכם עם העירייה.</p>
++      </article>`;
++  }
++  return `
++    <article class="v-ground">
++      <header>${icon('check')}<h3>${esc(g.labelHe)}</h3></header>
++      <p class="v-ground-big">${cell(g.notReceiving)} <span>זכאים ולא מקבלים</span></p>
++      <p>${cell(g.eligible)} עומדים בתנאי · ${shekel(g.unclaimedAnnual)} בשנה לא קוזזו מהחיוב</p>
++      ${g.unchecked ? `<p class="v-ground-foot is-amber">${icon('question')} ב־${num(g.unchecked)} משקי בית עם אזרח ותיק אי אפשר לבדוק: חסר נתון ההכנסה של משק הבית.</p>` : `<p class="v-ground-foot">${icon('database')} ${esc(g.sourceHe)}</p>`}
++    </article>`;
++}
++
++function worklist(data) {
++  if (!data.worklist.length) return `<section class="v-card">${emptyBox('check', 'אין משקי בית שממתינים לפנייה', 'כל מי שזכאי כבר מקבל את ההנחה או קיבל פנייה מהעירייה.')}</section>`;
++  return `
++    <section class="v-card">
++      <div class="section-head">
++        <h2>תושבים שכדאי לפנות אליהם</h2>
++        <span class="section-count">${icon('eye')} ${esc(data.access.whyHe)}</span>
++      </div>
++      <div class="v-list" role="list">
++        ${data.worklist.map((h) => worklistRow(h)).join('')}
++      </div>
++    </section>`;
++}
++
++function worklistRow(h) {
++  const best = h.qualifiers.find((q) => q.ground === h.bestGround) ?? h.qualifiers[0];
++  const sent = h.outreach;
++  return `
++    <article class="v-row" role="listitem">
++      <div class="v-avatar" aria-hidden="true">${esc(initials(best.name))}</div>
++      <div class="v-row-main">
++        <h3>${esc(best.name)} <span class="v-row-sub">${esc(h.address)}</span></h3>
++        <p>${chip(best.groundHe, { tone: 'ok' })} ${h.qualifiers.length > 1 ? `<span class="v-row-sub">ועוד ${num(h.qualifiers.length - 1)} במשק הבית</span>` : ''}</p>
++        <p class="v-evidence">${best.evidence.map((e) => `<span class="evidence-chip" title="${esc(`${e.table}.${e.column}`)}">${esc(e.sourceHe)} · ${ltr(e.row)} · ${esc(e.columnHe)}: ${/^\d{4}-\d{2}-\d{2}$/.test(e.value) ? esc(shortDate(e.value)) : esc(e.value)}</span>`).join('')}<span class="evidence-chip">גביית ארנונה · לא רשומה הנחה</span></p>
++      </div>
++      <div class="v-row-figures">
++        <b>${shekel(h.unclaimedAnnual)}</b><span>בשנה, מתוך חיוב של ${shekel(h.annualArnona)}</span>
++      </div>
++      <div class="v-row-action">
++        ${
++          sent
++            ? `<span class="status-pill status-on">${icon('check')} פנייה נשלחה · ${esc(sent.by.split(' (')[0])} · ${esc(shortDate(sent.at))}</span>`
++            : `<button class="btn btn-small" type="button" data-v-letter="${esc(h.householdId)}">${icon('mail')} הכנת פנייה</button>`
++        }
++      </div>
++    </article>`;
++}
++
++function aggregateNotice(data) {
++  return `
++    <section class="v-card v-locked-list">
++      ${icon('lock')}
++      <div>
++        <h2>השמות והכתובות לא מוצגים לך</h2>
++        <p>${esc(data.access.whyHe)} כאן מוצגים מספרים בלבד, ומספר קטן מ־${num(data.suppression.minCellSize)} מוסתר כדי שלא ניתן יהיה לזהות משק בית.</p>
++      </div>
++    </section>`;
++}
++
++function boundaryPanel(data) {
++  const b = data.boundary;
++  return `
++    <section class="v-card v-boundary" aria-labelledby="v-boundary-title">
++      <div class="section-head"><h2 id="v-boundary-title">גבול המידע: מה ראה מודל ה־AI</h2><span class="section-count">${icon('shield')} נבדק בכל חישוב</span></div>
++      <div class="v-boundary-grid">
++        <div>
++          <h3>מנוע הכללים (בתוך המערכת)</h3>
++          <p class="v-boundary-big">${num(b.rowsProcessed)} <span>משקי בית נבדקו</span></p>
++          <ul>${b.engineRead.map((c) => `<li>${esc(c.he)} <span class="v-col">${ltr(c.code)}</span></li>`).join('')}</ul>
++        </div>
++        <div class="is-model">
++          <h3>מודל ה־AI</h3>
++          <p class="v-boundary-big">${num(b.rowsSentToModel)} <span>רשומות תושבים נשלחו</span></p>
++          <p>החישוב מפעיל כלל מוצהר על שדות קבועים, והמכתב נבנה מתבנית קבועה, כך שהמודל לא היה מעורב כאן. כשמשתמשים בו כדי להבין שאלה בשפה חופשית, הוא רואה את השאלה, את שמות השדות ואת הכלל, ואף פעם לא את הנתונים עצמם.</p>
++        </div>
++      </div>
++      <div class="v-deploy">
++        <span><b>בענן של העירייה</b> הנתונים והמודל בתוך סביבת הענן של העירייה</span>
++        <span class="is-here"><b>מפוצל</b> המנוע רץ ליד הנתונים, והמודל רואה רק את מבנה הנתונים ואת הכלל</span>
++        <span><b>מקומי לחלוטין</b> גם המודל רץ על שרתי העירייה, בלי חיבור לאינטרנט</span>
++      </div>
++    </section>`;
++}
++
++async function openLetter(householdId) {
++  openSheet({ title: 'פנייה יזומה לתושב', eyebrow: 'מיצוי זכויות', body: '<div class="sheet-loading">המכתב בהכנה…</div>', wide: true });
++  try {
++    const data = await ctx.api(`/api/rights/letter?household=${encodeURIComponent(householdId)}`);
++    setSheetBody(
++      `
++      <div class="v-letter">
++        <p class="v-letter-meta">${icon('info')} המכתב נבנה מתבנית קבועה ומהשדות שבמסך. אף רשומה לא נשלחה למודל.</p>
++        <pre class="v-letter-text">${esc(data.letter.text)}</pre>
++        <p class="v-letter-meta">${icon('shield')} השליחה נרשמת כהחלטה על שמך. מערכת הגבייה לא משתנה עד שהזכאות תיבדק סופית.</p>
++      </div>`,
++      `<button class="btn" type="button" data-v-send="${esc(householdId)}">${icon('check')} אישור ושליחה</button><button class="btn btn-quiet" type="button" data-close-sheet>לא עכשיו</button>`,
++    );
++  } catch (err) {
++    setSheetBody(`<p>${esc(err.message ?? err)}</p>`);
++  }
++}
++
++async function sendLetter(button) {
++  button.disabled = true;
++  try {
++    await ctx.api('/api/rights/outreach', {
++      method: 'POST',
++      headers: { 'content-type': 'application/json' },
++      body: JSON.stringify({ household: button.dataset.vSend }),
++    });
++    closeSheet();
++    toast('הפנייה נשלחה ונרשמה כהחלטה על שמך.');
++    await ctx.refresh();
++  } catch (err) {
++    button.disabled = false;
++    toast(String(err.message ?? err), 'error');
++  }
++}
++
++// ---------------------------------------------------------------- meetings
++
++const STATUS = {
++  done: ['בוצע', 'ok'],
++  overdue: ['באיחור', 'danger'],
++  due_soon: ['בשבוע הקרוב', 'amber'],
++  open: ['פתוח', ''],
++};
++
++let lastQuestion = '';
++
++export async function meetingsPage() {
++  const data = await ctx.api(`/api/meetings${lastQuestion ? `?q=${encodeURIComponent(lastQuestion)}` : ''}`);
++  const c = data.counts;
++  const canAct = ctx.kind === 'head';
++  const recalled = data.recalled.map((id) => data.decisions.find((d) => d.id === id)).filter(Boolean);
++  return `
++    <div class="view value-view">
++      <header class="page-head">
++        <div>
++          <p class="eyebrow">זיכרון ארגוני · מהישיבה למשימות</p>
++          <h1>מה הוחלט, מי אחראי, ומה נתקע</h1>
++          <p class="page-sub">המערכת קוראת את סיכומי ישיבות ההנהלה, מזהה החלטות, אחראים ומועדים, ובודקת מול הישיבות הבאות מה בוצע. משימות נוצרות רק כשאדם מאשר.</p>
++        </div>
++        <div class="head-figure"><b>${num(c.open)}</b><span>החלטות פתוחות</span></div>
++      </header>
++
++      <form class="v-recall" id="v-recall-form" role="search">
++        <label for="v-recall-input">מה כבר הוחלט על…</label>
++        <div class="v-recall-row">
++          <input id="v-recall-input" name="q" type="search" value="${esc(lastQuestion)}" placeholder="למשל: שיבוץ ביקורות" autocomplete="off" />
++          <button class="btn" type="submit">${icon('search')} חיפוש</button>
++        </div>
++        <div class="v-recall-chips">${['שיבוץ ביקורות', 'הנחות לתושבים', 'קריאות מזיקים'].map((q) => `<button type="button" class="chip-btn" data-v-recall="${esc(q)}">${esc(q)}</button>`).join('')}</div>
++        ${
++          lastQuestion
++            ? recalled.length
++              ? `<div class="v-recall-results">${recalled.map((d) => decisionRow(d, data, { compact: true })).join('')}</div>`
++              : `<p class="v-recall-empty">לא מצאנו החלטה בנושא הזה ב־${num(data.meetings.length)} סיכומי הישיבות.</p>`
++            : ''
++        }
++      </form>
++
++      ${
++        data.alerts.length
++          ? `<section class="v-card v-alerts">
++              <div class="section-head"><h2>${icon('alert')} דורש תשומת לב</h2><span class="section-count">זוהה אוטומטית</span></div>
++              ${data.alerts.map((d) => alertRow(d, data, canAct)).join('')}
++            </section>`
++          : ''
++      }
++
++      ${
++        data.mine.length
++          ? `<section class="v-card">
++              <div class="section-head"><h2>המשימות שלי מהישיבות</h2><span class="section-count">${num(data.mine.length)}</span></div>
++              ${data.mine.map((d) => decisionRow(d, data)).join('')}
++            </section>`
++          : ''
++      }
++
++      <section class="v-card">
++        <div class="section-head">
++          <h2>כל ההחלטות</h2>
++          <span class="section-count">${num(c.total)} החלטות · ${num(c.done)} בוצעו · ${num(c.overdue)} באיחור · ${num(c.noOwner)} ללא אחראי</span>
++        </div>
++        ${data.meetings
++          .slice()
++          .reverse()
++          .map(
++            (m) => `
++          <h3 class="v-meeting-title">${icon('doc')} ${esc(m.title)} · ${esc(shortDate(m.date))} <button type="button" class="text-link" data-v-minutes="${esc(m.id)}">לסיכום המלא</button></h3>
++          ${data.decisions.filter((d) => d.meetingId === m.id).map((d) => decisionRow(d, data)).join('')}`,
++          )
++          .join('')}
++        ${
++          canAct
++            ? `<div class="v-tasks-bar">
++                <p>${c.readyForTasks ? `אפשר להפוך ${num(c.readyForTasks)} החלטות פתוחות שיש להן אחראי למשימות, עם תזכורת שלושה ימים לפני המועד.` : 'כל ההחלטות שיש להן אחראי כבר הפכו למשימות.'}${c.noOwner ? ` ${num(c.noOwner)} החלטות עדיין ממתינות לאחראי.` : ''}</p>
++                <button class="btn" type="button" data-v-tasks ${c.readyForTasks ? '' : 'disabled'}>${icon('check')} יצירת משימות ותזכורות</button>
++              </div>`
++            : `<p class="v-tasks-note">${icon('info')} מנהלת המחלקה יוצרת את המשימות, וכל אחראי רואה כאן את המשימות שלו.</p>`
++        }
++      </section>
++    </div>`;
++}
++
++function decisionRow(d, data, { compact = false } = {}) {
++  const [label, tone] = STATUS[d.status] ?? STATUS.open;
++  const owner = d.ownerName
++    ? `<span class="v-owner">${esc(d.ownerName)}${d.assignedLater ? ' <small>נקבע עכשיו</small>' : ''}</span>`
++    : `<span class="v-owner is-missing">${icon('alert')} ללא אחראי</span>`;
++  return `
++    <article class="v-decision">
++      <div class="v-decision-main">
++        <p class="v-decision-text">${mixed(d.text)}</p>
++        <p class="v-decision-meta">
++          ${owner}
++          ${d.due ? `<span>${icon('clock')} עד ${esc(shortDate(d.due))}</span>` : `<span class="is-amber">${icon('clock')} ללא מועד</span>`}
++          ${compact ? `<span>${esc(shortDate(d.meetingDate))} · ${esc(d.topic)}</span>` : ''}
++          <button type="button" class="v-source" data-v-minutes="${esc(d.meetingId)}" data-v-line="${num(d.line)}">${icon('doc')} שורה ${num(d.line)}</button>
++          ${d.doneLine ? `<button type="button" class="v-source" data-v-minutes="${esc(d.doneLine.meetingId)}" data-v-line="${num(d.doneLine.line)}">${icon('check')} בוצע ${esc(shortDate(d.doneAt))}</button>` : ''}
++          ${d.linksTo === 'rights' ? `<a class="text-link" href="#/rights">לרשימת הזכאים ${icon('arrowLeft')}</a>` : ''}
++        </p>
++      </div>
++      <div class="v-decision-side">
++        <span class="status-pill tone-${tone}">${esc(label)}</span>
++        ${d.task ? `<span class="v-task">${icon('bell')} משימה · תזכורת ${esc(shortDate(d.task.remindOn ?? d.task.due))}</span>` : ''}
++      </div>
++    </article>`;
++}
++
++function alertRow(d, data, canAct) {
++  const days = d.due ? Math.round((Date.parse(data.asOf) - Date.parse(d.due)) / 86_400_000) : 0;
++  const why = [
++    d.flags.includes('no_owner') ? 'אין אחראי' : '',
++    d.status === 'overdue' ? `המועד עבר לפני ${num(days)} ימים` : '',
++  ]
++    .filter(Boolean)
++    .join(' · ');
++  return `
++    <article class="v-alert">
++      <div>
++        <p class="v-decision-text">${mixed(d.text)}</p>
++        <p class="v-decision-meta"><span class="is-danger">${esc(why)}</span><span>מישיבת ${esc(shortDate(d.meetingDate))}</span>
++          <button type="button" class="v-source" data-v-minutes="${esc(d.meetingId)}" data-v-line="${num(d.line)}">${icon('doc')} שורה ${num(d.line)}</button></p>
++      </div>
++      ${
++        canAct && d.flags.includes('no_owner')
++          ? `<form class="v-assign" data-v-assign="${esc(d.id)}">
++              <label class="sr-only" for="v-owner-${esc(d.id)}">אחראי</label>
++              <select id="v-owner-${esc(d.id)}" name="owner" required>
++                <option value="">בחרו אחראי…</option>
++                ${data.people.map((p) => `<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.title)}</option>`).join('')}
++              </select>
++              <button class="btn btn-small" type="submit">קביעת אחראי</button>
++            </form>`
++          : ''
++      }
++    </article>`;
++}
++
++async function openMinutes(id, line) {
++  openSheet({ title: 'סיכום ישיבה', eyebrow: 'המקור', body: '<div class="sheet-loading">טוען…</div>', wide: true });
++  const data = await ctx.api(`/api/meetings/minutes?id=${encodeURIComponent(id)}`);
++  const m = data.minutes;
++  setSheetBody(`
++    <p class="v-letter-meta">${icon('doc')} ${esc(m.path)} · ${esc(shortDate(m.date))}</p>
++    <ol class="v-minutes">
++      ${m.lines.map((l, i) => `<li class="${i + 1 === line ? 'is-hit' : ''}" ${i + 1 === line ? 'id="v-hit"' : ''}>${mixed(l)}</li>`).join('')}
++    </ol>`);
++  document.getElementById('v-hit')?.scrollIntoView({ block: 'center' });
++}
++
++async function confirmTasks() {
++  const data = await ctx.api('/api/meetings');
++  const ready = data.decisions.filter((d) => d.status !== 'done' && d.ownerId && !d.task);
++  openSheet({
++    title: 'יצירת משימות ותזכורות',
++    eyebrow: 'מהישיבה למשימות',
++    wide: true,
++    body: `
++      <p>ייווצרו ${num(ready.length)} משימות. כל אחראי יראה את המשימה שלו, ותזכורת תישלח שלושה ימים לפני המועד.</p>
++      <ul class="v-confirm-list">${ready.map((d) => `<li><b>${esc(d.ownerName)}</b> · ${mixed(d.text)}${d.due ? ` · עד ${esc(shortDate(d.due))}` : ''}</li>`).join('')}</ul>
++      <p class="v-letter-meta">${icon('shield')} היצירה נרשמת כהחלטה על שמך. בהדגמה הזו שום דבר לא נכתב ליומן או לתיבת הדואר של העובדים.</p>`,
++    footer: `<button class="btn" type="button" data-v-tasks-confirm>${icon('check')} יצירה</button><button class="btn btn-quiet" type="button" data-close-sheet>ביטול</button>`,
++  });
++}
++
++async function post(path, body) {
++  return ctx.api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
++}
++
++// ---------------------------------------------------------------- events
++
++document.addEventListener('click', async (event) => {
++  const letter = event.target.closest('[data-v-letter]');
++  if (letter) return openLetter(letter.dataset.vLetter);
++  const send = event.target.closest('[data-v-send]');
++  if (send) return sendLetter(send);
++  const minutes = event.target.closest('[data-v-minutes]');
++  if (minutes) return openMinutes(minutes.dataset.vMinutes, Number(minutes.dataset.vLine || 0));
++  const recall = event.target.closest('[data-v-recall]');
++  if (recall) {
++    lastQuestion = recall.dataset.vRecall;
++    return ctx.refresh();
++  }
++  if (event.target.closest('[data-v-tasks]')) return confirmTasks();
++  const go = event.target.closest('[data-v-tasks-confirm]');
++  if (go) {
++    go.disabled = true;
++    try {
++      const result = await post('/api/meetings/tasks');
++      closeSheet();
++      toast(`נוצרו ${num(result.created.length)} משימות. ההחלטה נרשמה על שמך.`);
++      await ctx.refresh();
++    } catch (err) {
++      go.disabled = false;
++      toast(String(err.message ?? err), 'error');
++    }
++  }
++});
++
++document.addEventListener('submit', async (event) => {
++  const recallForm = event.target.closest('#v-recall-form');
++  if (recallForm) {
++    event.preventDefault();
++    lastQuestion = String(new FormData(recallForm).get('q') ?? '').trim();
++    return ctx.refresh();
++  }
++  const assign = event.target.closest('[data-v-assign]');
++  if (assign) {
++    event.preventDefault();
++    const owner = String(new FormData(assign).get('owner') ?? '');
++    if (!owner) return;
++    try {
++      await post('/api/meetings/assign', { decision: assign.dataset.vAssign, owner });
++      toast('האחראי נקבע. עכשיו אפשר להפוך את ההחלטה למשימה.');
++      await ctx.refresh();
++    } catch (err) {
++      toast(String(err.message ?? err), 'error');
++    }
++  }
++});
+diff --git a/src/web/views.js b/src/web/views.js
+index 9f85749..9a1bb88 100644
+--- a/src/web/views.js
++++ b/src/web/views.js
+@@ -45,7 +45,7 @@ const kindIcon = (kind) =>
+ 
+ /* ------------------------------------------------------------------ landing */
+ 
+-export function landingView({ viewers, answer, overview, approvals }) {
++export function landingView({ viewers, answer, overview, approvals, rights = null, meetings = null }) {
+   const counts = answer?.counts ?? {};
+   const total = Number(counts.total ?? 0) || 1;
+   const org = overview?.org ?? {};
+@@ -115,16 +115,17 @@ export function landingView({ viewers, answer, overview, approvals }) {
+             </div>
+           </div>
+           <p class="eyebrow">גרסת הדגמה · נתונים סינתטיים</p>
+-          <h1>העיר יודעת.<br><span>עכשיו אפשר לשאול.</span></h1>
++          <h1>העירייה יודעת.<br><span>עכשיו היא יכולה לפעול.</span></h1>
+           <p class="landing-lead">
+-            כל מה שהמחלקה עושה נמצא במערכות שלה. המערכת מחברת אותן, לומדת מהן,
+-            ועונה על שאלות עם הכלל והמקור שמאחורי כל מספר — כולל מה שעדיין לא ידוע.
++            המערכת מתחברת למערכות הקיימות, לומדת איך המחלקה עובדת בפועל, ומציגה את מה שדורש פעולה:
++            תושבים שזכאים להטבה ולא מקבלים אותה, החלטות שנתקעו, ושלבים שבהם תיקים מחכים.
++            כל מספר מגיע עם הכלל והמקור, וכל פעולה מחכה לאישור של אדם.
+           </p>
+           ${preview}
+           <ul class="landing-findings" aria-label="מה המערכת מצאה">
+-            <li><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקוק</span><em>${num(bottleneckShare)}% מזמן התיק</em></li>
+-            <li><b>${num(counts.unknown)}</b><span>משקי בית בלי נתון הכנסה</span><em>לא ניתן להכריע, לא אפס</em></li>
+-            <li><b>${num(openResp)}</b><span>אחריויות שזוהו מהעבודה</span><em>${num(confirmedResp)} אושרו עדיין</em></li>
++            ${rights ? `<li><b>${num(rights.totals.unclaimedAnnual)} ₪</b><span>בשנה בהנחות ארנונה שלא מומשו</span><em>${rights.totals.notReceiving === null ? 'משקי בית זכאים שלא מקבלים' : `${num(rights.totals.notReceiving)} משקי בית זכאים ולא מקבלים`}</em></li>` : ''}
++            <li><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקבוק</span><em>${num(bottleneckShare)}% מזמן הטיפול בתיק</em></li>
++            ${meetings ? `<li><b>${num(meetings.counts.noOwner)}</b><span>החלטות הנהלה בלי אחראי</span><em>${num(meetings.counts.overdue)} באיחור · ${num(meetings.counts.open)} פתוחות</em></li>` : `<li><b>${num(openResp)}</b><span>אחריויות שזוהו מהעבודה</span><em>${num(confirmedResp)} אושרו עדיין</em></li>`}
+           </ul>
+         </section>
+ 
+@@ -143,7 +144,7 @@ export function landingView({ viewers, answer, overview, approvals }) {
+       </div>
+       <footer class="landing-foot">
+         <span>${icon('lock')} קריאה בלבד מהמערכות · הרשאות המקור נשמרות</span>
+-        <span>עודכן ${shortDate(overview?.organization?.capturedAt)} · POC</span>
++        <span>נכון ל־${shortDate(overview?.organization?.capturedAt)} · גרסת הדגמה</span>
+       </footer>
+     </div>`;
+ }
+@@ -169,7 +170,7 @@ export function roleSheetBody(viewers) {
+ 
+ /* --------------------------------------------------------------------- home */
+ 
+-export function homeView({ viewer, kind, overview, answer, org, process, approvals, interviews, connectors, gap }) {
++export function homeView({ viewer, kind, overview, answer, org, process, approvals, interviews, connectors, gap, valueStrip = '' }) {
+   const person = parsePerson(viewer?.label);
+   const pending = approvals?.pending?.length ?? 0;
+   const openInterviews = (interviews?.interviews ?? []).filter((i) => i.status === 'open');
+@@ -194,11 +195,12 @@ export function homeView({ viewer, kind, overview, answer, org, process, approva
+           <h1>שלום, ${esc(person.name.split(' ')[0])}</h1>
+           <p class="page-sub">${esc(headline)}</p>
+         </div>
+-        <span class="head-status">${icon('check')} מחובר/ת · ${esc(person.title)}</span>
+       </header>
+ 
+       ${roleHomeBlock({ kind, overview, answer, org, process, approvals, openInterviews, mine, viewer })}
+ 
++      ${valueStrip}
++
+       <div class="home-columns">
+         <section class="home-main" aria-labelledby="focus-title">
+           ${focusList(focus, person.name, navFor(kind).includes('approvals'), pending)}
+@@ -217,6 +219,9 @@ export function homeView({ viewer, kind, overview, answer, org, process, approva
+ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openInterviews, mine, viewer }) {
+   const cases = overview?.cases;
+   const myWork = cases?.myWork;
++  // The last activity of every measured variant: a case whose latest event is one of
++  // these has finished its steps, so it is waiting to be closed, not waiting on a person.
++  const finals = new Set((process?.model?.variants ?? []).map((variant) => (variant.sequence ?? []).at(-1)).filter(Boolean));
+   if (kind === 'head') {
+     const open = Number(cases?.open ?? 0);
+     const overdue = Number(cases?.overdue ?? 0);
+@@ -227,30 +232,34 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
+     const gapCount = Number(answer?.counts?.unknown ?? 0);
+     const openResp = Number(overview?.org?.openResponsibilities ?? 0);
+     const confirmedResp = Number(overview?.org?.confirmedResponsibilities ?? 0);
++    const finalCases = (cases?.openCases ?? []).filter((entry) => finals.has(entry.stage));
++    const finalOpen = finalCases.length;
++    const oldestFinal = Math.max(0, ...finalCases.map((entry) => Number(entry.ageDays) || 0));
+     return `
+       <section class="role-block role-head">
+         <header class="role-block-head">
+           <div>
+             <p class="eyebrow">המחלקה במבט אחד</p>
+-            <h2>${num(open)} תיקים פתוחים · ${num(overdue)} חריגים מול SLA</h2>
+-            <p>הזמן נמדד מיומן התיקים. ${num(median)} יום חציון לתיק, ${num(bottleneckDays)} ימים בצוואר הבקוק.</p>
++            <h2>${num(open)} תיקים פתוחים · ${num(overdue)} חורגים מהיעד</h2>
++            <p>הזמן נמדד מיומן התיקים: משך חציוני של ${num(median)} ימים לתיק, ומתוכם ${num(bottleneckDays)} ימים בצוואר הבקבוק.</p>
+           </div>
+           <button class="btn btn-quiet btn-small" type="button" data-open-palette>${icon('search')} שאלו שאלה</button>
+         </header>
+         <div class="role-metrics">
+           <div><b>${num(open)}</b><span>תיקים פתוחים</span></div>
+-          <div class="is-warn"><b>${num(overdue)}</b><span>חריגים מול SLA ${num(cases?.slaDays ?? 30)} יום</span></div>
+-          <div><b>${num(median)}</b><span>יום חציון לתיק</span></div>
+-          <div><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקוק</span></div>
++          <div class="is-warn"><b>${num(overdue)}</b><span>חורגים מיעד של ${num(cases?.slaDays ?? 30)} ימים</span></div>
++          <div><b>${num(median)}</b><span>ימים, משך חציוני לתיק</span></div>
++          <div><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקבוק</span></div>
+         </div>
+         <div class="role-lower">
+           <div class="stage-block">
+             <h3>תיקים פתוחים לפי שלב</h3>
+-            ${(cases?.stages ?? []).map((stage) => `<div class="stage-row"><span>${esc(stage.label)}</span><div class="bar"><i style="width:${Math.round((Number(stage.count) / Math.max(1, open)) * 100)}%"></i></div><b>${num(stage.count)}</b></div>`).join('') || '<p class="muted">אין תיקים פתוחים.</p>'}
++            ${(cases?.stages ?? []).map((stage) => `<div class="stage-row"><span>${finals.has(stage.activity) ? `${esc(stage.label)} · השלב האחרון, התיק לא נסגר` : esc(stage.label)}</span><div class="bar"><i style="width:${Math.round((Number(stage.count) / Math.max(1, open)) * 100)}%"></i></div><b>${num(stage.count)}</b></div>`).join('') || '<p class="muted">אין תיקים פתוחים.</p>'}
+           </div>
+           <div class="findings-block">
+             <h3>מה גילינו</h3>
+-            <a class="finding-row" href="#/insights"><span class="finding-num">${num(bottleneckDays)}</span><div><strong>${esc(bottleneck?.labels ?? '')} הוא צוואר הבקוק</strong><p>${num(share)}% מזמן התיק. ${num(bottleneck?.occurrences ?? 0)} תיקים נמדדו.</p></div></a>
++            ${finalOpen ? `<div class="finding-row"><span class="finding-num">${num(finalOpen)}</span><div><strong>תיקים שסיימו את כל השלבים ולא נסגרו</strong><p>השלב האחרון ביומן בוצע, אבל התיק עדיין פתוח: ${num(oldestFinal)} ימים בתיק הוותיק ביותר.</p></div></div>` : ''}
++            <a class="finding-row" href="#/insights"><span class="finding-num">${num(bottleneckDays)}</span><div><strong>${esc(bottleneck?.labels ?? '')} הוא צוואר הבקבוק</strong><p>${num(share)}% מזמן התיק. ${num(bottleneck?.occurrences ?? 0)} תיקים נמדדו.</p></div></a>
+             <div class="finding-row"><span class="finding-num">${num(gapCount)}</span><div><strong>משקי בית בלי נתון הכנסה</strong><p>לא ניתן להכריע בזכאות. השאלה נשלחת מהרכזת אל משה טל, ובעל הכלל מכריע.</p></div></div>
+             <a class="finding-row" href="#/insights"><span class="finding-num">${num(openResp)}</span><div><strong>אחריויות שזוהו מהעבודה</strong><p>${num(confirmedResp)} אושרו עדיין. האחריות מוצגת לאדם עצמו, לא למנהל.</p></div></a>
+           </div>
+@@ -261,13 +270,14 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
+   if (kind === 'clerk') {
+     const myCases = myWork?.myCases ?? [];
+     const overdue = myCases.filter((entry) => entry.overdue).length;
++    const unclosed = myCases.filter((entry) => finals.has(entry.stage)).length;
+     return `
+       <section class="role-block role-clerk">
+         <header class="role-block-head">
+           <div>
+             <p class="eyebrow">התור שלך</p>
+-            <h2>${num(myCases.length)} תיקים פתוחים · ${num(overdue)} חריגים</h2>
+-            <p>לפי השלב האחרון ביומן התיק. הזמן נמדד מתאריך פתיחת התיק.</p>
++            <h2>${num(myCases.length)} תיקים פתוחים · ${unclosed ? `${num(unclosed)} סיימו את כל השלבים ולא נסגרו` : `${num(overdue)} חורגים מהיעד`}</h2>
++            <p>${unclosed ? 'השלב האחרון ביומן בוצע, אבל התיק לא נסגר. סגירה מסודרת תוציא אותם מהתור ומספירת החריגים.' : 'לפי השלב האחרון ביומן התיק. הזמן נמדד מתאריך פתיחת התיק.'}</p>
+           </div>
+           <a class="text-link" href="#/approvals">להחלטות שלי ${icon('arrowLeft')}</a>
+         </header>
+@@ -277,15 +287,15 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
+                 .slice(0, 5)
+                 .map(
+                   (entry) => `<button class="case-row" type="button" data-record="${esc(entry.ref)}">
+-                    <span class="case-row-main"><strong>${esc(entry.subjectName)}</strong><span>${esc(entry.stageLabel)} · ${esc(entry.serviceLabel)}</span></span>
+-                    <span class="case-row-meta">${num(entry.ageDays)} ימים${entry.overdue ? ` · ${badge('חריג', 'red')}` : ''}</span>
++                    <span class="case-row-main"><strong>${esc(entry.subjectName)}</strong><span>${finals.has(entry.stage) ? `${esc(entry.stageLabel)} בוצע · ממתין לסגירת התיק` : esc(entry.stageLabel)} · ${esc(entry.serviceLabel)}</span></span>
++                    <span class="case-row-meta">${num(entry.ageDays)} ימים פתוח${entry.overdue ? ` · ${badge('חורג מהיעד', 'red')}` : ''}</span>
+                     ${icon('arrowLeft')}
+                   </button>`,
+                 )
+                 .join('')}${myCases.length > 5 ? `<p class="rail-note">ועוד ${num(myCases.length - 5)} תיקים ב<a href="#/insights">תמונת המחלקה</a>.</p>` : ''}</div>`
+             : '<p class="muted">אין תיקים פתוחים בתור שלך כרגע.</p>'
+         }
+-        <div class="role-block-foot">${icon('info')} ${num(overdue)} חריגים מול SLA ${num(cases?.slaDays ?? 30)} יום. ${icon('clock')} הזמן נמדד מתאריך פתיחת התיק.</div>
++        <div class="role-block-foot">${icon('info')} ${num(overdue)} תיקים חורגים מיעד של ${num(cases?.slaDays ?? 30)} ימים. ${icon('clock')} הזמן נמדד מתאריך פתיחת התיק.</div>
+       </section>`;
+   }
+ 
+@@ -454,9 +464,10 @@ function focusItems({ kind, approvals, process, gap, openInterviews, pending })
+     items.push({
+       tone: 'green',
+       icon: 'check',
+-      reason: 'הכל מטופל',
+-      title: 'אין דבר שממתין לך',
+-      why: 'השאלות נענו וההצעות טופלו. אפשר לשאול שאלה חדשה או לפתוח את תמונת המחלקה.',
++      empty: true,
++      reason: 'אין החלטות פתוחות',
++      title: 'אין החלטה שממתינה לך',
++      why: 'שום החלטה במרכז ההכרעות לא מחכה לך כרגע. עבודה יזומה, אם יש, מופיעה למעלה.',
+       impact: '0 פתוחים',
+       cta: kind === 'field' ? 'למערכות' : navFor(kind).includes('insights') ? 'לתמונת המחלקה' : 'למרכז ההכרעות',
+       href: emptyHref,
+@@ -474,7 +485,7 @@ function focusList(items, name, showMore = false, totalPending = 0) {
+           <h2 id="focus-title">מה מחכה ל${esc(name.split(' ')[0])}</h2>
+         </div>
+         <div class="focus-head-actions">
+-          <span class="section-count">${items.length === 1 ? 'פריט אחד' : `${items.length} פריטים`}</span>
++          <span class="section-count">${items.some((item) => item.empty) ? 'אין פריטים פתוחים' : items.length === 1 ? 'פריט אחד' : `${items.length} פריטים`}</span>
+           ${showMore ? `<a class="text-link" href="#/approvals">לכל ${totalPending ? `${num(totalPending)} ` : ''}ההחלטות ${icon('arrowLeft')}</a>` : ''}
+         </div>
+       </header>
+@@ -908,7 +919,7 @@ function waitDistribution(item) {
+   const medianBin = Math.min(binCount - 1, Math.floor(median / size));
+   return `
+     <div class="wait-histogram">
+-      <div class="hist-head"><h3>התפלגות ההמתנה</h3><span>${num(samples.length)} דגימות · חציון ${num(median)} יום · p90 ${num(p90)}</span></div>
++      <div class="hist-head"><h3>התפלגות ההמתנה</h3><span>${num(samples.length)} תיקים · חציון ${num(median)} ימים · 90% עד ${num(p90)} ימים</span></div>
+       <div class="hist-bars">
+         ${bins
+           .map(
+@@ -1108,7 +1119,7 @@ export function sourceConsentBody(source) {
+     <div class="consent-block"><h3>${icon('eye')} מה ייקרא</h3><p>${esc(consent.scopeHe ?? source.unlocksHe)}</p></div>
+     <div class="consent-block"><h3>${icon('shield')} מי אישר</h3><ul>${(consent.approversHe ?? []).map((name) => `<li>${esc(name)}</li>`).join('')}</ul><p>${esc(consent.dpiaHe ?? '')}</p></div>
+     <div class="consent-block"><h3>${icon('users')} הזכות לאי-השתתפות</h3><p>${esc(consent.optOutHe ?? '')}</p></div>
+-    <div class="sheet-note">${icon('info')} ב-POC האישורים מוצגים כתנאי לחיבור, אך לא נשמרת חתימה משפטית. חיבור בסביבה אמיתית מותנה באישור ובבדיקת פרטיות.</div>
++    <div class="sheet-note">${icon('info')} בהדגמה הזו האישורים מוצגים כתנאי לחיבור, אך לא נשמרת חתימה משפטית. חיבור בסביבה אמיתית מותנה באישור ובבדיקת פרטיות.</div>
+     <div class="sheet-actions"><button class="btn" type="button" data-source-consent="${esc(source.id)}">אשרו והפעילו</button><button class="btn btn-quiet" type="button" data-close-sheet>לא עכשיו</button></div>`;
+ }
+ 
+@@ -1127,7 +1138,11 @@ export function insightsView({ overview, org, process, service, proposals, canAp
+   const people = org?.people ?? [];
+   const responsibilities = (org?.responsibilities ?? [])
+     .filter((r) => r.signal === 'case-events')
+-    .sort((a, b) => b.support - a.support)
++    .sort((a, b) => b.support - a.support);
++  // One row per person with their activities as chips: the same person four rows in a row reads as a bug.
++  const byPerson = [...responsibilities.reduce((map, r) => map.set(r.personRef, [...(map.get(r.personRef) ?? []), r]), new Map())]
++    .map(([personRef, items]) => ({ personRef, items, total: items.reduce((a, r) => a + Number(r.support || 0), 0) }))
++    .sort((a, b) => b.total - a.total)
+     .slice(0, 6);
+   const pendingProposals = (proposals ?? []).filter((p) => p.status !== 'approved');
+   const nameOf = (ref) => people.find((p) => p.ref === ref)?.name ?? '';
+@@ -1138,7 +1153,7 @@ export function insightsView({ overview, org, process, service, proposals, canAp
+         <div>
+           <p class="eyebrow">תמונת המחלקה</p>
+           <h1>איך באמת עובדת המחלקה</h1>
+-          <p class="page-sub">התהליך זוהה מלוג התיקים, לא נכתב ביד. הזמן נמדד בין אירוע לאירוע — לא הוערך.</p>
++          <p class="page-sub">התהליך זוהה מיומן התיקים, לא נכתב ביד. הזמן נמדד בין אירוע לאירוע — לא הוערך.</p>
+         </div>
+         <div class="head-status">${icon('flow')} ${num(model?.caseCount)} תיקים · ${num(model?.windowDays)} ימי תצפית</div>
+       </header>
+@@ -1148,9 +1163,9 @@ export function insightsView({ overview, org, process, service, proposals, canAp
+       </div>
+ 
+       <div class="kpi-strip">
+-        <div class="kpi"><b>${num(model?.medianTotalDays)}</b><span>יום חציון לתיק</span><small>p90 · ${num(model?.p90TotalDays)} יום</small></div>
++        <div class="kpi"><b>${num(model?.medianTotalDays)}</b><span>ימים, משך חציוני לתיק</span><small>90% מהתיקים עד ${num(model?.p90TotalDays)} ימים</small></div>
+         <div class="kpi"><b>${num(variants.length)}</b><span>מסלולים שונים</span><small>בתצפית הזו כל תיק שייך לאחד מהם</small></div>
+-        <div class="kpi kpi-warn"><b>${num(bottleneck?.medianWaitDays)}</b><span>ימים בצוואר הבקוק</span><small>${esc(bottleneck?.labels ?? '')} · ${pct(Number(bottleneck?.medianWaitDays ?? 0) / Math.max(1, Number(model?.medianTotalDays ?? 1)))} מהזמן</small></div>
++        <div class="kpi kpi-warn"><b>${num(bottleneck?.medianWaitDays)}</b><span>ימים בצוואר הבקבוק</span><small>${esc(bottleneck?.labels ?? '')} · ${pct(Number(bottleneck?.medianWaitDays ?? 0) / Math.max(1, Number(model?.medianTotalDays ?? 1)))} מהזמן</small></div>
+         <div class="kpi"><b>${num(pendingProposals.length)}</b><span>אוטומציות מוצעות</span><small>מבוססות על השלבים שנמדדו</small></div>
+       </div>
+ 
+@@ -1159,7 +1174,7 @@ export function insightsView({ overview, org, process, service, proposals, canAp
+           <div><p class="eyebrow">המסלול הנפוץ</p><h2>${esc(current?.nameHe ?? '')}: ${num(variants[0]?.caseCount)} תיקים, ${num(variants[0]?.medianDays)} ימים</h2></div>
+           <div class="flow-status">
+             ${model?.status === 'validated' ? `<span class="status-pill status-on">${icon('check')} תהליך מאושר</span>` : `<span class="status-pill">${icon('clock')} תהליך שנמדד · ממתין לאישור</span>`}
+-            ${model?.status !== 'validated' && canApprove ? `<button class="btn btn-small" type="button" data-validate-process="${esc(model?.serviceCode ?? service)}">אשר שהתהליך הזה נכון</button>` : ''}
++            ${model?.status !== 'validated' && canApprove ? `<button class="btn btn-small" type="button" data-validate-process="${esc(model?.serviceCode ?? service)}">אישור התהליך כפי שנמדד</button>` : ''}
+             <span class="section-count">${icon('clock')} המתנה חציונית</span>
+           </div>
+         </div>
+@@ -1167,7 +1182,7 @@ export function insightsView({ overview, org, process, service, proposals, canAp
+         <p class="flow-hint">${icon('arrowLeft')} גללו לרוחב כדי לראות את כל ${num((variants[0]?.sequence ?? []).length)} השלבים</p>
+         <div class="flow-legend">
+           <span><i class="lg lg-measured"></i> נמדד מהלוג</span>
+-          <span><i class="lg lg-bottleneck"></i> צוואר בקוק</span>
++          <span><i class="lg lg-bottleneck"></i> צוואר בקבוק</span>
+           <span><i class="lg lg-proposed"></i> מוצע לאישור</span>
+           <span><i class="lg lg-gate"></i> שער אישור אדם</span>
+         </div>
+@@ -1244,9 +1259,9 @@ export function insightsView({ overview, org, process, service, proposals, canAp
+         </div>
+         <div class="resp-list">
+           <h3 class="sheet-subtitle">מה כל אחד עושה בפועל</h3>
+-          ${responsibilities
++          ${byPerson
+             .map(
+-              (r) => `<div class="resp-row"><span class="avatar avatar-2">${esc(initials(nameOf(r.personRef)))}</span><div><strong>${esc(nameOf(r.personRef))}</strong><p>${mixed(r.summaryHe ?? r.summary)}</p></div><span class="resp-support">${num(r.support)} אירועים</span></div>`,
++              (p) => `<div class="resp-row"><span class="avatar avatar-2">${esc(initials(nameOf(p.personRef)))}</span><div><strong>${esc(nameOf(p.personRef))}</strong><p class="resp-acts">${p.items.map((r) => `<span class="resp-act">${esc(r.activityLabel ?? '')} · ${num(r.support)}</span>`).join('')}</p></div><span class="resp-support">${num(p.total)} פעולות</span></div>`,
+             )
+             .join('')}
+         </div>
+@@ -1281,8 +1296,8 @@ function flowTrack(sequence, steps, bottleneck, proposals) {
+         ${index === 0 ? '<span class="flow-start">התחלה</span>' : ''}
+         <span class="flow-index">${num(step.occurrences)}</span>
+         <strong>${esc(step.labels)}</strong>
+-        <span class="flow-wait ${step.medianWaitDays > 0 ? '' : 'is-zero'}">${step.medianWaitDays > 0 ? `המתנה ${num(step.medianWaitDays)} ימים` : 'ללא המתנה'}</span>
+-        ${isBottleneck ? `<span class="flow-flag">${icon('alert')} צוואר בקוק</span>` : ''}
++        <span class="flow-wait ${step.medianWaitDays > 0 ? '' : 'is-zero'}">${step.medianWaitDays > 1 ? `המתנה ${num(step.medianWaitDays)} ימים` : step.medianWaitDays === 1 ? 'המתנה של יום' : 'ללא המתנה'}</span>
++        ${isBottleneck ? `<span class="flow-flag">${icon('alert')} צוואר בקבוק</span>` : ''}
+         ${proposedSteps.has(activity) ? `<span class="flow-flag flag-proposed">${icon('spark')} מוצע כאן</span>` : ''}
+       </div>
+       ${index < sequence.length - 1 ? `<span class="flow-link" aria-hidden="true">${icon('arrowLeft')}</span>` : ''}`;
+diff --git a/tests/api.test.ts b/tests/api.test.ts
+index ce1bf37..c5e5215 100644
+--- a/tests/api.test.ts
++++ b/tests/api.test.ts
+@@ -299,7 +299,7 @@ test('the ask box refuses a filter it cannot map instead of dropping it', async
+   const caseStatus = await ask('מה הסטטוס של תיק CASE-0001?');
+   assert.equal(caseStatus.assistant.kind, 'case');
+   assert.equal(caseStatus.assistant.case.status, 'CLOSED');
+-  assert.equal(caseStatus.assistant.case.subjectName, 'מאפייה השכונה');
++  assert.equal(caseStatus.assistant.case.subjectName, 'מאפיית השכונה');
+ 
+   const filterRefusal = await ask('כמה עסקים ממתינים לפיקוח כרגע?');
+   assert.match(filterRefusal.interpretationHe, /עסקים/);
+diff --git a/tests/value.test.ts b/tests/value.test.ts
+new file mode 100644
+index 0000000..b27e941
+--- /dev/null
++++ b/tests/value.test.ts
+@@ -0,0 +1,77 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { buildFixture } from '../src/cloud/fixtures.ts';
++import { evaluateHouseholds, outreachLetter, rightsView } from '../src/value/rights.ts';
++import { createTasks, extractDecisions, meetingsView, recall } from '../src/value/meetings.ts';
++import { SUPPRESSION } from '../src/seed/eligibility-rules.ts';
++
++const fixture = buildFixture('givat-rimon');
++const names = { canSeeNames: true, whyHe: '' };
++const counts = { canSeeNames: false, whyHe: '' };
++
++test('proactive rights: eligible households that are not receiving the discount, with the evidence', () => {
++  const view = rightsView(fixture, names, new Map());
++  assert.equal(view.totals.households, 44);
++  assert.equal(view.totals.eligible, 7);
++  assert.equal(view.totals.notReceiving, 5);
++  assert.equal(view.worklist.length, 5);
++  for (const h of view.worklist) {
++    assert.ok(h.qualifiers.length > 0, 'every row has a ground');
++    assert.equal(h.receiving, false);
++    assert.ok(h.unclaimedAnnual > 0);
++    for (const q of h.qualifiers) assert.ok(q.evidence.every((e) => e.table && e.row && e.column), 'every ground points at a row and a column');
++  }
++  // One discount per household, never summed across grounds.
++  assert.equal(view.totals.unclaimedAnnual, view.worklist.reduce((a, h) => a + h.unclaimedAnnual, 0));
++});
++
++test('proactive rights: names stay with the role that handles requests, small counts are suppressed', () => {
++  const view = rightsView(fixture, counts, new Map());
++  assert.equal(view.worklist.length, 0, 'no names or addresses without the role');
++  for (const g of view.grounds.filter((x) => x.connected)) {
++    if (g.eligible !== null) assert.ok(g.eligible === 0 || g.eligible >= SUPPRESSION.minCellSize);
++  }
++  assert.equal(view.totals.receiving, null, 'a count of 2 is suppressed');
++});
++
++test('proactive rights: the rule engine reads the records and no record goes to a model', () => {
++  const view = rightsView(fixture, names, new Map());
++  assert.equal(view.boundary.rowsSentToModel, 0);
++  assert.equal(view.boundary.rowsProcessed, 44);
++  const reservist = view.grounds.find((g) => g.code === 'RESERVIST');
++  assert.equal(reservist?.connected, false);
++  assert.ok((reservist?.unchecked ?? 0) > 0, 'an unconnected source is reported as unchecked, not as zero');
++});
++
++test('proactive rights: the outreach letter is Hebrew, cites the rule and names the clerk', () => {
++  const household = evaluateHouseholds(fixture).find((h) => h.qualifiers.length && !h.receiving)!;
++  const letter = outreachLetter(household, 'הילה קורן')!;
++  assert.match(letter.text, /הנחה בארנונה/);
++  assert.match(letter.text, /תקנות הסדרים/);
++  assert.match(letter.text, /הילה קורן/);
++  assert.doesNotMatch(letter.text, /[A-Za-z]{3,}/, 'no English in a letter to a resident');
++});
++
++test('meetings: decisions, owners and dates come from the minutes, and a later meeting closes one', () => {
++  const decisions = extractDecisions(fixture);
++  assert.equal(decisions.length, 8);
++  assert.equal(decisions.filter((d) => d.status === 'done').length, 1);
++  assert.equal(decisions.filter((d) => d.status === 'overdue').length, 1);
++  assert.equal(decisions.filter((d) => d.flags.includes('no_owner')).length, 2);
++  assert.ok(decisions.every((d) => d.line > 0 && d.path), 'every decision keeps its document and line');
++  const owned = decisions.filter((d) => d.ownerName);
++  assert.ok(owned.every((d) => d.ownerId), 'every named owner is matched to the directory');
++});
++
++test('meetings: recall finds what was decided, and tasks are created only for owned, open decisions', () => {
++  const decisions = extractDecisions(fixture);
++  const found = recall(decisions, 'מה הוחלט על הנחות');
++  assert.ok(found.some((d) => d.linksTo === 'rights'));
++  const tasks = new Map();
++  const created = createTasks(fixture, tasks, new Map(), 'דנה לוי (מנהלת תברואה ובריאות)', '2026-10-17T08:00:00.000Z');
++  assert.equal(created.length, 5);
++  assert.ok(created.every((t) => t.ownerId && t.createdBy));
++  assert.equal(createTasks(fixture, tasks, new Map(), 'x', 'y').length, 0, 'creating twice adds nothing');
++  const view = meetingsView(fixture, created[0].ownerId, tasks, new Map(), '');
++  assert.ok(view.mine.length > 0, 'the owner sees their task');
++});

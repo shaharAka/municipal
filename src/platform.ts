@@ -52,6 +52,8 @@ function makeViewers(fixture: Fixture): Viewer[] {
     { label: 'Food inspector', user: pick(/מפקח מזון|food inspector/i), clearance: 1 },
     { label: 'Field inspector', user: pick(/מפקח תברואה|sanitation inspector/i), clearance: 1 },
     { label: 'Clerk', user: pick(/מזכיר|clerk/i), clearance: 1 },
+    { label: 'Rule owner (treasury)', user: pick(/רכז גזברות|treasury|finance/i), clearance: 1 },
+    { label: 'Data steward', user: pick(/אחראית נתונים|data steward|data owner/i), clearance: 3 },
   ];
   return candidates
     .filter((c) => Boolean(c.user))

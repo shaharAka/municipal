@@ -22,6 +22,13 @@ export type SourceDef = {
   evidenceHe: string;
   unlocksHe: string;
   enabledByDefault: boolean;
+  /** A source with staff or resident data needs an explicit gate before it is read. */
+  consent?: {
+    scopeHe: string;
+    approversHe: string[];
+    dpiaHe: string;
+    optOutHe: string;
+  };
 };
 
 export const SOURCES: SourceDef[] = [
@@ -51,6 +58,12 @@ export const SOURCES: SourceDef[] = [
     evidenceHe: '55 הודעות · 6 נושאים',
     unlocksHe: 'אחריויות ומשימות ידניות לאוטומציה',
     enabledByDefault: false,
+    consent: {
+      scopeHe: 'תיבות הדואר של עובדי מחלקת תברואה ובריאות בלבד, לקריאה בלבד. אין קריאת דואר אישי שאינו קשור לעבודה.',
+      approversHe: ['גלית אדלר, יועצת משפטית', 'מחלקת מערכות המידע העירונית'],
+      dpiaHe: 'הערכת השפעה על הפרטיות (DPIA) — טיוטה לבדיקת היועץ המשפטי לפני חיבור בסביבה אמיתית.',
+      optOutHe: 'עובד/ת רשאי/ת לבקש לא לכלול את תיבתו/ה. הבקשה נרשמת לפני החיבור, והחיבור לא יופעל עבורו/ה.',
+    },
   },
   {
     id: 'sharepoint',
@@ -60,6 +73,12 @@ export const SOURCES: SourceDef[] = [
     evidenceHe: '6 מסמכים · 2 מוגבלים',
     unlocksHe: 'טפסים וכללים מתוך הנהלים',
     enabledByDefault: false,
+    consent: {
+      scopeHe: 'אתר המחלקה ב-SharePoint וספריית המסמכים שלו בלבד. הרשאות המסמך נשמרות, ומסמך מוגבל לא נראה למי שאין לו הרשאה.',
+      approversHe: ['גלית אדלר, יועצת משפטית', 'אחראית הגנת הפרטיות העירונית'],
+      dpiaHe: 'הערכת השפעה על הפרטיות — המסמכים עלולים לכלול מידע אישי ותושבים.',
+      optOutHe: 'מסמך שהגישה אליו הוסרה לא ייקרא; אין עקיפת הרשאות.',
+    },
   },
 ];
 
@@ -109,20 +128,6 @@ const provenance = (asOf: string, source: string): Provenance => ({
 export function research(source: SourceId, ctx: ResearchContext): Suggestion[] {
   const suggestions: Suggestion[] = [];
   const lic = ctx.models.find((m) => m.serviceCode === 'LIC') ?? ctx.models[0];
-
-  if (source === 'entra') {
-    const people = ctx.graph.ofType('person').length;
-    suggestions.push({
-      id: stableId('SUG', 'entra', 'onboarding-form'),
-      source,
-      kind: 'form',
-      titleHe: 'טופס קליטת עובד חדש',
-      whyHe: 'מבנה הארגון מאפשר לטופס להיווצר מהמודל — בלי שדות שנכתבים ביד.',
-      evidenceHe: [`${people} עובדים עם תפקיד, יחידה ומנהל`, `${ctx.org.units.length} יחידות מזוהות`, 'השדות נגזרים מטיפוס האדם באונטולוגיה'],
-      action: { type: 'create_form', pageType: 'person', formKind: 'internal', nameHe: 'קליטת עובד', only: ['display_name', 'mail', 'job_title', 'department', 'employee_type'] },
-      status: 'new',
-    });
-  }
 
   if (source === 'exchange') {
     const inferred = ctx.org.responsibilities.filter((r) => r.signal === 'mail').length;
@@ -176,16 +181,22 @@ export function research(source: SourceId, ctx: ResearchContext): Suggestion[] {
       action: { type: 'validate_process', processCode: lic.serviceCode },
       status: 'new',
     });
-    const top = [...ctx.proposals].sort((a, b) => b.annualDaysSaved - a.annualDaysSaved)[0];
-    if (top?.ref) {
+    const missingIncome = ctx.graph.ofType('household').filter((h) => !h.properties.income_band).length;
+    if (missingIncome) {
       suggestions.push({
-        id: stableId('SUG', 'sql', 'automation', top.kind),
+        id: stableId('SUG', 'sql', 'income-form'),
         source,
-        kind: 'automation',
-        titleHe: top.kind === 'sla_reminder' ? 'הוסיפו תזכורת אוטומטית לפני חריגה מזמן הפיקוח' : 'הפעילו אוטומציה על השלב הצוואר-בקבוק',
-        whyHe: 'ההמתנה נמדדה מתוך הנתונים, והצעה כזו חוזרת על עצמה בכל מקרה.',
-        evidenceHe: [`${top.expectedCasesPerYear} מקרים בשנה`, `חיסכון מוערך ${top.annualDaysSaved} ימי עבודה`, ...top.evidence.slice(0, 1)],
-        action: { type: 'approve_automation', proposalRef: top.ref },
+        kind: 'form',
+        titleHe: 'טופס השלמת נתון הכנסה למשקי בית',
+        whyHe: `ל־${missingIncome} משקי בית אין נתון הכנסה, ובחלקם זה מונע הכרעה בזכאות. טופס קצר, שנגזר מהמודל, יכול לאסוף בדיוק את השדה הזה.`,
+        evidenceHe: [`${missingIncome} משקי בית בלי נתון הכנסה`, 'השדה: רמת הכנסה של משק הבית', 'נגזר מהמודל של משק בית'],
+        action: {
+          type: 'create_form',
+          pageType: 'household',
+          formKind: 'internal',
+          nameHe: 'השלמת נתון הכנסה',
+          only: ['household_size', 'income_band'],
+        },
         status: 'new',
       });
     }
@@ -292,6 +303,7 @@ export function approveSuggestion(suggestion: Suggestion, ctx: ResearchContext):
     page_type: spec.page_type,
     kind: spec.kind,
     field_count: spec.fields.length,
+    fields: spec.fields.map((f) => f.name),
     direction: spec.direction,
     status: 'approved',
     generated_at: ctx.capturedAt,

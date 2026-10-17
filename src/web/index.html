@@ -4,39 +4,36 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
+    <meta name="description" content="מערכת המידע העירונית של גבעת רימון — מחלקת תברואה ובריאות." />
     <title>גבעת רימון · מערכת המידע העירונית</title>
     <link rel="stylesheet" href="./home.css" />
+    <link rel="stylesheet" href="./value.css" />
   </head>
-  <body>
+  <body data-mode="landing">
     <a class="skip" href="#main">דלג לתוכן</a>
 
-    <header class="top">
-      <div class="shell top-row">
-        <div class="brand">
-          <span class="mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 20h18M5 20V9l7-5 7 5v11M9 20v-5h6v5" />
-            </svg>
-          </span>
-          <div>
-            <p class="city" id="city">עיריית גבעת רימון</p>
-            <p class="system">מערכת המידע העירונית · תברואה ובריאות</p>
-          </div>
-        </div>
-        <nav class="nav" id="nav" aria-label="ניווט ראשי"></nav>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="ניווט צדדי"></aside>
+      <div class="app-body">
+        <header class="topbar" id="topbar"></header>
+        <main class="main" id="main" tabindex="-1"></main>
       </div>
-    </header>
+    </div>
 
-    <main id="main" class="shell"></main>
+    <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
-    <footer class="foot shell">
-      <p>כל מספר במסך מגיע מהנתונים עצמם, עם הכלל שמאחוריו.</p>
-      <a href="./workbench.html">תצוגת אנליסט מלאה ←</a>
-    </footer>
-
-    <dialog class="modal" id="engine" aria-labelledby="engine-title">
-      <div class="modal-head"><h2 id="engine-title">איך הגענו לזה</h2><button class="modal-close" type="button" data-close-engine aria-label="סגור">×</button></div>
-      <div class="modal-body" id="engine-body"></div>
+    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+      <div class="sheet-head">
+        <div class="sheet-heading">
+          <p class="sheet-eyebrow" id="sheet-eyebrow" hidden></p>
+          <h2 id="sheet-title">—</h2>
+        </div>
+        <button class="icon-btn" type="button" data-close-sheet aria-label="סגור">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body" id="sheet-body"></div>
+      <footer class="sheet-foot" id="sheet-foot" hidden></footer>
     </dialog>
 
     <script type="module" src="./home.js"></script>

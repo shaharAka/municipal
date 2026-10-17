@@ -22,14 +22,22 @@ export type Evaluation = {
   rule: RuleSeed;
   outcomes: HouseholdOutcome[];
   counts: { eligible: number; notEligible: number; unknown: number; total: number };
-  unknownByReason: { reason: string; count: number; ground: string; property: string; label_he: string; label_en: string }[];
+  unknownByReason: {
+    reason: string;
+    count: number;
+    ground: string;
+    property: string;
+    property_label_he: string;
+    label_he: string;
+    label_en: string;
+  }[];
   suppressed: boolean;
   suppressionNote: string | null;
 };
 
 export type QueryPlan = {
   metric: 'count';
-  entity: 'household' | 'resident' | 'business' | 'case';
+  entity: 'household' | 'resident' | 'business' | 'case' | 'complaint';
   rule_code?: string;
   filter?: Record<string, unknown>;
 };
@@ -37,6 +45,8 @@ export type QueryPlan = {
 export type QueryAnswer = {
   answer_id: string;
   question: string;
+  /** One line in Hebrew saying what the system understood before it ran. */
+  interpretationHe: string;
   plan: QueryPlan;
   rule: { code: string; version: number; status: string; owner: string; citation: string; effective_from: string; logic: string } | null;
   counts: { eligible: number | null; notEligible: number | null; unknown: number | null; total: number | null; value?: number };
@@ -46,11 +56,45 @@ export type QueryAnswer = {
   sources: { system: string; label: string; asOf: string }[];
   freshness: string;
   explain: { plan: QueryPlan; ruleVersion: number | null; steps: string[]; whatWasNotChecked: string[] };
+  /** The derivation in the language the person reads. */
+  explainHe: { steps: string[]; whatWasNotChecked: string[] };
   gapsCreated: number;
   refused: string | null;
 };
 
 const DAY = 86_400_000;
+
+const ENTITY_HE: Record<QueryPlan['entity'], string> = {
+  household: 'משקי בית',
+  resident: 'תושבים',
+  business: 'עסקים',
+  case: 'תיקים',
+  complaint: 'קריאות תברואה',
+};
+
+const ENTITY_DEF_HE: Record<QueryPlan['entity'], string> = {
+  household: 'משקי הבית',
+  resident: 'התושבים',
+  business: 'העסקים',
+  case: 'התיקים',
+  complaint: 'קריאות התברואה',
+};
+
+const ENTITY_SOURCE: Record<QueryPlan['entity'], string> = {
+  household: 'sql',
+  resident: 'sql',
+  business: 'sql',
+  case: 'sql',
+  complaint: 'sql',
+};
+
+/** The attribute that is missing, not the rule criterion that could not be applied. */
+const PROPERTY_LABELS_HE: Record<string, string> = {
+  income_band: 'נתון הכנסה של משק הבית',
+  birth_date: 'תאריך לידה',
+  disability_certificate_expiry: 'תוקף תעודת נכות',
+  inspection_zone: 'אזור הפיקוח',
+};
 
 const ageAt = (birthDate: string, at: string): number | null => {
   const born = Date.parse(birthDate);
@@ -215,6 +259,7 @@ export function evaluateRule(
       count: entry.count,
       ground: entry.criterion.ground,
       property: entry.criterion.property,
+      property_label_he: PROPERTY_LABELS_HE[entry.criterion.property] ?? entry.criterion.property,
       label_he: entry.criterion.label_he,
       label_en: entry.criterion.label_en,
     })),
@@ -227,23 +272,139 @@ export function evaluateRule(
 
 // ------------------------------------------------------------------ planning
 
-export function planQuestion(question: string): { plan: QueryPlan | null; refusal: string | null } {
-  const q = question.trim();
-  if (!q) return { plan: null, refusal: 'Ask a question about residents, households, businesses or cases.' };
+type PlannedQuestion = {
+  plan: QueryPlan | null;
+  refusal: string | null;
+  interpretationHe: string;
+};
 
-  const wantsEligibility = /(זכאי|זכאות|eligible|entitled)/i.test(q);
-  const mentionsDiscount = /(הנחה|אגרת תברואה|discount|fee)/i.test(q);
-  if (wantsEligibility || mentionsDiscount) {
-    return { plan: { metric: 'count', entity: 'household', rule_code: 'SAN-FEE-DISCOUNT', filter: {} }, refusal: null };
+const ENTITY_PATTERNS: { entity: QueryPlan['entity']; pattern: RegExp; labelHe: string }[] = [
+  { entity: 'household', pattern: /(משקי\s*בית|משק\s*בית|households?)/i, labelHe: 'משקי בית' },
+  { entity: 'resident', pattern: /(תושבים|תושב|residents?)/i, labelHe: 'תושבים' },
+  { entity: 'business', pattern: /(בתי\s*עסק|עסקים|עסק|business(?:es)?)/i, labelHe: 'עסקים' },
+  { entity: 'case', pattern: /(תיקים|תיק|cases?)/i, labelHe: 'תיקים' },
+  { entity: 'complaint', pattern: /(קריאות|קריאה|תלונות|תלונה|complaints?)/i, labelHe: 'קריאות תברואה' },
+];
+
+/** Words that describe a filter or a slice the planner does not implement yet. */
+const QUALIFIERS: { pattern: RegExp; labelHe: string }[] = [
+  { pattern: /(ממתין|ממתינים|ממתינות|מחכה|מחכים|מחכות|waiting|pending)/i, labelHe: 'ממתין' },
+  { pattern: /(פתוחים|פתוחות|פתוח|open)/i, labelHe: 'פתוח' },
+  { pattern: /(בלי|ללא)\s+רישיון/i, labelHe: 'בלי רישיון' },
+  { pattern: /(פיקוח|ביקורת|inspection)/i, labelHe: 'פיקוח' },
+  { pattern: /(החודש|השבוע|היום|כרגע|השנה|this month|this week|today|now)/i, labelHe: 'תקופה' },
+  { pattern: /(ינואר|פברואר|מרץ|אפריל|מאי|יוני|יולי|אוגוסט|ספטמבר|אוקטובר|נובמבר|דצמבר|january|february|march|april|may|june|july|august|september|october|november|december)/i, labelHe: 'חודש' },
+  { pattern: /(חורף|קיץ|אביב|סתיו|רבעון|quarter)/i, labelHe: 'תקופה' },
+  { pattern: /(?:^|\s)(באזור|בשכונה|בשכונת|ברחוב|לפי|במחוז|ביישוב|בקריית)(?=\s|$|[?.,!])/i, labelHe: 'מיקום או חיתוך' },
+  { pattern: /(מעל|מתחת|יותר\s*מ|פחות\s*מ|above|below)/i, labelHe: 'סף' },
+  { pattern: /(סטטוס|status|נסגר|נסגרו|סגור|סגורים|סגורות|closed|בטיפול|חריג|חריגה|חריגים|באיחור|overdue|פעיל|פעילים|active|טופל|טופלו)/i, labelHe: 'סטטוס' },
+  { pattern: /(הכנסה|הכנסות|income|שכר)/i, labelHe: 'נתון הכנסה' },
+  { pattern: /(נכות|נכה|אזרח\s*ותיק|גיל|ותק|disability|\bage\b)/i, labelHe: 'מאפיין תושב' },
+  { pattern: /\b20\d{2}\b/, labelHe: 'שנה' },
+  { pattern: /(אתמול|לאחרונה|לפני|אחרי|last\s+week|yesterday|recently)/i, labelHe: 'תקופה' },
+  { pattern: /(שירות|service|\bLIC\b|\bSAN\b|\bCMP\b)/i, labelHe: 'שירות' },
+  { pattern: /(מזיקים|מכרסמים|ריח|רעש|pests?|מסוג|סוג\s+קריאה)/i, labelHe: 'סוג קריאה' },
+  { pattern: /\b(?:CASE|BUS|HHD|CMP|PRP)-\d+/i, labelHe: 'מזהה רשומה' },
+];
+
+export function planQuestion(question: string): PlannedQuestion {
+  const q = question.trim();
+  if (!q) {
+    return {
+      plan: null,
+      refusal: 'לא הוקלדה שאלה.',
+      interpretationHe: 'לא הוקלדה שאלה, ולכן לא הורצה דבר.',
+    };
   }
-  if (/(תושבים|residents?)/i.test(q)) return { plan: { metric: 'count', entity: 'resident', filter: {} }, refusal: null };
-  if (/(בתי עסק|business|עסקים)/i.test(q)) return { plan: { metric: 'count', entity: 'business', filter: {} }, refusal: null };
-  if (/(תיקים|cases|בקשות|licen[cs]es)/i.test(q)) return { plan: { metric: 'count', entity: 'case', filter: {} }, refusal: null };
+
+  const isCount = /(כמה|מה\s*מספר|how\s*many|what\s*number)/i.test(q);
+  const wantsEligibility = /(זכאי|זכאות|eligible|entitled|הנחה)/i.test(q);
+  const entities = ENTITY_PATTERNS.filter((entry) => entry.pattern.test(q));
+  const qualifiers = QUALIFIERS.filter((entry) => entry.pattern.test(q)).map((entry) => entry.labelHe);
+  const entity = entities.length === 1 ? entities[0] : null;
+  const entityLabel = entity?.labelHe ?? 'רשומה';
+
+  if (wantsEligibility) {
+    // Eligibility is a count plan. "What is the rule?" and "who is eligible?"
+    // are different questions; answering them with the aggregate would be the
+    // same credibility failure as dropping a filter.
+    if (!isCount) {
+      return {
+        plan: null,
+        refusal: 'לא הצגתי מספר, כי זו אינה שאלת ספירה.',
+        interpretationHe:
+          'הבנתי שמדובר בזכאות להנחת אגרת תברואה, אבל השאלה אינה שואלת כמה זכאים. לא הוצג מספר; אפשר לשאול "כמה משקי בית זכאים?".',
+      };
+    }
+    // The declared rule is a household rule. A question about businesses and
+    // discounts is a different rule, not a filter we may silently drop.
+    if (entities.some((entry) => entry.entity === 'business')) {
+      return {
+        plan: null,
+        refusal: 'הכלל המוכר הוא הנחה למשקי בית; שאלת זכאות על עסקים אינה ממופה עדיין.',
+        interpretationHe:
+          'הבנתי שמדובר בעסקים ובהנחה, אבל כלל הזכאות המוכר הוא למשקי בית. לא הוצג מספר.',
+      };
+    }
+    const otherEntity = entities.find((entry) => entry.entity !== 'household');
+    if (otherEntity) {
+      return {
+        plan: null,
+        refusal: `הכלל המוכר הוא הנחה למשקי בית; שאלת זכאות על ${otherEntity.labelHe} אינה ממופה עדיין.`,
+        interpretationHe: `הבנתי שמדובר ב${otherEntity.labelHe} ובהנחה, אבל כלל הזכאות המוכר חל על משקי בית. לא הוצג מספר.`,
+      };
+    }
+    if (qualifiers.length) {
+      return {
+        plan: null,
+        refusal: 'לא הצגתי מספר, כי הסינון בשאלה עדיין לא ממופה למודל.',
+        interpretationHe: `הבנתי שמדובר בזכאות להנחת אגרת תברואה, אבל הסינון (${qualifiers.join(', ')}) לא נתמך עדיין.`,
+      };
+    }
+    return {
+      plan: { metric: 'count', entity: 'household', rule_code: 'SAN-FEE-DISCOUNT', filter: {} },
+      refusal: null,
+      interpretationHe: 'כל משקי הבית במודל, לפי כלל SAN-FEE-DISCOUNT.',
+    };
+  }
+
+  if (entities.length > 1) {
+    return {
+      plan: null,
+      refusal: 'השאלה מתייחסת ליותר מסוג רשומה אחד.',
+      interpretationHe: `הבנתי שמדובר ב${entities.map((entry) => entry.labelHe).join(' ו')}, ולכן לא בחרתי סוג אחד לספור.`,
+    };
+  }
+
+  if (entity && isCount) {
+    if (qualifiers.length) {
+      return {
+        plan: null,
+        refusal: 'לא הצגתי מספר, כי הסינון בשאלה עדיין לא ממופה למודל.',
+        interpretationHe: `הבנתי שמדובר ב${entity.labelHe}, אבל הסינון (${qualifiers.join(', ')}) לא נתמך עדיין. לא הוצג מספר.`,
+      };
+    }
+    return {
+      plan: { metric: 'count', entity: entity.entity, filter: {} },
+      refusal: null,
+      interpretationHe: `כל ${entity.labelHe} במודל, ללא סינון.`,
+    };
+  }
+
+  if (entity && qualifiers.length) {
+    return {
+      plan: null,
+      refusal: 'לא הצגתי מספר, כי לא זוהתה שאלת ספירה נתמכת.',
+      interpretationHe: `הבנתי שמדובר ב${entity.labelHe}; הסינון (${qualifiers.join(', ')}) ושאלת הסטטוס לא נתמכים עדיין.`,
+    };
+  }
 
   return {
     plan: null,
     refusal:
-      'I can only answer questions declared against the ontology and the rule catalogue today: eligibility for the sanitation-fee discount, or counts of residents, businesses and cases.',
+      'אפשר לשאול על זכאות להנחת אגרת תברואה, או לספור משקי בית, תושבים, עסקים, תיקים וקריאות תברואה.',
+    interpretationHe:
+      'לא זוהתה שאלה נתמכת. השאלה לא הורצה, ולכן לא הוצג מספר.',
   };
 }
 
@@ -254,14 +415,18 @@ export function answerQuestion(
   question: string,
   opts: { capturedAt: string; sources: { system: string; label: string }[] },
 ): QueryAnswer {
-  const { plan, refusal } = planQuestion(question);
+  const { plan, refusal, interpretationHe } = planQuestion(question);
   const answerId = stableId('ANS', question);
-  const sources = opts.sources.map((s) => ({ ...s, asOf: opts.capturedAt }));
+  const readSystems = plan ? (plan.rule_code ? ['sql'] : [ENTITY_SOURCE[plan.entity]]) : [];
+  const sources = opts.sources
+    .filter((source) => readSystems.includes(source.system))
+    .map((source) => ({ ...source, asOf: opts.capturedAt }));
 
   if (!plan) {
     return {
       answer_id: answerId,
       question,
+      interpretationHe,
       plan: { metric: 'count', entity: 'resident' },
       rule: null,
       counts: { eligible: null, notEligible: null, unknown: null, total: null },
@@ -276,6 +441,10 @@ export function answerQuestion(
         steps: ['The question did not match a declared metric or rule, so no query was run.'],
         whatWasNotChecked: ['Everything: nothing was executed.'],
       },
+      explainHe: {
+        steps: ['השאלה לא תאמה מדד או כלל מוצהר, ולכן לא הורצה שאילתה.'],
+        whatWasNotChecked: ['הכול: דבר לא הורץ.'],
+      },
       gapsCreated: 0,
       refused: refusal,
     };
@@ -288,6 +457,7 @@ export function answerQuestion(
     return {
       answer_id: answerId,
       question,
+      interpretationHe: `כל ${ENTITY_DEF_HE[type]} במודל${suppressed ? '; המדד מוסתר בשל גודל תא מינימלי' : ''}.`,
       plan,
       rule: null,
       counts: { eligible: null, notEligible: null, unknown: null, total: null, value: suppressed ? null : count },
@@ -301,6 +471,10 @@ export function answerQuestion(
         ruleVersion: null,
         steps: [`Counted every ${type} page in the graph.`],
         whatWasNotChecked: ['Whether a count below the minimum cell size should be published.'],
+      },
+      explainHe: {
+        steps: [`נספרו כל ${ENTITY_HE[type]} בגרף.`],
+        whatWasNotChecked: ['האם מותר לפרסם מדד מתחת לגודל התא המינימלי.'],
       },
       gapsCreated: 0,
       refused: null,
@@ -319,13 +493,14 @@ export function answerQuestion(
     return {
       answer_id: answerId,
       question,
+      interpretationHe: `${interpretationHe} לא נמצאה גרסת כלל מאושרת ותקפה, ולכן לא הוצג מספר.`,
       plan,
       rule: null,
       counts: { eligible: null, notEligible: null, unknown: null, total: null },
       suppression: { applied: false, minCellSize: SUPPRESSION.minCellSize, owner: SUPPRESSION.owner },
       unknownReasons: [],
       provisional: true,
-      sources,
+      sources: [],
       freshness: opts.capturedAt,
       explain: {
         plan,
@@ -333,8 +508,12 @@ export function answerQuestion(
         steps: [`No approved rule version is in force on ${REFERENCE_DATE}.`],
         whatWasNotChecked: ['The count, because there is no approved rule to count with.'],
       },
+      explainHe: {
+        steps: [`אין גרסת כלל מאושרת ותקפה ל-${REFERENCE_DATE}.`],
+        whatWasNotChecked: ['הספירה — כי אין כלל מאושר לספור לפיו.'],
+      },
       gapsCreated: 0,
-      refused: 'No approved eligibility rule is in force for this date. The answer would be provisional; a rule owner has to approve one first.',
+      refused: 'אין גרסת כלל מאושרת ותקפה לתאריך הזה. התשובה תהיה בגדר טיוטה עד שבעל הכלל יאשר גרסה.',
     };
   }
 
@@ -344,6 +523,7 @@ export function answerQuestion(
   const answer: QueryAnswer = {
     answer_id: answerId,
     question,
+    interpretationHe: `כל ${evaluation.counts.total} משקי הבית במודל, לפי כלל ${inForce.code} גרסה ${inForce.version}${inForce.effective_from ? ` (בתוקף מ-${inForce.effective_from})` : ''}.`,
     plan,
     rule: {
       code: inForce.code,
@@ -376,6 +556,16 @@ export function answerQuestion(
       whatWasNotChecked: evaluation.unknownByReason.length
         ? evaluation.unknownByReason.map((r) => `${r.count} households: ${r.property} is missing, so ${r.label_en} cannot be decided.`)
         : ['Every criterion had the data it needed.'],
+    },
+    explainHe: {
+      steps: [
+        `נקראו ${evaluation.counts.total} משקי בית והתושבים שלהם מטבלאות מערכות ההפעלה.`,
+        `הופעל ${inForce.code} גרסה ${inForce.version}, בתוקף מ-${inForce.effective_from}, עם ${inForce.criteria.length} עילות בקישור ״${inForce.logic === 'any' ? 'או' : 'ו'}״.`,
+        'משק בית זכאי אם עילה אחת מתקיימת; לא ניתן להכריע אם אף עילה אינה מתקיימת וחסר נתון; אחרת — אינו זכאי.',
+      ],
+      whatWasNotChecked: evaluation.unknownByReason.length
+        ? evaluation.unknownByReason.map((r) => `${r.count} משקי בית: חסר ${r.property_label_he} (${r.property}), ולכן לא ניתן להכריע.`)
+        : ['לכל קריטריון היה הנתון הנדרש.'],
     },
     gapsCreated,
     refused: null,
