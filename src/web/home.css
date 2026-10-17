@@ -186,3 +186,5 @@ details ul { margin: 10px 0 0; padding-inline-start: 18px; font-size: 13px; colo
 .inferred { margin: 0 0 10px; padding-inline-start: 18px; font-size: 13px; color: var(--ink-2); }
 .inferred li { margin-bottom: 5px; }
 .ok-note { color: var(--accent) !important; font-weight: 600; }
+.saved { font-size: 12px !important; color: var(--accent) !important; margin: 8px 0 0 !important; }
+.saved::before { content: "✓ "; font-weight: 700; }

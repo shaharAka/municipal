@@ -109,6 +109,12 @@ function buildTour(platform: Platform) {
     .slice(0, 3)
     .map((m) => ({ subject: m.properties.subject, from: m.properties.from_address, received: String(m.properties.received_at).slice(0, 10) }));
   const responsibilities = platform.org.responsibilities.filter((r) => r.signal === 'mail').slice(0, 3);
+  const person = platform.graph.ofType('person').find((p) => /רכז|coordinator|רכזת/i.test(String(p.properties.job_title ?? '')))
+    ?? platform.graph.ofType('person')[0];
+  const personEvidence = person ? evidenceOf(platform, person.ref, 'job_title') : null;
+  const unitCounts = platform.org.units.map((u) => `${u.name} (${u.headcount})`);
+  const openGap = platform.graph.ofType('knowledge_candidate')
+    .find((p) => String(p.properties.proposed_by).includes('eligibility') && String(p.properties.candidate_kind) === 'property');
   const document = platform.report.documents.find((d) => /הנחה|תעריף/.test(d.name));
   const form = generateForm(platform.ontology, 'household', 'application', { only: ['household_size', 'income_band', 'discount_status'] });
   const answer = platform.answer;
@@ -126,6 +132,7 @@ function buildTour(platform: Platform) {
             locator: missingEvidence?.locator ?? 'dbo.households',
             excerpt: missingEvidence?.excerpt ?? 'income_band = NULL',
             didHe: 'המערכת קראה את טבלת משקי הבית. אין צורך שאף אחד יפיק קובץ או יבנה אקסל.',
+            savedHe: 'לא נשלחה פנייה לגזברות ולא נבנה אקסל.',
           },
           {
             kind: 'source',
@@ -133,6 +140,7 @@ function buildTour(platform: Platform) {
             locator: seniorEvidence?.locator ?? 'dbo.residents',
             excerpt: seniorEvidence?.excerpt ?? 'birth_date',
             didHe: `שדה תאריך הלידה הופך לגיל מול תאריך הייחוס. ${senior ? 'אחד התושבים עובר את גיל 67 ולכן משק הבית זכאי.' : ''}`,
+            savedHe: 'לא חושב גיל ידנית ולא נבדק תיק אחר תיק.',
           },
           {
             kind: 'result',
@@ -153,18 +161,80 @@ function buildTour(platform: Platform) {
             system: 'Exchange Online',
             items: messages,
             didHe: 'המערכת קראה הודעות אמיתיות של המחלקה: מי כתב, על מה, ומתי.',
+            savedHe: 'לא נשאל איש "מי מטפל בזה".',
           },
           {
             kind: 'inference',
             titleHe: 'מה נגזר מהן',
             items: responsibilities.map((r) => ({ name: platform.org.people.find((p) => p.ref === r.personRef)?.name ?? '', summary: r.summary })),
             didHe: 'כל אחריות היא הצעה עם מספר האירועים שמאחוריה — לא קביעה.',
+            savedHe: 'לא נכתב מסמך תפקידים ולא התקיים דיון.',
           },
           {
             kind: 'action',
             titleHe: 'מה האדם עושה',
             textHe: 'מאשר את האחריויות בקליק אחד. מרגע האישור הן הופכות לבסיס לניתוב ולשאלות.',
             action: { type: 'approve-responsibility', labelHe: 'אשר את האחריויות' },
+          },
+        ],
+      },
+      {
+        id: 'people',
+        titleHe: 'מי עובד כאן ומי אחראי',
+        promiseHe: 'מבנה הארגון מגיע מהמערכת, לא משאל.',
+        steps: [
+          {
+            kind: 'source',
+            system: 'Microsoft Entra ID · /users',
+            locator: personEvidence?.locator ?? '/users',
+            excerpt: personEvidence?.excerpt ?? 'job_title',
+            didHe: 'המערכת קראה את העובדים, התפקידים וקווי הדיווח מהמערכת הארגונית.',
+            savedHe: 'לא רואיינה אף אחת מהיחידות ולא עודכן ארגון ידני.',
+          },
+          {
+            kind: 'inference',
+            titleHe: 'היחידות שנגזרו',
+            items: unitCounts.map((label) => ({ name: label, summary: 'אנשים שמשויכים ליחידה' })),
+            didHe: 'השיוך ליחידה נגזר מהשדה הארגוני בכל רשומת עובד.',
+            savedHe: 'לא נבנה ארגון מחדש בתרשים.',
+          },
+          {
+            kind: 'action',
+            titleHe: 'מה האדם עושה',
+            textHe: 'מאשר הצעת טופס קליטה שנוצרה מהמודל — או דוחה אותה.',
+            action: { type: 'approve-responsibility', labelHe: 'אשר את האחריויות' },
+          },
+        ],
+      },
+      {
+        id: 'interview',
+        titleHe: 'איך סוגרים פער בלי פגישה',
+        promiseHe: 'שלוש שאלות, עם הניחוש המוכן מראש.',
+        steps: [
+          {
+            kind: 'source',
+            system: 'פער שזוהה מהתשובה',
+            locator: openGap?.title ?? '',
+            excerpt: String(openGap?.properties.evidence_summary ?? ''),
+            didHe: 'המערכת זיהתה שהפער חוסם החלטות, ומצאה מי מחזיק את הנתון לפי מפת הארגון.',
+            savedHe: 'לא נקבעה פגישה ולא נשלח מייל "מי יודע?".',
+          },
+          {
+            kind: 'inference',
+            titleHe: 'השאלות שנשלחו',
+            items: [
+              { name: 'איפה נשמר הנתון?', summary: 'ניחוש מוכן: גזברות' },
+              { name: 'מה לעשות כשהערך חסר?', summary: 'ניחוש מוכן: להשאיר לא ידוע' },
+              { name: 'מי יכול לספק אותו?', summary: 'נבחר מרשימת האחראים' },
+            ],
+            didHe: 'השאלות נגזרו מהפער, לא מתבנית שיחה כללית.',
+            savedHe: 'לא ניסחו שאלות ולא נבחרו נמענים.',
+          },
+          {
+            kind: 'action',
+            titleHe: 'התשובה משנה משהו',
+            textHe: 'התשובה נשמרת כראיה. סתירה לכלל יוצרת הצעה עם מספרי מה-יקרה-אם — והבעלים מאשר.',
+            action: { type: 'interview', labelHe: 'פתח וענה כמו משה' },
           },
         ],
       },
@@ -179,12 +249,14 @@ function buildTour(platform: Platform) {
             locator: document?.ref ?? '',
             excerpt: document ? `${document.name} · ${document.label}` : '',
             didHe: 'הנוהל והתעריף הם המקור לשדות שנדרשים מבקש.',
+            savedHe: 'לא נשלחה ספציפיקציה למפתחים.',
           },
           {
             kind: 'fields',
             titleHe: 'השדות שנגזרו מהמודל',
             items: form.fields.map((f) => ({ label: f.labelHe, rule: f.widget === 'select' ? `בחירה: ${f.options.join(' / ')}` : f.widget })),
             didHe: 'אותו מקור משמש גם ליצירת הטופס וגם לבדיקת התקינות. לכן הם לא יכולים לסתור זה את זה.',
+            savedHe: 'לא תוחזק טופס נפרד מהחוקים שלו.',
           },
           {
             kind: 'action',
