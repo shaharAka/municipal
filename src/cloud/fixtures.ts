@@ -315,13 +315,13 @@ const LABELS: LabelDef[] = [
 
 const STREETS = ['הרצל', 'בן גוריון', 'רוטשילד', 'העצמאות', 'הגנים', 'החרושת', 'המלאכה', 'אלון', 'שקמה', 'התאנה'] as const;
 const BUSINESS_KINDS = [
-  { he: 'מסעדה', en: 'Restaurant', risk: 'high' },
-  { he: 'פיצריה', en: 'Pizzeria', risk: 'high' },
-  { he: 'מכולת', en: 'Grocery', risk: 'medium' },
-  { he: 'קונדיטוריה', en: 'Patisserie', risk: 'high' },
-  { he: 'מזנון', en: 'Snack bar', risk: 'medium' },
-  { he: 'מאפייה', en: 'Bakery', risk: 'medium' },
-  { he: 'חנות פירות וירקות', en: 'Produce shop', risk: 'low' },
+  { he: 'מסעדה', of: 'מסעדת', en: 'Restaurant', risk: 'high' },
+  { he: 'פיצריה', of: 'פיצריית', en: 'Pizzeria', risk: 'high' },
+  { he: 'מכולת', of: 'מכולת', en: 'Grocery', risk: 'medium' },
+  { he: 'קונדיטוריה', of: 'קונדיטוריית', en: 'Patisserie', risk: 'high' },
+  { he: 'מזנון', of: 'מזנון', en: 'Snack bar', risk: 'medium' },
+  { he: 'מאפייה', of: 'מאפיית', en: 'Bakery', risk: 'medium' },
+  { he: 'חנות פירות וירקות', of: 'ירקניית', en: 'Produce shop', risk: 'low' },
 ] as const;
 
 const FIRST = ['דנה', 'יוסי', 'מיכל', 'אמיר', 'נועה', 'רבקה', 'איתן', 'סיגל', 'עומר', 'ליאור', 'טלי', 'הילה', 'רונית', 'גלית', 'משה', 'שירה', 'אביבה', 'יצחק', 'סימה', 'אליהו', 'ורד', 'בנימין'] as const;
@@ -506,7 +506,7 @@ export function buildFixture(profileId: string): Fixture {
     businesses.push({
       business_id: businessId,
       registry_number: String(int(rng, 510000000, 519999999)),
-      business_name: kind.he + ' ' + pick(rng, ['השכונה', 'המרכז', 'הגן', 'הוותיק', 'החדש']),
+      business_name: kind.of + ' ' + pick(rng, ['השכונה', 'המרכז', 'הגן', 'הכיכר', 'השוק']),
       category: kind.en,
       risk_level: kind.risk,
       address_raw: property.address_raw,

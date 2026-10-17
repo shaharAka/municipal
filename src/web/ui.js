@@ -27,8 +27,9 @@ export const sensitivityHe = (label) =>
 export const ltr = (v, cls = '') => `<span class="ltr${cls ? ` ${cls}` : ''}" dir="ltr">${esc(v)}</span>`;
 
 /** Escape a Hebrew sentence and isolate the Latin tokens inside it. */
+// Latin runs are isolated LTR; the lookbehind keeps entities such as &quot; intact.
 export const mixed = (v) =>
-  esc(v).replace(/([A-Za-z][A-Za-z0-9_.\-]*)/g, '<span class="ltr" dir="ltr">$1</span>');
+  esc(v).replace(/(?<![&#\w])([A-Za-z][A-Za-z0-9_.\-]*)/g, '<span class="ltr" dir="ltr">$1</span>');
 
 export const initials = (name) =>
   String(name ?? '')
@@ -105,6 +106,8 @@ export const roleKind = (label) => {
 
 export const NAV = {
   home: { label: 'בית', icon: 'home' },
+  rights: { label: 'מיצוי זכויות', icon: 'users' },
+  meetings: { label: 'מהישיבה למשימות', icon: 'flow' },
   approvals: { label: 'מרכז הכרעות', icon: 'decisions' },
   insights: { label: 'תמונת המחלקה', icon: 'chart' },
   sources: { label: 'מקורות', icon: 'database' },
@@ -112,12 +115,12 @@ export const NAV = {
 };
 
 export const NAV_BY_ROLE = {
-  head: ['home', 'approvals', 'insights', 'sources', 'workspace'],
-  clerk: ['home', 'approvals', 'insights', 'sources', 'workspace'],
-  secretary: ['home', 'approvals', 'sources', 'workspace'],
-  field: ['home', 'insights', 'workspace'],
-  rule: ['home', 'approvals', 'sources'],
-  steward: ['home', 'approvals', 'sources'],
+  head: ['home', 'rights', 'meetings', 'approvals', 'insights', 'sources', 'workspace'],
+  clerk: ['home', 'meetings', 'approvals', 'insights', 'sources', 'workspace'],
+  secretary: ['home', 'rights', 'meetings', 'approvals', 'sources', 'workspace'],
+  field: ['home', 'meetings', 'insights', 'workspace'],
+  rule: ['home', 'rights', 'approvals', 'sources'],
+  steward: ['home', 'meetings', 'approvals', 'sources'],
 };
 
 export const navFor = (kind) => NAV_BY_ROLE[kind] ?? NAV_BY_ROLE.clerk;

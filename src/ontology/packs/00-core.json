@@ -136,7 +136,7 @@
         "decision_id": { "type": "string" },
         "kind": {
           "type": "string",
-          "enum": ["automation_approved", "process_validated", "schema_candidate_accepted", "responsibility_confirmed", "eligibility_rule_approved"]
+          "enum": ["automation_approved", "process_validated", "schema_candidate_accepted", "responsibility_confirmed", "eligibility_rule_approved", "outreach_approved", "meeting_tasks_created"]
         },
         "status": { "type": "string", "enum": ["proposed", "approved", "rejected", "superseded"] },
         "decided_at": { "type": "string", "format": "date-time" },

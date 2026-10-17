@@ -188,8 +188,8 @@ export function research(source: SourceId, ctx: ResearchContext): Suggestion[] {
         source,
         kind: 'form',
         titleHe: 'טופס השלמת נתון הכנסה למשקי בית',
-        whyHe: `${missingIncome} משקי בית לא ניתנים להכרעה כי חסר נתון הכנסה. טופס קצר, שנגזר מהמודל, יכול לאסוף בדיוק את השדה הזה.`,
-        evidenceHe: [`${missingIncome} משקי בית חסרים`, 'השדה income_band', 'נגזר מטיפוס household'],
+        whyHe: `ל־${missingIncome} משקי בית אין נתון הכנסה, ובחלקם זה מונע הכרעה בזכאות. טופס קצר, שנגזר מהמודל, יכול לאסוף בדיוק את השדה הזה.`,
+        evidenceHe: [`${missingIncome} משקי בית בלי נתון הכנסה`, 'השדה: רמת הכנסה של משק הבית', 'נגזר מהמודל של משק בית'],
         action: {
           type: 'create_form',
           pageType: 'household',

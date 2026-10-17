@@ -294,10 +294,10 @@ export function proposeAutomations(model: ProcessModel): AutomationProposal[] {
           : kind === 'standard_letter'
             ? 'הפקת מכתב התיקונים מתוך ממצאי הביקורת'
             : 'תזכורת לרכזת הרישוי לפני חריגה מזמן שיבוץ הפיקוח',
-      rationaleHe: `${step.labels} ממתין חציון של ${step.medianWaitDays} ימים מרגע היצירה (${step.occurrences} מקרים). זה ${sharePct}% מתוך חציון של ${model.medianTotalDays} ימים לתיק.`,
+      rationaleHe: `בשלב "${step.labels}" תיק ממתין בחציון ${step.medianWaitDays} ימים (${step.occurrences} מקרים), כלומר ${sharePct}% מ־${model.medianTotalDays} הימים שתיק נמשך בחציון.`,
       evidenceHe: [
         `${step.occurrences} אירועים מתוך ${model.caseCount} תיקים`,
-        `חציון המתנה ${step.medianWaitDays} ימים, p90 ${step.p90WaitDays} ימים`,
+        `חציון המתנה ${step.medianWaitDays} ימים, 90% עד ${step.p90WaitDays} ימים`,
         `הנחה מוצהרת: ${reductionPct}% מההמתנה מוסרת`,
       ],
       step: step.activity,

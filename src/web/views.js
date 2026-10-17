@@ -45,7 +45,7 @@ const kindIcon = (kind) =>
 
 /* ------------------------------------------------------------------ landing */
 
-export function landingView({ viewers, answer, overview, approvals }) {
+export function landingView({ viewers, answer, overview, approvals, rights = null, meetings = null }) {
   const counts = answer?.counts ?? {};
   const total = Number(counts.total ?? 0) || 1;
   const org = overview?.org ?? {};
@@ -115,16 +115,17 @@ export function landingView({ viewers, answer, overview, approvals }) {
             </div>
           </div>
           <p class="eyebrow">גרסת הדגמה · נתונים סינתטיים</p>
-          <h1>העיר יודעת.<br><span>עכשיו אפשר לשאול.</span></h1>
+          <h1>העירייה יודעת.<br><span>עכשיו היא יכולה לפעול.</span></h1>
           <p class="landing-lead">
-            כל מה שהמחלקה עושה נמצא במערכות שלה. המערכת מחברת אותן, לומדת מהן,
-            ועונה על שאלות עם הכלל והמקור שמאחורי כל מספר — כולל מה שעדיין לא ידוע.
+            המערכת מתחברת למערכות הקיימות, לומדת איך המחלקה עובדת בפועל, ומציגה את מה שדורש פעולה:
+            תושבים שזכאים להטבה ולא מקבלים אותה, החלטות שנתקעו, ושלבים שבהם תיקים מחכים.
+            כל מספר מגיע עם הכלל והמקור, וכל פעולה מחכה לאישור של אדם.
           </p>
           ${preview}
           <ul class="landing-findings" aria-label="מה המערכת מצאה">
-            <li><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקוק</span><em>${num(bottleneckShare)}% מזמן התיק</em></li>
-            <li><b>${num(counts.unknown)}</b><span>משקי בית בלי נתון הכנסה</span><em>לא ניתן להכריע, לא אפס</em></li>
-            <li><b>${num(openResp)}</b><span>אחריויות שזוהו מהעבודה</span><em>${num(confirmedResp)} אושרו עדיין</em></li>
+            ${rights ? `<li><b>${num(rights.totals.unclaimedAnnual)} ₪</b><span>בשנה בהנחות ארנונה שלא מומשו</span><em>${rights.totals.notReceiving === null ? 'משקי בית זכאים שלא מקבלים' : `${num(rights.totals.notReceiving)} משקי בית זכאים ולא מקבלים`}</em></li>` : ''}
+            <li><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקבוק</span><em>${num(bottleneckShare)}% מזמן הטיפול בתיק</em></li>
+            ${meetings ? `<li><b>${num(meetings.counts.noOwner)}</b><span>החלטות הנהלה בלי אחראי</span><em>${num(meetings.counts.overdue)} באיחור · ${num(meetings.counts.open)} פתוחות</em></li>` : `<li><b>${num(openResp)}</b><span>אחריויות שזוהו מהעבודה</span><em>${num(confirmedResp)} אושרו עדיין</em></li>`}
           </ul>
         </section>
 
@@ -143,7 +144,7 @@ export function landingView({ viewers, answer, overview, approvals }) {
       </div>
       <footer class="landing-foot">
         <span>${icon('lock')} קריאה בלבד מהמערכות · הרשאות המקור נשמרות</span>
-        <span>עודכן ${shortDate(overview?.organization?.capturedAt)} · POC</span>
+        <span>נכון ל־${shortDate(overview?.organization?.capturedAt)} · גרסת הדגמה</span>
       </footer>
     </div>`;
 }
@@ -169,7 +170,7 @@ export function roleSheetBody(viewers) {
 
 /* --------------------------------------------------------------------- home */
 
-export function homeView({ viewer, kind, overview, answer, org, process, approvals, interviews, connectors, gap }) {
+export function homeView({ viewer, kind, overview, answer, org, process, approvals, interviews, connectors, gap, valueStrip = '' }) {
   const person = parsePerson(viewer?.label);
   const pending = approvals?.pending?.length ?? 0;
   const openInterviews = (interviews?.interviews ?? []).filter((i) => i.status === 'open');
@@ -194,10 +195,11 @@ export function homeView({ viewer, kind, overview, answer, org, process, approva
           <h1>שלום, ${esc(person.name.split(' ')[0])}</h1>
           <p class="page-sub">${esc(headline)}</p>
         </div>
-        <span class="head-status">${icon('check')} מחובר/ת · ${esc(person.title)}</span>
       </header>
 
       ${roleHomeBlock({ kind, overview, answer, org, process, approvals, openInterviews, mine, viewer })}
+
+      ${valueStrip}
 
       <div class="home-columns">
         <section class="home-main" aria-labelledby="focus-title">
@@ -217,6 +219,9 @@ export function homeView({ viewer, kind, overview, answer, org, process, approva
 function roleHomeBlock({ kind, overview, answer, org, process, approvals, openInterviews, mine, viewer }) {
   const cases = overview?.cases;
   const myWork = cases?.myWork;
+  // The last activity of every measured variant: a case whose latest event is one of
+  // these has finished its steps, so it is waiting to be closed, not waiting on a person.
+  const finals = new Set((process?.model?.variants ?? []).map((variant) => (variant.sequence ?? []).at(-1)).filter(Boolean));
   if (kind === 'head') {
     const open = Number(cases?.open ?? 0);
     const overdue = Number(cases?.overdue ?? 0);
@@ -227,30 +232,34 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
     const gapCount = Number(answer?.counts?.unknown ?? 0);
     const openResp = Number(overview?.org?.openResponsibilities ?? 0);
     const confirmedResp = Number(overview?.org?.confirmedResponsibilities ?? 0);
+    const finalCases = (cases?.openCases ?? []).filter((entry) => finals.has(entry.stage));
+    const finalOpen = finalCases.length;
+    const oldestFinal = Math.max(0, ...finalCases.map((entry) => Number(entry.ageDays) || 0));
     return `
       <section class="role-block role-head">
         <header class="role-block-head">
           <div>
             <p class="eyebrow">המחלקה במבט אחד</p>
-            <h2>${num(open)} תיקים פתוחים · ${num(overdue)} חריגים מול SLA</h2>
-            <p>הזמן נמדד מיומן התיקים. ${num(median)} יום חציון לתיק, ${num(bottleneckDays)} ימים בצוואר הבקוק.</p>
+            <h2>${num(open)} תיקים פתוחים · ${num(overdue)} חורגים מהיעד</h2>
+            <p>הזמן נמדד מיומן התיקים: משך חציוני של ${num(median)} ימים לתיק, ומתוכם ${num(bottleneckDays)} ימים בצוואר הבקבוק.</p>
           </div>
           <button class="btn btn-quiet btn-small" type="button" data-open-palette>${icon('search')} שאלו שאלה</button>
         </header>
         <div class="role-metrics">
           <div><b>${num(open)}</b><span>תיקים פתוחים</span></div>
-          <div class="is-warn"><b>${num(overdue)}</b><span>חריגים מול SLA ${num(cases?.slaDays ?? 30)} יום</span></div>
-          <div><b>${num(median)}</b><span>יום חציון לתיק</span></div>
-          <div><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקוק</span></div>
+          <div class="is-warn"><b>${num(overdue)}</b><span>חורגים מיעד של ${num(cases?.slaDays ?? 30)} ימים</span></div>
+          <div><b>${num(median)}</b><span>ימים, משך חציוני לתיק</span></div>
+          <div><b>${num(bottleneckDays)}</b><span>ימים בצוואר הבקבוק</span></div>
         </div>
         <div class="role-lower">
           <div class="stage-block">
             <h3>תיקים פתוחים לפי שלב</h3>
-            ${(cases?.stages ?? []).map((stage) => `<div class="stage-row"><span>${esc(stage.label)}</span><div class="bar"><i style="width:${Math.round((Number(stage.count) / Math.max(1, open)) * 100)}%"></i></div><b>${num(stage.count)}</b></div>`).join('') || '<p class="muted">אין תיקים פתוחים.</p>'}
+            ${(cases?.stages ?? []).map((stage) => `<div class="stage-row"><span>${finals.has(stage.activity) ? `${esc(stage.label)} · השלב האחרון, התיק לא נסגר` : esc(stage.label)}</span><div class="bar"><i style="width:${Math.round((Number(stage.count) / Math.max(1, open)) * 100)}%"></i></div><b>${num(stage.count)}</b></div>`).join('') || '<p class="muted">אין תיקים פתוחים.</p>'}
           </div>
           <div class="findings-block">
             <h3>מה גילינו</h3>
-            <a class="finding-row" href="#/insights"><span class="finding-num">${num(bottleneckDays)}</span><div><strong>${esc(bottleneck?.labels ?? '')} הוא צוואר הבקוק</strong><p>${num(share)}% מזמן התיק. ${num(bottleneck?.occurrences ?? 0)} תיקים נמדדו.</p></div></a>
+            ${finalOpen ? `<div class="finding-row"><span class="finding-num">${num(finalOpen)}</span><div><strong>תיקים שסיימו את כל השלבים ולא נסגרו</strong><p>השלב האחרון ביומן בוצע, אבל התיק עדיין פתוח: ${num(oldestFinal)} ימים בתיק הוותיק ביותר.</p></div></div>` : ''}
+            <a class="finding-row" href="#/insights"><span class="finding-num">${num(bottleneckDays)}</span><div><strong>${esc(bottleneck?.labels ?? '')} הוא צוואר הבקבוק</strong><p>${num(share)}% מזמן התיק. ${num(bottleneck?.occurrences ?? 0)} תיקים נמדדו.</p></div></a>
             <div class="finding-row"><span class="finding-num">${num(gapCount)}</span><div><strong>משקי בית בלי נתון הכנסה</strong><p>לא ניתן להכריע בזכאות. השאלה נשלחת מהרכזת אל משה טל, ובעל הכלל מכריע.</p></div></div>
             <a class="finding-row" href="#/insights"><span class="finding-num">${num(openResp)}</span><div><strong>אחריויות שזוהו מהעבודה</strong><p>${num(confirmedResp)} אושרו עדיין. האחריות מוצגת לאדם עצמו, לא למנהל.</p></div></a>
           </div>
@@ -261,13 +270,14 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
   if (kind === 'clerk') {
     const myCases = myWork?.myCases ?? [];
     const overdue = myCases.filter((entry) => entry.overdue).length;
+    const unclosed = myCases.filter((entry) => finals.has(entry.stage)).length;
     return `
       <section class="role-block role-clerk">
         <header class="role-block-head">
           <div>
             <p class="eyebrow">התור שלך</p>
-            <h2>${num(myCases.length)} תיקים פתוחים · ${num(overdue)} חריגים</h2>
-            <p>לפי השלב האחרון ביומן התיק. הזמן נמדד מתאריך פתיחת התיק.</p>
+            <h2>${num(myCases.length)} תיקים פתוחים · ${unclosed ? `${num(unclosed)} סיימו את כל השלבים ולא נסגרו` : `${num(overdue)} חורגים מהיעד`}</h2>
+            <p>${unclosed ? 'השלב האחרון ביומן בוצע, אבל התיק לא נסגר. סגירה מסודרת תוציא אותם מהתור ומספירת החריגים.' : 'לפי השלב האחרון ביומן התיק. הזמן נמדד מתאריך פתיחת התיק.'}</p>
           </div>
           <a class="text-link" href="#/approvals">להחלטות שלי ${icon('arrowLeft')}</a>
         </header>
@@ -277,15 +287,15 @@ function roleHomeBlock({ kind, overview, answer, org, process, approvals, openIn
                 .slice(0, 5)
                 .map(
                   (entry) => `<button class="case-row" type="button" data-record="${esc(entry.ref)}">
-                    <span class="case-row-main"><strong>${esc(entry.subjectName)}</strong><span>${esc(entry.stageLabel)} · ${esc(entry.serviceLabel)}</span></span>
-                    <span class="case-row-meta">${num(entry.ageDays)} ימים${entry.overdue ? ` · ${badge('חריג', 'red')}` : ''}</span>
+                    <span class="case-row-main"><strong>${esc(entry.subjectName)}</strong><span>${finals.has(entry.stage) ? `${esc(entry.stageLabel)} בוצע · ממתין לסגירת התיק` : esc(entry.stageLabel)} · ${esc(entry.serviceLabel)}</span></span>
+                    <span class="case-row-meta">${num(entry.ageDays)} ימים פתוח${entry.overdue ? ` · ${badge('חורג מהיעד', 'red')}` : ''}</span>
                     ${icon('arrowLeft')}
                   </button>`,
                 )
                 .join('')}${myCases.length > 5 ? `<p class="rail-note">ועוד ${num(myCases.length - 5)} תיקים ב<a href="#/insights">תמונת המחלקה</a>.</p>` : ''}</div>`
             : '<p class="muted">אין תיקים פתוחים בתור שלך כרגע.</p>'
         }
-        <div class="role-block-foot">${icon('info')} ${num(overdue)} חריגים מול SLA ${num(cases?.slaDays ?? 30)} יום. ${icon('clock')} הזמן נמדד מתאריך פתיחת התיק.</div>
+        <div class="role-block-foot">${icon('info')} ${num(overdue)} תיקים חורגים מיעד של ${num(cases?.slaDays ?? 30)} ימים. ${icon('clock')} הזמן נמדד מתאריך פתיחת התיק.</div>
       </section>`;
   }
 
@@ -454,9 +464,10 @@ function focusItems({ kind, approvals, process, gap, openInterviews, pending }) 
     items.push({
       tone: 'green',
       icon: 'check',
-      reason: 'הכל מטופל',
-      title: 'אין דבר שממתין לך',
-      why: 'השאלות נענו וההצעות טופלו. אפשר לשאול שאלה חדשה או לפתוח את תמונת המחלקה.',
+      empty: true,
+      reason: 'אין החלטות פתוחות',
+      title: 'אין החלטה שממתינה לך',
+      why: 'שום החלטה במרכז ההכרעות לא מחכה לך כרגע. עבודה יזומה, אם יש, מופיעה למעלה.',
       impact: '0 פתוחים',
       cta: kind === 'field' ? 'למערכות' : navFor(kind).includes('insights') ? 'לתמונת המחלקה' : 'למרכז ההכרעות',
       href: emptyHref,
@@ -474,7 +485,7 @@ function focusList(items, name, showMore = false, totalPending = 0) {
           <h2 id="focus-title">מה מחכה ל${esc(name.split(' ')[0])}</h2>
         </div>
         <div class="focus-head-actions">
-          <span class="section-count">${items.length === 1 ? 'פריט אחד' : `${items.length} פריטים`}</span>
+          <span class="section-count">${items.some((item) => item.empty) ? 'אין פריטים פתוחים' : items.length === 1 ? 'פריט אחד' : `${items.length} פריטים`}</span>
           ${showMore ? `<a class="text-link" href="#/approvals">לכל ${totalPending ? `${num(totalPending)} ` : ''}ההחלטות ${icon('arrowLeft')}</a>` : ''}
         </div>
       </header>
@@ -908,7 +919,7 @@ function waitDistribution(item) {
   const medianBin = Math.min(binCount - 1, Math.floor(median / size));
   return `
     <div class="wait-histogram">
-      <div class="hist-head"><h3>התפלגות ההמתנה</h3><span>${num(samples.length)} דגימות · חציון ${num(median)} יום · p90 ${num(p90)}</span></div>
+      <div class="hist-head"><h3>התפלגות ההמתנה</h3><span>${num(samples.length)} תיקים · חציון ${num(median)} ימים · 90% עד ${num(p90)} ימים</span></div>
       <div class="hist-bars">
         ${bins
           .map(
@@ -1108,7 +1119,7 @@ export function sourceConsentBody(source) {
     <div class="consent-block"><h3>${icon('eye')} מה ייקרא</h3><p>${esc(consent.scopeHe ?? source.unlocksHe)}</p></div>
     <div class="consent-block"><h3>${icon('shield')} מי אישר</h3><ul>${(consent.approversHe ?? []).map((name) => `<li>${esc(name)}</li>`).join('')}</ul><p>${esc(consent.dpiaHe ?? '')}</p></div>
     <div class="consent-block"><h3>${icon('users')} הזכות לאי-השתתפות</h3><p>${esc(consent.optOutHe ?? '')}</p></div>
-    <div class="sheet-note">${icon('info')} ב-POC האישורים מוצגים כתנאי לחיבור, אך לא נשמרת חתימה משפטית. חיבור בסביבה אמיתית מותנה באישור ובבדיקת פרטיות.</div>
+    <div class="sheet-note">${icon('info')} בהדגמה הזו האישורים מוצגים כתנאי לחיבור, אך לא נשמרת חתימה משפטית. חיבור בסביבה אמיתית מותנה באישור ובבדיקת פרטיות.</div>
     <div class="sheet-actions"><button class="btn" type="button" data-source-consent="${esc(source.id)}">אשרו והפעילו</button><button class="btn btn-quiet" type="button" data-close-sheet>לא עכשיו</button></div>`;
 }
 
@@ -1127,7 +1138,11 @@ export function insightsView({ overview, org, process, service, proposals, canAp
   const people = org?.people ?? [];
   const responsibilities = (org?.responsibilities ?? [])
     .filter((r) => r.signal === 'case-events')
-    .sort((a, b) => b.support - a.support)
+    .sort((a, b) => b.support - a.support);
+  // One row per person with their activities as chips: the same person four rows in a row reads as a bug.
+  const byPerson = [...responsibilities.reduce((map, r) => map.set(r.personRef, [...(map.get(r.personRef) ?? []), r]), new Map())]
+    .map(([personRef, items]) => ({ personRef, items, total: items.reduce((a, r) => a + Number(r.support || 0), 0) }))
+    .sort((a, b) => b.total - a.total)
     .slice(0, 6);
   const pendingProposals = (proposals ?? []).filter((p) => p.status !== 'approved');
   const nameOf = (ref) => people.find((p) => p.ref === ref)?.name ?? '';
@@ -1138,7 +1153,7 @@ export function insightsView({ overview, org, process, service, proposals, canAp
         <div>
           <p class="eyebrow">תמונת המחלקה</p>
           <h1>איך באמת עובדת המחלקה</h1>
-          <p class="page-sub">התהליך זוהה מלוג התיקים, לא נכתב ביד. הזמן נמדד בין אירוע לאירוע — לא הוערך.</p>
+          <p class="page-sub">התהליך זוהה מיומן התיקים, לא נכתב ביד. הזמן נמדד בין אירוע לאירוע — לא הוערך.</p>
         </div>
         <div class="head-status">${icon('flow')} ${num(model?.caseCount)} תיקים · ${num(model?.windowDays)} ימי תצפית</div>
       </header>
@@ -1148,9 +1163,9 @@ export function insightsView({ overview, org, process, service, proposals, canAp
       </div>
 
       <div class="kpi-strip">
-        <div class="kpi"><b>${num(model?.medianTotalDays)}</b><span>יום חציון לתיק</span><small>p90 · ${num(model?.p90TotalDays)} יום</small></div>
+        <div class="kpi"><b>${num(model?.medianTotalDays)}</b><span>ימים, משך חציוני לתיק</span><small>90% מהתיקים עד ${num(model?.p90TotalDays)} ימים</small></div>
         <div class="kpi"><b>${num(variants.length)}</b><span>מסלולים שונים</span><small>בתצפית הזו כל תיק שייך לאחד מהם</small></div>
-        <div class="kpi kpi-warn"><b>${num(bottleneck?.medianWaitDays)}</b><span>ימים בצוואר הבקוק</span><small>${esc(bottleneck?.labels ?? '')} · ${pct(Number(bottleneck?.medianWaitDays ?? 0) / Math.max(1, Number(model?.medianTotalDays ?? 1)))} מהזמן</small></div>
+        <div class="kpi kpi-warn"><b>${num(bottleneck?.medianWaitDays)}</b><span>ימים בצוואר הבקבוק</span><small>${esc(bottleneck?.labels ?? '')} · ${pct(Number(bottleneck?.medianWaitDays ?? 0) / Math.max(1, Number(model?.medianTotalDays ?? 1)))} מהזמן</small></div>
         <div class="kpi"><b>${num(pendingProposals.length)}</b><span>אוטומציות מוצעות</span><small>מבוססות על השלבים שנמדדו</small></div>
       </div>
 
@@ -1159,7 +1174,7 @@ export function insightsView({ overview, org, process, service, proposals, canAp
           <div><p class="eyebrow">המסלול הנפוץ</p><h2>${esc(current?.nameHe ?? '')}: ${num(variants[0]?.caseCount)} תיקים, ${num(variants[0]?.medianDays)} ימים</h2></div>
           <div class="flow-status">
             ${model?.status === 'validated' ? `<span class="status-pill status-on">${icon('check')} תהליך מאושר</span>` : `<span class="status-pill">${icon('clock')} תהליך שנמדד · ממתין לאישור</span>`}
-            ${model?.status !== 'validated' && canApprove ? `<button class="btn btn-small" type="button" data-validate-process="${esc(model?.serviceCode ?? service)}">אשר שהתהליך הזה נכון</button>` : ''}
+            ${model?.status !== 'validated' && canApprove ? `<button class="btn btn-small" type="button" data-validate-process="${esc(model?.serviceCode ?? service)}">אישור התהליך כפי שנמדד</button>` : ''}
             <span class="section-count">${icon('clock')} המתנה חציונית</span>
           </div>
         </div>
@@ -1167,7 +1182,7 @@ export function insightsView({ overview, org, process, service, proposals, canAp
         <p class="flow-hint">${icon('arrowLeft')} גללו לרוחב כדי לראות את כל ${num((variants[0]?.sequence ?? []).length)} השלבים</p>
         <div class="flow-legend">
           <span><i class="lg lg-measured"></i> נמדד מהלוג</span>
-          <span><i class="lg lg-bottleneck"></i> צוואר בקוק</span>
+          <span><i class="lg lg-bottleneck"></i> צוואר בקבוק</span>
           <span><i class="lg lg-proposed"></i> מוצע לאישור</span>
           <span><i class="lg lg-gate"></i> שער אישור אדם</span>
         </div>
@@ -1244,9 +1259,9 @@ export function insightsView({ overview, org, process, service, proposals, canAp
         </div>
         <div class="resp-list">
           <h3 class="sheet-subtitle">מה כל אחד עושה בפועל</h3>
-          ${responsibilities
+          ${byPerson
             .map(
-              (r) => `<div class="resp-row"><span class="avatar avatar-2">${esc(initials(nameOf(r.personRef)))}</span><div><strong>${esc(nameOf(r.personRef))}</strong><p>${mixed(r.summaryHe ?? r.summary)}</p></div><span class="resp-support">${num(r.support)} אירועים</span></div>`,
+              (p) => `<div class="resp-row"><span class="avatar avatar-2">${esc(initials(nameOf(p.personRef)))}</span><div><strong>${esc(nameOf(p.personRef))}</strong><p class="resp-acts">${p.items.map((r) => `<span class="resp-act">${esc(r.activityLabel ?? '')} · ${num(r.support)}</span>`).join('')}</p></div><span class="resp-support">${num(p.total)} פעולות</span></div>`,
             )
             .join('')}
         </div>
@@ -1281,8 +1296,8 @@ function flowTrack(sequence, steps, bottleneck, proposals) {
         ${index === 0 ? '<span class="flow-start">התחלה</span>' : ''}
         <span class="flow-index">${num(step.occurrences)}</span>
         <strong>${esc(step.labels)}</strong>
-        <span class="flow-wait ${step.medianWaitDays > 0 ? '' : 'is-zero'}">${step.medianWaitDays > 0 ? `המתנה ${num(step.medianWaitDays)} ימים` : 'ללא המתנה'}</span>
-        ${isBottleneck ? `<span class="flow-flag">${icon('alert')} צוואר בקוק</span>` : ''}
+        <span class="flow-wait ${step.medianWaitDays > 0 ? '' : 'is-zero'}">${step.medianWaitDays > 1 ? `המתנה ${num(step.medianWaitDays)} ימים` : step.medianWaitDays === 1 ? 'המתנה של יום' : 'ללא המתנה'}</span>
+        ${isBottleneck ? `<span class="flow-flag">${icon('alert')} צוואר בקבוק</span>` : ''}
         ${proposedSteps.has(activity) ? `<span class="flow-flag flag-proposed">${icon('spark')} מוצע כאן</span>` : ''}
       </div>
       ${index < sequence.length - 1 ? `<span class="flow-link" aria-hidden="true">${icon('arrowLeft')}</span>` : ''}`;

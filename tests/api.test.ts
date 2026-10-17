@@ -299,7 +299,7 @@ test('the ask box refuses a filter it cannot map instead of dropping it', async 
   const caseStatus = await ask('מה הסטטוס של תיק CASE-0001?');
   assert.equal(caseStatus.assistant.kind, 'case');
   assert.equal(caseStatus.assistant.case.status, 'CLOSED');
-  assert.equal(caseStatus.assistant.case.subjectName, 'מאפייה השכונה');
+  assert.equal(caseStatus.assistant.case.subjectName, 'מאפיית השכונה');
 
   const filterRefusal = await ask('כמה עסקים ממתינים לפיקוח כרגע?');
   assert.match(filterRefusal.interpretationHe, /עסקים/);

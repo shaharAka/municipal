@@ -15,6 +15,7 @@ import {
   NAV,
 } from './ui.js';
 import * as views from './views.js';
+import * as value from './value.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 
@@ -134,14 +135,16 @@ async function renderLanding() {
   if (!main) return;
   main.innerHTML = `<div class="landing-loading"><span class="mark">${icon('building')}</span><p>טוען את מפת העיר…</p></div>`;
   try {
-    const [viewers, answer, overview, approvals] = await Promise.all([
+    const [viewers, answer, overview, approvals, rights, meetings] = await Promise.all([
       api('/api/viewers').catch(() => ({ viewers: state.viewers ?? [] })),
       api('/api/answer').catch(() => null),
       api('/api/overview').catch(() => null),
       api('/api/approvals?scope=all').catch(() => null),
+      api('/api/rights').catch(() => null),
+      api('/api/meetings').catch(() => null),
     ]);
     state.viewers = viewers.viewers ?? [];
-    main.innerHTML = views.landingView({ viewers: state.viewers, answer, overview, approvals });
+    main.innerHTML = views.landingView({ viewers: state.viewers, answer, overview, approvals, rights, meetings });
     document.title = 'כניסה · מערכת המידע העירונית';
     const sidebar = $('#sidebar');
     if (sidebar) sidebar.innerHTML = '';
@@ -183,7 +186,7 @@ function renderChrome() {
     <nav class="side-nav" aria-label="ניווט ראשי">
       <p class="side-label">העבודה שלי</p>
       ${tabs
-        .filter((id) => ['home', 'approvals', 'insights'].includes(id))
+        .filter((id) => ['home', 'rights', 'meetings', 'approvals', 'insights'].includes(id))
         .map(
           (id) => `<a class="nav-item ${state.tab === id ? 'is-active' : ''}" href="#/${id}" aria-label="${NAV[id].label}" title="${NAV[id].label}" ${state.tab === id ? 'aria-current="page"' : ''}>
             ${icon(NAV[id].icon)}<span>${NAV[id].label}</span>
@@ -241,12 +244,13 @@ async function renderMain() {
   try {
     let html = '';
     if (state.tab === 'home') {
-      const [overview, answer, org, process, interviews] = await Promise.all([
+      const [overview, answer, org, process, interviews, valueStrip] = await Promise.all([
         api('/api/overview'),
         api('/api/answer'),
         api('/api/org'),
         api('/api/process?service=LIC'),
         api('/api/interviews'),
+        value.homeStrip({ api, kind }).catch(() => ''),
       ]);
       state.answer = answer;
       const approvals = state.shell.approvals;
@@ -262,6 +266,7 @@ async function renderMain() {
         interviews,
         connectors: state.shell.connectors,
         gap,
+        valueStrip,
       });
     } else if (state.tab === 'approvals') {
       const approvals = await api('/api/approvals');
@@ -286,6 +291,9 @@ async function renderMain() {
       const connectors = await api('/api/connectors');
       state.shell = { ...state.shell, connectors };
       html = views.sourcesView({ connectors, showInsights: navFor(kind).includes('insights'), kind });
+    } else if (state.tab === 'rights' || state.tab === 'meetings') {
+      value.bind({ api, kind, refresh: async () => { invalidate(); await render(); } });
+      html = state.tab === 'rights' ? await value.rightsPage() : await value.meetingsPage();
     } else if (state.tab === 'workspace') {
       const [outlook, doclib] = await Promise.all([api('/api/outlook'), api('/api/doclib')]);
       html = views.workspaceView({ outlook, doclib, ws: state.ws, kind });
@@ -760,7 +768,7 @@ document.addEventListener('click', async (event) => {
       await renderMain();
     } catch (error) {
       validateProcess.disabled = false;
-      validateProcess.textContent = 'אשר שהתהליך הזה נכון';
+      validateProcess.textContent = 'אישור התהליך כפי שנמדד';
       toast(error.message, 'error');
     }
     return;

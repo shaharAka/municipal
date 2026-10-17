@@ -20,6 +20,7 @@ import { generateForm, proposeValues, validateSubmission, type FormKind } from '
 import { answerInterview, listInterviews, openInterview, ATTENTION } from './interviews/engine.ts';
 import { SOURCES, research, approveSuggestion, type Suggestion, type SourceId } from './research/sources.ts';
 import { refFor, type Viewer } from './graph/graph.ts';
+import { handleValueApi } from './value/api.ts';
 
 const WEB = new URL('./web/', import.meta.url).pathname;
 
@@ -1051,7 +1052,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       waitP90: p.waitP90,
       waitCount: p.waitCount,
       whatHappensHe:
-        'האישור רושם החלטה ומסמן את האוטומציה כמאושרת. ב-POC אין מנוע הרצה המחובר לתור אמיתי, ולכן לא נשלחת הודעה בפועל; אין כתיבה חזרה למערכות המקור.',
+        'האישור רושם החלטה ומסמן את האוטומציה כמאושרת. בהדגמה הזו אין מנוע הרצה המחובר לתור אמיתי, ולכן לא נשלחת הודעה בפועל; אין כתיבה חזרה למערכות המקור.',
     }));
 
     const openCandidates = platform.graph
@@ -1481,6 +1482,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     }
     return json(res, 200, { candidates: platform.report.schemaCandidates });
   }
+  if ((parts[1] === 'rights' || parts[1] === 'meetings') && (await handleValueApi(req, res, platform, viewer, url, parts, viewerName(platform, viewer)))) return;
   return json(res, 404, { error: 'unknown endpoint', path: url.pathname });
 }
 
