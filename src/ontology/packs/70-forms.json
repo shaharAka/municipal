@@ -6,19 +6,72 @@
     "form_definition": {
       "description": "A generated form, with the page type it collects and the field set a person approved.",
       "properties": {
-        "form_id": { "type": "string" },
-        "name_he": { "type": "string" },
-        "page_type": { "type": "string" },
-        "kind": { "type": "string", "enum": ["interview", "application", "internal"] },
-        "field_count": { "type": "integer", "minimum": 1 },
-        "direction": { "type": "string", "enum": ["rtl", "ltr"] },
-        "status": { "type": "string", "enum": ["draft", "approved"] },
-        "generated_at": { "type": "string", "format": "date-time" },
-        "source_ref": { "type": "string" },
-        "provenance": { "$ref": "#/defs/provenance" }
+        "form_id": {
+          "type": "string"
+        },
+        "name_he": {
+          "type": "string"
+        },
+        "page_type": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "interview",
+            "application",
+            "internal"
+          ]
+        },
+        "field_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "rtl",
+            "ltr"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "approved"
+          ]
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_ref": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/defs/provenance"
+        }
       },
-      "required": ["form_id", "name_he", "page_type", "kind", "field_count", "status", "generated_at"]
+      "required": [
+        "form_id",
+        "name_he",
+        "page_type",
+        "kind",
+        "field_count",
+        "status",
+        "generated_at"
+      ]
     }
   },
-  "edge_kinds": {}
+  "edge_kinds": {
+    "form_for": {
+      "description": "The service a generated form serves.",
+      "from": [
+        "form_definition"
+      ],
+      "to": [
+        "service"
+      ]
+    }
+  }
 }

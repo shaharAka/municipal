@@ -80,7 +80,7 @@ export type Suggestion = {
     | { type: 'validate_process'; processCode: string }
     | { type: 'approve_automation'; proposalRef: string }
     | { type: 'confirm_responsibilities' }
-    | { type: 'create_form'; pageType: string; formKind: FormKind; nameHe: string; only?: string[] };
+    | { type: 'create_form'; pageType: string; formKind: FormKind; nameHe: string; only?: string[]; serviceCode?: string };
   status: 'new' | 'approved';
   artifact?: Artifact;
 };
@@ -160,7 +160,7 @@ export function research(source: SourceId, ctx: ResearchContext): Suggestion[] {
       titleHe: 'טופס בקשת הנחה באגרת תברואה',
       whyHe: 'הנוהל והתעריף קובעים אילו שדות נדרשים. הטופס נגזר מהם ומהמודל, ולכן לא סוטה מהם.',
       evidenceHe: ['נוהל הנחות באגרת תברואה', 'תעריף אגרת תברואה 2026', `${ctx.graph.ofType('household').length} משקי בית במודל`],
-      action: { type: 'create_form', pageType: 'household', formKind: 'application', nameHe: 'בקשה להנחה באגרת תברואה', only: ['household_size', 'income_band', 'discount_status'] },
+      action: { type: 'create_form', pageType: 'household', formKind: 'application', nameHe: 'בקשה להנחה באגרת תברואה', only: ['household_size', 'income_band', 'discount_status'], serviceCode: 'FEE' },
       status: 'new',
     });
   }
@@ -196,7 +196,7 @@ export function research(source: SourceId, ctx: ResearchContext): Suggestion[] {
 
 /** Applies an approved suggestion, and only then does it change anything. */
 export function approveSuggestion(suggestion: Suggestion, ctx: ResearchContext): Artifact {
-  const decision = (subjectRef: string, labelHe: string, kind: string): Artifact | null => {
+  const decision = (subjectRef: string, labelHe: string, kind: string): string => {
     const ref = refFor('decision', stableId('DEC', suggestion.id).replace('DEC-', ''));
     if (!ctx.graph.page(ref)) {
       ctx.graph.addPage({ ref, type: 'decision', title: labelHe, properties: {}, createdAt: ctx.capturedAt });
@@ -220,7 +220,8 @@ export function approveSuggestion(suggestion: Suggestion, ctx: ResearchContext):
         });
       }
     }
-    return null;
+    ctx.graph.addEdge({ kind: 'approves', from: ref, to: subjectRef });
+    return ref;
   };
 
   if (suggestion.action.type === 'validate_process') {
@@ -278,15 +279,16 @@ export function approveSuggestion(suggestion: Suggestion, ctx: ResearchContext):
     return { kind: 'responsibilities', ref: refFor('org_unit', 'department'), labelHe: `${count} אחריויות אושרו`, count };
   }
 
-  const spec = generateForm(ctx.ontology, suggestion.action.pageType, suggestion.action.formKind, {
-    only: suggestion.action.only,
-    titleHe: suggestion.action.nameHe,
+  const formAction = suggestion.action;
+  const spec = generateForm(ctx.ontology, formAction.pageType, formAction.formKind, {
+    only: formAction.only,
+    titleHe: formAction.nameHe,
   });
   const ref = refFor('form_definition', spec.form_id);
-  ctx.graph.addPage({ ref, type: 'form_definition', title: suggestion.action.nameHe, properties: {}, createdAt: ctx.capturedAt });
+  ctx.graph.addPage({ ref, type: 'form_definition', title: formAction.nameHe, properties: {}, createdAt: ctx.capturedAt });
   const values: Record<string, unknown> = {
     form_id: spec.form_id,
-    name_he: suggestion.action.nameHe,
+    name_he: formAction.nameHe,
     page_type: spec.page_type,
     kind: spec.kind,
     field_count: spec.fields.length,
@@ -306,5 +308,10 @@ export function approveSuggestion(suggestion: Suggestion, ctx: ResearchContext):
     });
   }
   decision(ref, 'אישור טופס', 'schema_candidate_accepted');
-  return { kind: 'form', ref, labelHe: `${suggestion.action.nameHe} · ${spec.fields.length} שדות`, spec };
+  // The form is now connected to the service it collects a request for.
+  if (formAction.serviceCode) {
+    const serviceRef = refFor('service', formAction.serviceCode);
+    if (ctx.graph.page(serviceRef)) ctx.graph.addEdge({ kind: 'form_for', from: ref, to: serviceRef });
+  }
+  return { kind: 'form', ref, labelHe: `${formAction.nameHe} · ${spec.fields.length} שדות`, spec };
 }

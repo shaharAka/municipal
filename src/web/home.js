@@ -901,11 +901,13 @@ async function openEngine(kind) {
     const data = await api('/api/tour');
     const scenario = data.scenarios.find((sc) => sc.id === kind) ?? data.scenarios[0];
     body.innerHTML = scenario.steps.map((step) => {
-      if (step.kind === 'source') return `<div class="ev-row"><div class="ev-top"><span class="sys">${escapeHtml(step.system)}</span><code class="locator">${escapeHtml(step.locator)}</code></div><pre class="ev-quote">${escapeHtml(step.excerpt)}</pre><p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
-      if (step.kind === 'sources') return `<div class="ev-row"><div class="ev-top"><span class="sys">${escapeHtml(step.system)}</span></div>${step.items.map((m) => `<pre class="ev-quote">${escapeHtml(m.subject)} — ${escapeHtml(m.from)}</pre>`).join('')}<p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
-      if (step.kind === 'inference' || step.kind === 'fields') return `<div class="ev-row"><div class="ev-top"><strong>${escapeHtml(step.titleHe)}</strong></div><ul class="inferred">${step.items.map((i) => `<li><strong>${escapeHtml(i.name ?? i.label)}</strong> ${escapeHtml(i.summary ?? i.rule ?? '')}</li>`).join('')}</ul><p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
-      if (step.kind === 'result') return `<div class="ev-row"><strong>${escapeHtml(step.titleHe)}</strong><p class="ev-did">כלל ${escapeHtml(step.rule?.code ?? '')} גרסה ${step.rule?.version ?? ''} · ${escapeHtml(step.rule?.owner ?? '')}</p></div>`;
-      return `<div class="ev-row"><strong>${escapeHtml(step.titleHe)}</strong><p class="ev-did">${escapeHtml(step.textHe)}</p></div>`;
+      const cls = step.kind === 'action' ? 'ev-row action' : 'ev-row evidence';
+      const tag = step.kind === 'action' ? '<span class="tag act">פעולה</span>' : '<span class="tag ev">ראיה</span>';
+      if (step.kind === 'source') return `<div class="${cls}">${tag}<div class="ev-top"><span class="sys">${escapeHtml(step.system)}</span><code class="locator">${escapeHtml(step.locator)}</code></div><pre class="ev-quote">${escapeHtml(step.excerpt)}</pre><p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
+      if (step.kind === 'sources') return `<div class="${cls}">${tag}<div class="ev-top"><span class="sys">${escapeHtml(step.system)}</span></div>${step.items.map((m) => `<pre class="ev-quote">${escapeHtml(m.subject)} — ${escapeHtml(m.from)}</pre>`).join('')}<p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
+      if (step.kind === 'inference' || step.kind === 'fields') return `<div class="${cls}">${tag}<div class="ev-top"><strong>${escapeHtml(step.titleHe)}</strong></div><ul class="inferred">${step.items.map((i) => `<li><strong>${escapeHtml(i.name ?? i.label)}</strong> ${escapeHtml(i.summary ?? i.rule ?? '')}</li>`).join('')}</ul><p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
+      if (step.kind === 'result') return `<div class="${cls}">${tag}<strong>${escapeHtml(step.titleHe)}</strong><p class="ev-did">כלל ${escapeHtml(step.rule?.code ?? '')} גרסה ${step.rule?.version ?? ''} · ${escapeHtml(step.rule?.owner ?? '')}</p></div>`;
+      return `<div class="${cls}">${tag}<strong>${escapeHtml(step.titleHe)}</strong><p class="ev-did">${escapeHtml(step.textHe)}</p></div>`;
     }).join('');
   } catch (error) {
     body.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`;
