@@ -1,0 +1,18 @@
+{
+  "name": "municipal-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Municipal data platform POC: map the organization, learn the ontology, discover workflows, propose automations.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts",
+    "demo": "node src/demo.ts",
+    "test": "node --test tests/*.test.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

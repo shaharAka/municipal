@@ -1,0 +1,116 @@
+{
+  "pack": "workflow",
+  "title": "Discovered processes and proposed automations",
+  "description": "What the event log says about how work moves, and the automations the system proposes because of it. Nothing here is executable until a person approves it.",
+  "page_types": {
+    "process_model": {
+      "description": "A discovered model of how a service's cases actually flow.",
+      "properties": {
+        "model_id": { "type": "string" },
+        "service_code": { "type": "string", "enum": ["LIC", "FEE", "CMP"] },
+        "algorithm": { "type": "string" },
+        "case_count": { "type": "integer", "minimum": 0 },
+        "variant_count": { "type": "integer", "minimum": 0 },
+        "coverage_share": { "type": "number", "minimum": 0, "maximum": 1 },
+        "median_total_days": { "type": "number", "x-unit": "d", "minimum": 0 },
+        "discovered_at": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["discovered", "validated", "executable"] },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["model_id", "service_code", "status", "discovered_at"]
+    },
+    "process_variant": {
+      "description": "One path through a process, with how often it happens.",
+      "properties": {
+        "variant_id": { "type": "string" },
+        "activity_sequence": { "type": "array", "items": { "type": "string" } },
+        "case_count": { "type": "integer", "minimum": 0 },
+        "coverage_share": { "type": "number", "minimum": 0, "maximum": 1 },
+        "median_days": { "type": "number", "x-unit": "d", "minimum": 0 },
+        "has_rework": { "type": "boolean" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["variant_id", "activity_sequence", "case_count"]
+    },
+    "process_step": {
+      "description": "One activity in the process with its measured wait and the role that performs it.",
+      "properties": {
+        "step_id": { "type": "string" },
+        "activity_code": { "type": "string" },
+        "activity_label_he": { "type": "string" },
+        "occurrences": { "type": "integer", "minimum": 0 },
+        "median_wait_days": { "type": "number", "x-unit": "d", "minimum": 0 },
+        "p90_wait_days": { "type": "number", "x-unit": "d", "minimum": 0 },
+        "actor_role": { "type": "string" },
+        "is_rework": { "type": "boolean" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["step_id", "activity_code", "occurrences"]
+    },
+    "automation_proposal": {
+      "description": "A step the data says is repetitive and rule-like, proposed as an automation with the evidence behind it.",
+      "properties": {
+        "proposal_id": { "type": "string" },
+        "proposal_kind": {
+          "type": "string",
+          "enum": ["routing", "sla_reminder", "document_request", "standard_letter"]
+        },
+        "title": { "type": "string" },
+        "rationale": { "type": "string" },
+        "expected_cases_per_year": { "type": "integer", "minimum": 0 },
+        "time_saved_days_per_case": { "type": "number", "x-unit": "d", "minimum": 0 },
+        "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+        "status": { "type": "string", "enum": ["proposed", "approved", "rejected", "disabled"] },
+        "approved_by": { "type": "string" },
+        "approved_at": { "type": "string", "format": "date-time" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["proposal_id", "proposal_kind", "title", "status"]
+    }
+  },
+  "edge_kinds": {
+    "model_for": {
+      "from": ["process_model"],
+      "to": ["service"]
+    },
+    "step_of_model": {
+      "from": ["process_step"],
+      "to": ["process_model"]
+    },
+    "variant_of_model": {
+      "from": ["process_variant"],
+      "to": ["process_model"]
+    },
+    "proposes": {
+      "description": "An automation proposal targets the step the evidence points at.",
+      "from": ["automation_proposal"],
+      "to": ["process_step"]
+    },
+    "approves": {
+      "from": ["decision"],
+      "to": ["automation_proposal", "process_model", "knowledge_candidate"]
+    }
+  },
+  "learning": {
+    "observations": [
+      {
+        "metric": "step_share_of_total_wait",
+        "subject": "process_step",
+        "quantity": { "dimension": "fraction", "canonical_unit": "fraction" },
+        "value": "median_wait_days divided by the model's median_total_days"
+      }
+    ],
+    "learnings": [
+      {
+        "name": "automation_opportunity",
+        "insight_kind": "opportunity",
+        "about": ["process_step", "automation_proposal"],
+        "from": ["step_share_of_total_wait"],
+        "aggregates": [
+          { "name": "share_of_wait", "function": "sum", "metric": "step_share_of_total_wait" }
+        ],
+        "question": "Which step is worth automating first, given how much waiting it causes and how rule-like it is?"
+      }
+    ]
+  }
+}

@@ -112,3 +112,18 @@ territory. One language, one lockfile.
 - Any local substitute starts accumulating behaviour that production would
   contradict. That is the signal the boundary is wrong, not that the substitute
   needs more features.
+
+## Amendment, 2026-10-17 (same day, after the first slice)
+
+Two rows above were written before the first line of code and are corrected here
+rather than edited silently:
+
+- **API framework.** Node's `http` module, not Fastify. The HTTP layer is a
+  router and a static file handler; a framework buys nothing at this size and
+  costs an install. The ADR's point — that the Azure path is a swap, not a
+  rewrite — is unaffected.
+- **Language runtime.** TypeScript, run directly through Node 22's type
+  stripping. No build step and no bundler, so the demo runs from a checkout with
+  no `npm install`. `tsc` is not yet wired up as a gate; the tests are.
+- **The ontology layer was rebuilt** on the AKA engine's model after reviewing
+  `aka-food/aka-new-platform`. See ADR-0006.

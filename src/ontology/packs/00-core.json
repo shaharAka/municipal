@@ -1,0 +1,234 @@
+{
+  "pack": "core",
+  "title": "Core municipal objects shared by every department",
+  "description": "People, units, groups, services, documents, messages, decisions and knowledge candidates. Department packs extend these; nothing here is redefined by a pack or an overlay.",
+  "defs": {
+    "date": { "type": "string", "format": "date" },
+    "date_time": { "type": "string", "format": "date-time" },
+    "currency_amount": {
+      "type": "object",
+      "description": "Money with its currency and the period it is stated for.",
+      "properties": {
+        "value": { "type": "number", "x-unit": "ILS" },
+        "period": { "type": "string", "enum": ["annual", "monthly", "one_off"] }
+      },
+      "required": ["value", "period"],
+      "additionalProperties": false
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "measured",
+        "sourced",
+        "extracted",
+        "attributed",
+        "asserted",
+        "model_estimate"
+      ],
+      "description": "How a value is known, as a label. There are deliberately no numbers attached: a stored weight becomes a cutoff nobody declared. measured - an instrument or a clerk counted it. sourced - an outside system of record sent it. extracted - a model read it from a document. attributed - a person or a rule attached it to this subject. asserted - a person stated it. model_estimate - a fitted model produced it."
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Where a recorded value came from. Applied to every property written by a connector or a model, because a value without this is a number, not a record.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["recorded", "computed", "inferred", "imported", "modelled", "extracted", "drafted", "copied", "migrated"]
+        },
+        "source": { "type": "string" },
+        "method": { "type": "string" },
+        "as_of": { "type": "string", "format": "date-time" },
+        "evidence_class": { "$ref": "#/defs/evidence_class" },
+        "locator": { "type": "string" },
+        "confirmed_by_role": { "type": "string" }
+      },
+      "required": ["kind", "as_of"],
+      "additionalProperties": false
+    },
+    "label_text": {
+      "type": "object",
+      "description": "What a person reads, in Hebrew and English. Overlays add languages; packs never hold only one.",
+      "properties": { "he": { "type": "string" }, "en": { "type": "string" } },
+      "additionalProperties": false
+    }
+  },
+  "page_types": {
+    "person": {
+      "description": "A staff member as the directory knows them.",
+      "properties": {
+        "display_name": { "type": "string" },
+        "mail": { "type": "string" },
+        "job_title": { "type": "string" },
+        "department": { "type": "string", "description": "The directory's department string. Org units are derived from it, then confirmed by people." },
+        "department_en": { "type": "string" },
+        "employee_type": { "type": "string", "enum": ["Employee", "Contractor"] },
+        "time_share": { "type": "number", "minimum": 0, "maximum": 1 },
+        "account_enabled": { "type": "boolean" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["display_name", "mail"]
+    },
+    "org_unit": {
+      "description": "A unit in the department. Derived from the directory and confirmed by people, never typed by hand.",
+      "properties": {
+        "name": { "type": "string" },
+        "name_en": { "type": "string" },
+        "headcount": { "type": "integer", "minimum": 0 },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["name"]
+    },
+    "group": {
+      "description": "A security or mail group from Entra ID.",
+      "properties": {
+        "display_name": { "type": "string" },
+        "mail_nickname": { "type": "string" },
+        "description": { "type": "string" },
+        "member_count": { "type": "integer", "minimum": 0 },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["display_name", "mail_nickname"]
+    },
+    "service": {
+      "description": "A service the department runs. Declared, not discovered: the SLA has an owner.",
+      "properties": {
+        "code": { "type": "string", "enum": ["LIC", "FEE", "CMP"] },
+        "name_he": { "type": "string" },
+        "name_en": { "type": "string" },
+        "sla_days": { "type": "integer", "x-unit": "d", "minimum": 1 },
+        "requires_inspection": { "type": "boolean" },
+        "rule_owner": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["code", "name_he", "name_en", "sla_days"]
+    },
+    "document": {
+      "description": "A file in a document library, held by reference with its label and access list.",
+      "properties": {
+        "drive_item_id": { "type": "string" },
+        "name": { "type": "string" },
+        "mime_type": { "type": "string" },
+        "web_url": { "type": "string" },
+        "sensitivity_label": { "type": "string" },
+        "page_count": { "type": "integer", "minimum": 0 },
+        "source_system": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["drive_item_id", "name", "source_system"]
+    },
+    "message": {
+      "description": "An email held in a mailbox, held by reference.",
+      "properties": {
+        "message_id": { "type": "string" },
+        "subject": { "type": "string" },
+        "from_address": { "type": "string" },
+        "received_at": { "type": "string", "format": "date-time" },
+        "conversation_id": { "type": "string" },
+        "sensitivity_label": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["message_id", "subject", "received_at"]
+    },
+    "decision": {
+      "description": "A choice a person made and the system recorded: approving an automation, validating a process, accepting a schema candidate. The system proposes; this page is what makes it real.",
+      "properties": {
+        "decision_id": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["automation_approved", "process_validated", "schema_candidate_accepted", "responsibility_confirmed", "eligibility_rule_approved"]
+        },
+        "status": { "type": "string", "enum": ["proposed", "approved", "rejected", "superseded"] },
+        "decided_at": { "type": "string", "format": "date-time" },
+        "decided_by": { "type": "string" },
+        "rationale": { "type": "string" },
+        "subject_ref": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["decision_id", "kind", "status"]
+    },
+    "knowledge_candidate": {
+      "description": "A proposal that is in no page, search or answer until a person turns it into something. A schema candidate, a proposed responsibility, a discovered step: all start here.",
+      "properties": {
+        "candidate_id": { "type": "string" },
+        "candidate_kind": {
+          "type": "string",
+          "enum": ["property", "type", "enum_value", "responsibility", "step", "automation", "eligibility_rule"]
+        },
+        "subject_ref": { "type": "string" },
+        "proposal": { "type": "object" },
+        "evidence_summary": { "type": "string" },
+        "support_count": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string", "enum": ["open", "accepted", "rejected"] },
+        "proposed_by": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["candidate_id", "candidate_kind", "status", "evidence_summary"]
+    }
+  },
+  "edge_kinds": {
+    "occupies": {
+      "description": "A person sits in an org unit, with the title they hold there.",
+      "from": ["person"],
+      "to": ["org_unit"],
+      "payload": {
+        "role_title": { "type": "string" },
+        "share": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "payload_required": ["role_title"]
+    },
+    "reports_to": {
+      "from": ["person"],
+      "to": ["person"],
+      "lineage": "upstream"
+    },
+    "in_group": {
+      "from": ["person"],
+      "to": ["group"]
+    },
+    "head_of": {
+      "description": "The person who heads a unit.",
+      "from": ["person"],
+      "to": ["org_unit"]
+    },
+    "evidence_of": {
+      "description": "A document or message that evidences a page or a value.",
+      "from": ["*"],
+      "to": ["document", "message"]
+    }
+  },
+  "inference_rules": [
+    {
+      "id": "core.reports_to_is_acyclic",
+      "description": "Following reports_to from any person terminates at one head of the department.",
+      "if": "person -reports_to-> person",
+      "then": "no cycle in the reports_to chain"
+    },
+    {
+      "id": "core.proposal_needs_a_decision",
+      "description": "An automation, a validated process or a schema change exists only with an approved decision behind it.",
+      "if": "decision.status == approved",
+      "then": "decision.subject_ref points at the accepted thing"
+    }
+  ],
+  "learning": {
+    "observations": [
+      {
+        "metric": "proposal_review_days",
+        "subject": "decision",
+        "quantity": { "dimension": "time", "canonical_unit": "d" },
+        "value": "decided_at minus proposed_at"
+      }
+    ],
+    "learnings": [
+      {
+        "name": "proposal_acceptance",
+        "insight_kind": "pattern",
+        "about": ["decision"],
+        "from": ["proposal_review_days"],
+        "aggregates": [{ "name": "p50_review_days", "function": "p50", "metric": "proposal_review_days" }],
+        "question": "Which proposals wait longest for a decision, and what does the evidence say about why?"
+      }
+    ]
+  }
+}

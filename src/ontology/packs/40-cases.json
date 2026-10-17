@@ -1,0 +1,129 @@
+{
+  "pack": "cases",
+  "title": "Applications, cases and the events that moved them",
+  "description": "The work items, and the traces the process discovery reads. Every event is one step that happened, with who and when.",
+  "page_types": {
+    "case": {
+      "description": "A unit of work: a licence application, a fee request or a complaint.",
+      "properties": {
+        "case_id": { "type": "string" },
+        "service_code": { "type": "string", "enum": ["LIC", "FEE", "CMP"] },
+        "subject_ref": { "type": "string" },
+        "opened_at": { "type": "string", "format": "date-time" },
+        "closed_at": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["OPEN", "CLOSED"] },
+        "channel": { "type": "string", "enum": ["EMAIL", "WEB", "PHONE", "COUNTER"] },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["case_id", "service_code", "opened_at", "status"]
+    },
+    "case_event": {
+      "description": "One step that happened on a case, with when and who.",
+      "properties": {
+        "event_id": { "type": "string" },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "activity": { "type": "string" },
+        "source": { "type": "string", "enum": ["CASES", "MAIL", "FINANCE", "WEB"] },
+        "detail": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["event_id", "occurred_at", "activity"]
+    },
+    "complaint": {
+      "description": "A sanitation or pest-control complaint from a resident.",
+      "properties": {
+        "complaint_id": { "type": "string" },
+        "category": { "type": "string", "enum": ["PEST", "WASTE", "NOISE", "FOOD_SAFETY"] },
+        "location": { "type": "string" },
+        "priority": { "type": "string", "enum": ["NORMAL", "HIGH"] },
+        "resolved_at": { "type": "string", "format": "date-time" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["complaint_id", "category"]
+    },
+    "fee_obligation": {
+      "description": "A sanitation fee charged against a property for a fiscal year.",
+      "properties": {
+        "fee_id": { "type": "string" },
+        "fiscal_year": { "type": "integer", "minimum": 2000 },
+        "amount": { "type": "number", "x-unit": "ILS", "minimum": 0 },
+        "discount_granted": { "type": "boolean" },
+        "paid_at": { "type": "string", "format": "date" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["fee_id", "fiscal_year"]
+    }
+  },
+  "edge_kinds": {
+    "case_about": {
+      "description": "What a case is about: a business, a resident or a property.",
+      "from": ["case"],
+      "to": ["business", "resident", "property"],
+      "payload": { "subject_ref": { "type": "string" } }
+    },
+    "case_owner": {
+      "from": ["case"],
+      "to": ["person"]
+    },
+    "event_of": {
+      "from": ["case_event"],
+      "to": ["case"],
+      "lineage": "upstream"
+    },
+    "event_actor": {
+      "from": ["case_event"],
+      "to": ["person"]
+    },
+    "complaint_in_case": {
+      "from": ["complaint"],
+      "to": ["case"]
+    },
+    "fee_for": {
+      "from": ["fee_obligation"],
+      "to": ["property"],
+      "lineage": "upstream"
+    },
+    "assigned_to": {
+      "description": "The person, or the role through a person, a case moved to.",
+      "from": ["case"],
+      "to": ["person"]
+    }
+  },
+  "inference_rules": [
+    {
+      "id": "cases.event_order",
+      "description": "A case's events are ordered by occurred_at and none predates the case.",
+      "if": "case_event -event_of-> case",
+      "then": "case_event.occurred_at >= case.opened_at"
+    }
+  ],
+  "learning": {
+    "observations": [
+      {
+        "metric": "case_wait_days",
+        "subject": "case_event",
+        "quantity": { "dimension": "time", "canonical_unit": "d" },
+        "value": "next event occurred_at minus this event occurred_at"
+      },
+      {
+        "metric": "case_total_days",
+        "subject": "case",
+        "quantity": { "dimension": "time", "canonical_unit": "d" },
+        "value": "closed_at minus opened_at"
+      }
+    ],
+    "learnings": [
+      {
+        "name": "licence_bottleneck",
+        "insight_kind": "pattern",
+        "about": ["case"],
+        "from": ["case_wait_days", "case_total_days"],
+        "aggregates": [
+          { "name": "p50_wait_by_activity", "function": "p50", "metric": "case_wait_days" },
+          { "name": "p90_total_days", "function": "p90", "metric": "case_total_days" }
+        ],
+        "question": "Which step holds food-licence cases longest, in which variant, and what does the evidence say about why?"
+      }
+    ]
+  }
+}

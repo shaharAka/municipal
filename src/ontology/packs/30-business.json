@@ -1,0 +1,77 @@
+{
+  "pack": "business",
+  "title": "Businesses, licences and inspections",
+  "description": "Food premises under health licensing: the department's process-mining subject.",
+  "page_types": {
+    "business": {
+      "description": "A food premises under health licensing.",
+      "properties": {
+        "business_id": { "type": "string" },
+        "registry_number": { "type": "string" },
+        "business_name": { "type": "string" },
+        "category": { "type": "string" },
+        "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
+        "address_raw": { "type": "string" },
+        "contact_name": { "type": "string" },
+        "contact_email": { "type": "string" },
+        "licence_status": { "type": "string", "enum": ["VALID", "PENDING_RENEWAL", "EXPIRED"] },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["business_id", "business_name"]
+    },
+    "licence": {
+      "description": "A health licence granted to a business.",
+      "properties": {
+        "licence_id": { "type": "string" },
+        "licence_type": { "type": "string", "enum": ["FOOD_BUSINESS", "TRADE", "EVENT"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "PENDING_RENEWAL", "REVOKED"] },
+        "issued_date": { "type": "string", "format": "date" },
+        "expiry_date": { "type": "string", "format": "date" },
+        "conditions_text": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["licence_id", "licence_type", "status"]
+    },
+    "inspection": {
+      "description": "A health inspection of a business.",
+      "properties": {
+        "inspection_id": { "type": "string" },
+        "scheduled_for": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "result": { "type": "string", "enum": ["PASS", "FAIL"] },
+        "findings_text": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["inspection_id"]
+    }
+  },
+  "edge_kinds": {
+    "located_at": {
+      "from": ["business"],
+      "to": ["property"],
+      "lineage": "upstream"
+    },
+    "holds": {
+      "from": ["business"],
+      "to": ["licence"],
+      "inverse": { "label": "Held by", "group": "Licences" }
+    },
+    "inspection_of": {
+      "from": ["inspection"],
+      "to": ["business"],
+      "lineage": "upstream"
+    },
+    "performed_by": {
+      "from": ["inspection"],
+      "to": ["person"]
+    }
+  },
+  "inference_rules": [
+    {
+      "id": "business.active_licence_has_inspection",
+      "description": "An active food licence has at least one inspection, unless the licence predates the case system.",
+      "if": "licence.status == ACTIVE AND licence.licence_type == FOOD_BUSINESS",
+      "then": "EXISTS inspection -inspection_of-> business"
+    }
+  ]
+}

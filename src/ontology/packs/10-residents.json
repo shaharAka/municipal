@@ -1,0 +1,79 @@
+{
+  "pack": "residents",
+  "title": "Residents and households",
+  "description": "Who lives in the city and on which billing unit. The eligibility rule reads this pack.",
+  "page_types": {
+    "resident": {
+      "description": "A person registered at a municipal address.",
+      "properties": {
+        "resident_id": { "type": "string" },
+        "national_id": { "type": "string", "description": "Masked on read for anyone without the high-sensitivity role." },
+        "first_name": { "type": "string" },
+        "last_name": { "type": "string" },
+        "birth_date": { "type": "string", "format": "date" },
+        "residency_start_date": { "type": "string", "format": "date" },
+        "disability_certificate_expiry": { "type": "string", "format": "date" },
+        "income_band": { "type": "string", "enum": ["LOW", "MID", "HIGH"] },
+        "phone": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["resident_id", "first_name", "last_name"]
+    },
+    "household": {
+      "description": "The billing and eligibility unit for a property.",
+      "properties": {
+        "household_id": { "type": "string" },
+        "household_size": { "type": "integer", "minimum": 0 },
+        "income_band": { "type": "string", "enum": ["LOW", "MID", "HIGH"] },
+        "discount_status": { "type": "string", "enum": ["GRANTED", "NOT_REQUESTED", "PENDING"] },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["household_id"]
+    }
+  },
+  "edge_kinds": {
+    "member_of_household": {
+      "from": ["resident"],
+      "to": ["household"],
+      "inverse": { "label": "Members", "group": "Household" }
+    },
+    "resides_at": {
+      "from": ["resident"],
+      "to": ["property"],
+      "lineage": "upstream"
+    },
+    "household_at": {
+      "from": ["household"],
+      "to": ["property"],
+      "lineage": "upstream"
+    }
+  },
+  "inference_rules": [
+    {
+      "id": "residents.household_at_resident_property",
+      "description": "A resident's household sits at the property the resident is registered at, unless the evidence says otherwise.",
+      "if": "resident -member_of_household-> household AND resident -resides_at-> property",
+      "then": "household -household_at-> property"
+    }
+  ],
+  "learning": {
+    "observations": [
+      {
+        "metric": "residents_without_income_band",
+        "subject": "household",
+        "quantity": { "dimension": "count", "canonical_unit": "count" },
+        "value": "count of households where income_band is absent"
+      }
+    ],
+    "learnings": [
+      {
+        "name": "eligibility_unknown_cause",
+        "insight_kind": "gap",
+        "about": ["household", "resident"],
+        "from": ["residents_without_income_band"],
+        "aggregates": [{ "name": "unknown_households", "function": "sum", "metric": "residents_without_income_band" }],
+        "question": "Which missing attribute blocks the most eligibility decisions, and who can supply it?"
+      }
+    ]
+  }
+}

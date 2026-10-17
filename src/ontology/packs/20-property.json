@@ -1,0 +1,25 @@
+{
+  "pack": "property",
+  "title": "Properties and addresses",
+  "description": "The buildings the city charges sanitation fees for.",
+  "page_types": {
+    "property": {
+      "description": "A building or parcel with a municipal address.",
+      "properties": {
+        "property_id": { "type": "string" },
+        "street_name": { "type": "string" },
+        "house_number": { "type": "integer" },
+        "city": { "type": "string" },
+        "parcel_number": { "type": "string" },
+        "building_year": { "type": "integer", "minimum": 1800 },
+        "floor_area_sqm": { "type": "number", "x-unit": "m2", "minimum": 0 },
+        "sanitation_fee_annual": { "type": "number", "x-unit": "ILS", "minimum": 0 },
+        "address_raw": { "type": "string" },
+        "provenance": { "$ref": "#/defs/provenance" }
+      },
+      "required": ["property_id", "street_name", "house_number"]
+    }
+  },
+  "edge_kinds": {},
+  "inference_rules": []
+}
