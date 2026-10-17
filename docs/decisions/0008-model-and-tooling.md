@@ -15,21 +15,32 @@ The alias is deliberate for the POC: it tracks the vendor's current build
 instead of pinning one, which is right for a demo and **wrong for an eval**
 (§9). Reproducing a benchmark requires pinning the concrete build.
 
-## What this file can and cannot prove
+## What was verified, and what was not
 
-`~/.dsh/settings.yaml` and the session transcript record the alias
-`deepseek-flash`; neither records the resolved build, because resolution happens
-on the provider side. The build string above comes from the vendor's own release
-note, not from a locally observable field. The corroborating signal is tooling:
-this session exposes `web_search` and `web_fetch`, which the same release note
-announces for the API, and which earlier builds of the alias did not carry.
+Verified on 2026-10-17 against `GET https://api.deepseek.com/models` using the
+session credential (stored in `~/.dsh/.credentials.yaml` under
+`refs.DEEPSEEK_API_KEY`; the harness injects it into its own process, not into a
+user's interactive shell):
 
-To pin it independently:
-
-```bash
-curl -s https://api.deepseek.com/models -H "Authorization: Bearer $DEEPSEEK_API_KEY"
-# or read .model from any completion response
+```json
+{ "id": "deepseek-flash", "name": "DeepSeek-V4.1-Flash", "owned_by": "deepseek",
+  "context_window": 1048576, "max_output_tokens": 393216,
+  "input_modalities": ["text", "image"], "output_modalities": ["text"],
+  "effort": { "supported_levels": ["low", "high", "max"], "default_level": "high" } }
 ```
+
+The catalogue exposes exactly two models: `deepseek-flash` and
+`deepseek-v4-pro`.
+
+**Not verifiable:** the build tag `1017`. The API returns the model family and
+its limits, not a build date, so "V4.1-Flash-1017" remains the vendor's statement
+and this ADR says so. The session runs `deepseek-flash` with `reasoningEffort:
+max`, which is within the supported levels and above the default.
+
+One practical note: an unauthenticated call to `/models` returns **plain text**
+(`Authentication Fails (governor)`, HTTP 401, no content type), not the JSON
+error envelope a bad key produces. Any script should check the status before
+parsing the body.
 
 ## Why it matters to this product, not just to the build log
 
