@@ -880,10 +880,11 @@ async function simpleHome() {
     </form>
     <div id="answer-slot">${simpleAnswer(answer)}</div>
     ${focusView(focus)}
-    <div class="home-grid">
-      <article class="card mini"><h3>אנשים</h3><div class="val">${num(overview.graph.byType.person)}</div><p>${num(org.units.length)} יחידות · ${num(org.responsibilities.length)} אחריויות שזוהו</p><button class="engine-btn" type="button" data-engine="people">מה למדנו?</button></article>
-      <article class="card mini"><h3>תהליכים</h3><div class="val">${num(lic.model.medianTotalDays)} יום</div><p>חציון רישיון עסק · ${num(lic.model.caseCount)} תיקים</p><button class="engine-btn" type="button" data-engine="mail">מה למדנו?</button></article>
-      <article class="card mini"><h3>אוטומציות</h3><div class="val">${num(top?.annualDaysSaved ?? 0)}</div><p>ימי עבודה בשנה שאפשר לחסוך</p><button class="engine-btn" type="button" data-engine="form">איך נראה הפתרון?</button></article>
+    <div class="connected">
+      <span class="dot"></span>
+      <span>מחובר:</span>
+      ${['Entra ID', 'Azure SQL', 'דואר העבודה', 'SharePoint'].map((n) => `<span class="src-chip">${n}</span>`).join('')}
+      <a href="#/workspace">למערכות ←</a>
     </div>`;
 }
 
@@ -1016,7 +1017,17 @@ async function submitQuestion(event) {
           <p class="note">${escapeHtml(extra.hint)}</p></section>`;
         return;
       }
-      slot.innerHTML = `<div class="err">${escapeHtml(answer.refused)}</div>`;
+      // Nothing declared matched — search the sources and the graph instead.
+      try {
+        const found = await api('/api/find?q=' + encodeURIComponent(question));
+        const hits = (found.groups ?? []).flatMap((g) => g.items.map((i) => ({ ...i, source: g.source })));
+        slot.innerHTML = hits.length
+          ? `<section class="answer"><h2>לא הייתה לזה תשובה מוכנה — מצאתי ${num(hits.length)} אזכורים</h2>
+             <div class="find-list">${hits.slice(0, 6).map((h) => `<button class="card find-hit" type="button" data-find-ref="${escapeHtml(h.ref)}"><span class="badge">${escapeHtml(h.source)}</span><strong>${escapeHtml(h.title)}</strong><p>${escapeHtml(h.snippet)}</p></button>`).join('')}</div></section>`
+          : `<div class="err">${escapeHtml(answer.refused)}</div>`;
+      } catch {
+        slot.innerHTML = `<div class="err">${escapeHtml(answer.refused)}</div>`;
+      }
       return;
     }
     slot.innerHTML = simpleAnswer(answer);
