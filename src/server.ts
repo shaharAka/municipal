@@ -16,9 +16,16 @@ import { answerQuestion } from './query/eligibility.ts';
 import { REFERENCE_DATE, RULES, SUPPRESSION } from './seed/eligibility-rules.ts';
 import { generateForm, proposeValues, validateSubmission, type FormKind } from './forms/generate.ts';
 import { answerInterview, listInterviews, openInterview, ATTENTION } from './interviews/engine.ts';
+import { SOURCES, research, approveSuggestion, type Suggestion, type SourceId } from './research/sources.ts';
 import { refFor, type Viewer } from './graph/graph.ts';
 
 const WEB = new URL('./web/', import.meta.url).pathname;
+
+// Which sources a person turned on, and what research found once they did.
+const connectors: { enabled: Set<string>; suggestions: Map<string, Suggestion> } = {
+  enabled: new Set(SOURCES.filter((s) => s.enabledByDefault).map((s) => s.id)),
+  suggestions: new Map(),
+};
 const PORT = Number(process.env.PORT ?? 4173);
 
 const json = (res: ServerResponse, status: number, body: unknown) => {
@@ -291,6 +298,48 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       sources: platform.report.sources.map((s) => ({ system: s.system, label: s.label })),
     });
     return json(res, 200, answer);
+  }
+  if (parts[1] === 'connectors') {
+    if (req.method === 'POST' && parts[3] === 'toggle') {
+      const body = await readBody(req);
+      const id = decodeURIComponent(parts[2]) as SourceId;
+      if (!SOURCES.some((s) => s.id === id)) return json(res, 404, { error: 'unknown source' });
+      if (body.enabled) connectors.enabled.add(id); else connectors.enabled.delete(id);
+    }
+    for (const id of connectors.enabled) {
+      for (const suggestion of research(id as SourceId, {
+        graph: platform.graph, ontology: platform.ontology, org: platform.org,
+        models: platform.models, proposals: platform.proposals,
+        capturedAt: captureTime, actor: viewerName(platform, viewer),
+      })) {
+        if (!connectors.suggestions.has(suggestion.id)) connectors.suggestions.set(suggestion.id, suggestion);
+      }
+    }
+    return json(res, 200, {
+      sources: SOURCES.map((source) => ({
+        ...source,
+        enabled: connectors.enabled.has(source.id),
+        suggestions: [...connectors.suggestions.values()].filter((s) => s.source === source.id),
+      })),
+      forms: platform.graph.ofType('form_definition').map((p) => ({
+        ref: p.ref, name: p.title, page_type: p.properties.page_type,
+        kind: p.properties.kind, field_count: p.properties.field_count, status: p.properties.status,
+      })),
+    });
+  }
+  if (parts[1] === 'suggestions' && parts[3] === 'approve') {
+    const id = decodeURIComponent(parts[2]);
+    const suggestion = connectors.suggestions.get(id);
+    if (!suggestion) return json(res, 404, { error: 'unknown suggestion' });
+    if (suggestion.status === 'approved') return json(res, 200, { suggestion });
+    const artifact = approveSuggestion(suggestion, {
+      graph: platform.graph, ontology: platform.ontology, org: platform.org,
+      models: platform.models, proposals: platform.proposals,
+      capturedAt: captureTime, actor: viewerName(platform, viewer),
+    });
+    suggestion.status = 'approved';
+    suggestion.artifact = artifact;
+    return json(res, 200, { suggestion });
   }
   if (parts[1] === 'forms') {
     const pageType = url.searchParams.get('type') ?? 'household';

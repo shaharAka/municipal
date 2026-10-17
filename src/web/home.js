@@ -14,6 +14,7 @@ const PROPOSAL_HE = {
 const TABS = [
   { id: 'home', label: 'בית' },
   { id: 'ask', label: 'שאל' },
+  { id: 'sources', label: 'מקורות' },
   { id: 'people', label: 'אנשים' },
   { id: 'process', label: 'תהליכים' },
   { id: 'onboard', label: 'קליטה' },
@@ -232,7 +233,50 @@ async function onboardView() {
 
 /* ------------------------------------------------------------------ render */
 
-const VIEWS = { home: homeView, ask: askView, people: peopleView, process: processView, onboard: onboardView };
+async function sourcesView() {
+  const data = await api('/api/connectors');
+  const badge = (n) => `<span class="count-pill">${n}</span>`;
+  return `
+    <h1>מקורות המידע של העיר</h1>
+    <p class="lede">כל מקור שמחברים מפעיל מחקר משלו. המחקר מציע — אדם מאשר. שום דבר לא משתנה עד לאישור.</p>
+    <div class="source-grid">
+      ${data.sources.map((source) => `
+        <article class="card source ${source.enabled ? 'on' : ''}">
+          <div class="source-top">
+            <div>
+              <h3>${escapeHtml(source.nameHe)}</h3>
+              <p class="meta">${escapeHtml(source.nameEn)}</p>
+            </div>
+            <button class="toggle ${source.enabled ? 'on' : ''}" type="button" data-toggle-source="${source.id}" aria-pressed="${source.enabled}">
+              ${source.enabled ? 'מחובר' : 'חיבור'}
+            </button>
+          </div>
+          <p>${escapeHtml(source.descriptionHe)}</p>
+          <p class="meta">${escapeHtml(source.evidenceHe)}</p>
+          ${source.enabled
+            ? `<div class="research">
+                 <p class="research-title">מחקר · ${source.suggestions.length} הצעות ${source.suggestions.length ? '' : '— עדיין אין'}</p>
+                 ${source.suggestions.map((suggestion) => `
+                   <div class="suggestion ${suggestion.status === 'approved' ? 'done' : ''}">
+                     <div class="suggestion-top">
+                       <strong>${escapeHtml(suggestion.titleHe)}</strong>
+                       ${suggestion.status === 'approved' ? '<span class="pill ok">אושר</span>' : `<button class="btn small" type="button" data-approve-suggestion="${suggestion.id}">אישור</button>`}
+                     </div>
+                     <p>${escapeHtml(suggestion.whyHe)}</p>
+                     <div class="chips evidence">${suggestion.evidenceHe.map((e) => `<span class="chip static">${escapeHtml(e)}</span>`).join('')}</div>
+                     ${suggestion.artifact ? `<p class="artifact">נוצר: ${escapeHtml(suggestion.artifact.labelHe)}</p>` : ''}
+                   </div>`).join('')}
+               </div>`
+            : `<p class="unlocks">מה זה יאפשר: ${escapeHtml(source.unlocksHe)}</p>`}
+        </article>`).join('')}
+    </div>
+    ${data.forms?.length ? `<section class="section">
+      <div class="section-head"><h2>טפסים שנוצרו</h2><p>נגזרו מהמודל, לא נכתבו ביד</p></div>
+      <div class="grid-3">${data.forms.map((f) => `<article class="card"><h3>${escapeHtml(f.name)}</h3><p>${num(f.field_count)} שדות · ${f.kind === 'application' ? 'טופס בקשה' : 'טופס פנימי'}</p><p class="meta">${escapeHtml(f.page_type)}</p></article>`).join('')}</div>
+    </section>` : ''}`;
+}
+
+const VIEWS = { home: homeView, ask: askView, sources: sourcesView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -279,6 +323,26 @@ function fromHash() {
   const id = location.hash.replace('#/', '').replace('#', '');
   return TABS.some((t) => t.id === id) ? id : 'home';
 }
+
+document.addEventListener('click', async (event) => {
+  const toggle = event.target.closest('[data-toggle-source]');
+  if (toggle) {
+    const enabled = toggle.getAttribute('aria-pressed') !== 'true';
+    toggle.disabled = true;
+    await fetch(`/api/connectors/${encodeURIComponent(toggle.dataset.toggleSource)}/toggle`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled }),
+    });
+    if (location.hash !== '#/sources') location.hash = '#/sources';
+    else render();
+    return;
+  }
+  const approve = event.target.closest('[data-approve-suggestion]');
+  if (approve) {
+    approve.disabled = true;
+    await fetch(`/api/suggestions/${encodeURIComponent(approve.dataset.approveSuggestion)}/approve`, { method: 'POST' });
+    render();
+  }
+});
 
 window.addEventListener('hashchange', () => { state.tab = fromHash(); state.answer = null; render(); });
 $('#nav').addEventListener('click', (e) => {
