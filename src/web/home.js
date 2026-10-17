@@ -13,7 +13,6 @@ const PROPOSAL_HE = {
 
 const TABS = [
   { id: 'home', label: 'בית' },
-  { id: 'ask', label: 'שאל' },
   { id: 'sources', label: 'מקורות' },
   { id: 'approvals', label: 'אישורים' },
   { id: 'workspace', label: 'מערכות' },
@@ -928,8 +927,8 @@ function roleKind(label) {
 function tabsFor(kind) {
   const ids = {
     head: ['home', 'approvals', 'sources', 'workspace'],
-    clerk: ['home', 'ask', 'sources', 'approvals'],
-    field: ['home', 'ask', 'workspace'],
+    clerk: ['home', 'sources', 'approvals'],
+    field: ['home', 'workspace'],
   }[kind];
   return TABS.filter((t) => ids.includes(t.id));
 }
@@ -1043,6 +1042,8 @@ async function submitQuestion(event) {
 
 function fromHash() {
   const id = location.hash.replace('#/', '').replace('#', '');
+  // Internal screens (learning, canvas, tour) stay addressable for an analyst
+  // but are not part of the signed-in surface.
   return TABS.some((t) => t.id === id) ? id : 'home';
 }
 
