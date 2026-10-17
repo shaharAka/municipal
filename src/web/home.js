@@ -826,10 +826,37 @@ function simpleAnswer(answer) {
     ${answer.unknownReasons?.length ? `<p class="note">הסיבה ל״לא ידוע״: חסר נתון הכנסה. <button class="engine-btn" type="button" data-engine="interview">איך מטפלים בזה?</button></p>` : ''}
   </section>`;
 }
+function tasksFor(role, data) {
+  const { approvals, interviews, lic, answer } = data;
+  if (/מנהל|head/i.test(role)) {
+    return [
+      { label: 'פריטים שממתינים לאישור', value: approvals.pending.length, href: '#/approvals' },
+      { label: 'אוטומציות מוצעות', value: approvals.counts.automations, href: '#/approvals' },
+      { label: 'הצעות לשינוי המודל', value: approvals.counts.candidates, href: '#/approvals' },
+    ];
+  }
+  if (/רכז|מזכיר|coordinator|clerk/i.test(role)) {
+    return [
+      { label: 'משקי בית בלי נתון הכנסה', value: answer.counts?.unknown ?? 0, href: '#/ask' },
+      { label: 'שאלות פתוחות לאנשים', value: interviews.interviews.filter((i) => i.status === 'open').length, href: '#/demo' },
+      { label: 'פערים שממתינים לאדם', value: interviews.gaps.length, href: '#/approvals' },
+    ];
+  }
+  return [
+    { label: 'המתנה חציונית לשיבוץ פיקוח (ימים)', value: lic.model.steps[0]?.medianWaitDays ?? 0, href: '#/demo' },
+    { label: 'תיקים פתוחים', value: lic.model.caseCount, href: '#/demo' },
+    { label: 'הצעות אוטומציה על התהליך', value: lic.proposals.length, href: '#/approvals' },
+  ];
+}
 async function simpleHome() {
-  const [overview, answer, org, lic] = await Promise.all([
+  const [overview, answer, org, lic, viewers, approvals, interviews] = await Promise.all([
     api('/api/overview'), api('/api/answer'), api('/api/org'), api('/api/process?service=LIC'),
+    api('/api/viewers'), api('/api/approvals'), api('/api/interviews'),
   ]);
+  const roles = viewers.viewers;
+  const role = state.role && roles.some((r) => r.id === state.role) ? state.role : roles[0]?.id;
+  const roleLabel = roles.find((r) => r.id === role)?.label ?? '';
+  const tasks = tasksFor(roleLabel, { approvals, interviews, lic, answer });
   const top = [...lic.proposals].sort((a, b) => b.annualDaysSaved - a.annualDaysSaved)[0];
   return `
     <p class="hello">שלום דנה,</p>
@@ -847,6 +874,12 @@ async function simpleHome() {
       </div>
     </form>
     <div id="answer-slot">${simpleAnswer(answer)}</div>
+    <section class="card mine">
+      <div class="role-row"><span>התצוגה שלי:</span>${roles.map((r) => `<button class="role-chip ${r.id === role ? 'active' : ''}" type="button" data-role="${r.id}">${escapeHtml(r.label.split('(')[0].trim())}</button>`).join('')}</div>
+      <h2>המשימות שלי</h2>
+      <p class="sub">${escapeHtml(roleLabel)} · רק מה שממתין לכם, בלי גרפים</p>
+      ${tasks.map((t) => `<div class="task"><div><p>${escapeHtml(t.label)}</p></div><div style="display:flex;align-items:center;gap:14px"><span class="num">${num(t.value)}</span><a href="${t.href}">פתח</a></div></div>`).join('')}
+    </section>
     <div class="home-grid">
       <article class="card mini"><h3>אנשים</h3><div class="val">${num(overview.graph.byType.person)}</div><p>${num(org.units.length)} יחידות · ${num(org.responsibilities.length)} אחריויות שזוהו</p><button class="engine-btn" type="button" data-engine="people">מה למדנו?</button></article>
       <article class="card mini"><h3>תהליכים</h3><div class="val">${num(lic.model.medianTotalDays)} יום</div><p>חציון רישיון עסק · ${num(lic.model.caseCount)} תיקים</p><button class="engine-btn" type="button" data-engine="mail">מה למדנו?</button></article>
@@ -985,6 +1018,8 @@ document.addEventListener('click', async (event) => {
       .catch((error) => { out.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`; });
     return;
   }
+  const roleChip = event.target.closest('[data-role]');
+  if (roleChip) { state.role = roleChip.dataset.role; render(); return; }
   const engineBtn = event.target.closest('[data-engine]');
   if (engineBtn) { openEngine(engineBtn.dataset.engine); return; }
   if (event.target.closest('[data-close-engine]')) { document.getElementById('engine')?.close(); return; }

@@ -314,3 +314,80 @@ dialog.modal::backdrop { background: rgba(20, 24, 40, .38); backdrop-filter: blu
 .ev-quote { margin: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; direction: ltr; text-align: left; color: var(--ink-2); overflow: auto; }
 .ev-did { margin: 0; font-size: 12.5px; color: var(--ink-2); }
 @media (max-width: 880px) { .home-grid { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------- shadcn tokens (provided) */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2101 0.0318 264.6645);
+  --card: oklch(1 0 0);
+  --primary: oklch(0.6716 0.1368 48.5130);
+  --secondary: oklch(0.5360 0.0398 196.0280);
+  --muted: oklch(0.9670 0.0029 264.5419);
+  --muted-foreground: oklch(0.5510 0.0234 264.3637);
+  --border: oklch(0.9276 0.0058 264.5313);
+  --ring: oklch(0.6716 0.1368 48.5130);
+  --radius: 0.75rem;
+  --font-sans: Outfit, system-ui, -apple-system, "Segoe UI", "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
+  --shadow-sm: 0px 1px 4px 0px hsl(0 0% 0% / 0.05), 0px 1px 2px -1px hsl(0 0% 0% / 0.05);
+  --shadow-md: 0px 1px 4px 0px hsl(0 0% 0% / 0.05), 0px 2px 4px -1px hsl(0 0% 0% / 0.05);
+
+  /* map the product's variables onto the theme */
+  --bg: var(--background);
+  --surface: var(--card);
+  --surface-2: var(--muted);
+  --ink: var(--foreground);
+  --ink-2: oklch(0.3800 0.0250 264.5);
+  --muted: var(--muted-foreground);
+  --line: var(--border);
+  --line-strong: oklch(0.8900 0.0060 264.5);
+  --accent: var(--primary);
+  --accent-strong: oklch(0.5800 0.1300 48.0);
+  --accent-soft: oklch(0.9700 0.0250 60.0);
+  --accent-line: oklch(0.8900 0.0600 55.0);
+  --ok: var(--secondary);
+  --ok-bg: oklch(0.9650 0.0150 196.0);
+  --ok-line: oklch(0.8900 0.0300 196.0);
+  --warn: oklch(0.5600 0.1000 70.0);
+  --warn-bg: oklch(0.9750 0.0300 75.0);
+  --warn-line: oklch(0.9050 0.0600 75.0);
+  --danger: oklch(0.5600 0.1900 25.0);
+  --danger-bg: oklch(0.9700 0.0200 25.0);
+  --danger-line: oklch(0.9000 0.0500 25.0);
+  --radius: 0.75rem;
+  --shadow: var(--shadow-sm);
+  --font: var(--font-sans);
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); letter-spacing: var(--tracking-normal, 0); }
+.card, .answer, .tour-card, .replay-card, .modal { border-radius: var(--radius); box-shadow: var(--shadow-sm); border-color: var(--line); }
+.btn { background: var(--primary); border-radius: calc(var(--radius) - 2px); }
+.btn:hover { background: var(--accent-strong); }
+.btn.quiet { background: var(--accent-soft); color: oklch(0.4800 0.1200 48.0); }
+.btn.quiet:hover { background: oklch(0.9500 0.0400 60.0); }
+.chip { border-radius: 999px; }
+.count.good { background: var(--ok-bg); border-color: var(--ok-line); }
+.count.good b { color: var(--ok); }
+.count.unknown { background: var(--warn-bg); }
+.count.unknown b { color: var(--warn); }
+.count b { font-family: var(--font-sans); letter-spacing: -0.02em; }
+.top { background: color-mix(in oklch, var(--background) 88%, transparent); }
+.nav { background: var(--card); border-color: var(--border); }
+.nav button[aria-current="page"] { background: var(--primary); }
+.sys { background: var(--accent-soft); color: oklch(0.4800 0.1200 48.0); }
+.step-badge { background: var(--primary); }
+.ol-rail { background: oklch(0.2600 0.0200 264.5); }
+.foot { border-color: var(--border); }
+
+/* role area */
+.role-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }
+.role-row span { font-size: 12px; color: var(--muted); }
+.role-chip { appearance: none; border: 1px solid var(--line); background: var(--surface); font: inherit; font-size: 12.5px; padding: 6px 12px; border-radius: 999px; cursor: pointer; color: var(--ink-2); }
+.role-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.mine { margin-top: 18px; }
+.mine h2 { font-size: 16px; margin: 0 0 4px; }
+.mine .sub { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+.task { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); }
+.task:first-of-type { border-top: 0; }
+.task p { margin: 0; font-size: 13px; }
+.task .num { font-size: 18px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.task a { font-size: 12.5px; color: oklch(0.4800 0.1200 48.0); text-decoration: none; }
+.task a:hover { text-decoration: underline; }
