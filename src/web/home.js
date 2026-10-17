@@ -703,6 +703,118 @@ async function sourcesView() {
     </section>` : ''}`;
 }
 
+
+/* -------------------------------------------------------------------- tour */
+function startReplay(button) {
+  const out = document.getElementById('replay-out');
+  if (!out || button.dataset.busy === '1') return;
+  button.dataset.busy = '1'; button.disabled = true; out.innerHTML = '';
+  const source = new EventSource('/api/replay');
+  source.addEventListener('stage', (event) => {
+    const stage = JSON.parse(event.data);
+    out.insertAdjacentHTML('beforeend', `<div class="replay-stage">
+      <div class="replay-head"><span class="sys">${escapeHtml(stage.system)}</span><strong>${escapeHtml(stage.titleHe)}</strong>
+      <span class="replay-count">${num(stage.count)} ${escapeHtml(stage.unit)}</span></div>
+      ${(stage.samples ?? []).map((x) => `<pre class="evid">${escapeHtml(x.excerpt)}</pre>`).join('')}
+      <p class="did">${escapeHtml(stage.didHe)}</p></div>`);
+  });
+  source.addEventListener('done', (event) => {
+    const summary = JSON.parse(event.data);
+    out.insertAdjacentHTML('beforeend', `<p class="note ok-note">הקליטה הושלמה: ${num(summary.pages)} דפים ו־${num(summary.facts)} עובדות, כל אחת עם מקור.</p>`);
+    source.close(); button.disabled = false; button.dataset.busy = '0';
+  });
+  source.onerror = () => {
+    source.close(); button.disabled = false; button.dataset.busy = '0';
+    out.insertAdjacentHTML('beforeend', '<div class="err">הקליטה נעצרה. נסו שוב.</div>');
+  };
+}
+function tourStep(step, index) {
+  const badge = `<span class="step-badge">${index + 1}</span>`;
+  const saved = step.savedHe ? `<p class="saved">מה שנחסך: ${escapeHtml(step.savedHe)}</p>` : '';
+  if (step.kind === 'source') return `<div class="tour-step">${badge}<div class="tour-body">
+    <p class="src"><span class="sys">${escapeHtml(step.system)}</span><code class="locator">${escapeHtml(step.locator)}</code></p>
+    <pre class="evid">${escapeHtml(step.excerpt)}</pre>
+    <p class="did"><strong>מה המערכת עשתה:</strong> ${escapeHtml(step.didHe)}</p>${saved}</div></div>`;
+  if (step.kind === 'sources') return `<div class="tour-step">${badge}<div class="tour-body">
+    <p class="src"><span class="sys">${escapeHtml(step.system)}</span></p>
+    <div class="mail-list">${step.items.map((m) => `<div class="mail"><div class="mail-top"><strong>${escapeHtml(m.subject)}</strong><span class="tiny muted">${escapeHtml(m.received)}</span></div><p class="tiny muted">${escapeHtml(m.from)}</p></div>`).join('')}</div>
+    <p class="did"><strong>מה המערכת עשתה:</strong> ${escapeHtml(step.didHe)}</p>${saved}</div></div>`;
+  if (step.kind === 'inference' || step.kind === 'fields') return `<div class="tour-step">${badge}<div class="tour-body">
+    <p class="tour-title">${escapeHtml(step.titleHe)}</p>
+    <ul class="inferred">${step.items.map((item) => `<li><strong>${escapeHtml(item.name ?? item.label)}</strong> ${escapeHtml(item.summary ?? item.rule ?? '')}</li>`).join('')}</ul>
+    <p class="did"><strong>מה המערכת עשתה:</strong> ${escapeHtml(step.didHe)}</p>${saved}</div></div>`;
+  if (step.kind === 'result') {
+    const c = step.counts ?? {};
+    return `<div class="tour-step">${badge}<div class="tour-body"><p class="tour-title">${escapeHtml(step.titleHe)}</p>
+      <div class="counts">${[['זכאים', c.eligible, 'good'], ['אינם זכאים', c.notEligible, ''], ['לא ידוע', c.unknown, 'unknown'], ['סה״כ', c.total, '']].map(([l, v, t]) => `<div class="count ${t}"><b>${num(v)}</b><span>${l}</span></div>`).join('')}</div>
+      <p class="note">כלל ${escapeHtml(step.rule?.code ?? '')} גרסה ${step.rule?.version ?? ''} · ${escapeHtml(step.rule?.owner ?? '')}</p></div></div>`;
+  }
+  return `<div class="tour-step">${badge}<div class="tour-body"><p class="tour-title">${escapeHtml(step.titleHe)}</p><p>${escapeHtml(step.textHe)}</p>
+    <button class="btn small" type="button" data-tour-action="${step.action.type}">${escapeHtml(step.action.labelHe)}</button></div></div>`;
+}
+async function tourView() {
+  const data = await api('/api/tour');
+  const scenarios = data.scenarios;
+  const pick = Math.min(state.tour.pick, scenarios.length - 1);
+  const scenario = scenarios[pick];
+  const shown = Math.min(Math.max(1, state.tour.shown), scenario.steps.length);
+  const done = shown >= scenario.steps.length;
+  return `
+    <h1>סיור: איך המערכת באמת עושה את זה</h1>
+    <p class="lede">שלב אחר שלב, עם הנתונים עצמם: מאיזה מקור הגיע הערך, מה נגזר ממנו, ומה נחסך מכם.</p>
+    <section class="card replay-card">
+      <div class="row-between"><div><p class="eyebrow">קליטה חיה</p><h2 style="font-size:17px;margin:2px 0 4px">מה קורה כשמחברים את המקורות</h2>
+      <p class="tiny muted">כל שלב מגיע בזמן אמת: מספר הרשומות שנקלטו ודוגמה אמיתית מהמקור.</p></div>
+      <button class="btn" type="button" data-action="replay">התחל קליטה</button></div>
+      <div id="replay-out" role="log" aria-live="polite"></div>
+    </section>
+    <div class="chips">${scenarios.map((sc, i) => `<button class="chip ${i === pick ? 'active' : ''}" type="button" data-tour-scenario="${i}">${escapeHtml(sc.titleHe)}</button>`).join('')}</div>
+    <section class="card tour-card" style="margin-top:16px">
+      <p class="eyebrow">${escapeHtml(scenario.promiseHe)}</p>
+      <h2 style="font-size:19px;margin:4px 0 14px">${escapeHtml(scenario.titleHe)}</h2>
+      ${scenario.steps.slice(0, shown).map((step, i) => tourStep(step, i)).join('')}
+      <div class="row-between" style="margin-top:16px"><span class="tiny muted">${shown} מתוך ${scenario.steps.length} שלבים</span>
+      ${done ? '<a class="btn quiet" href="#/learning">איך זה נרשם במודל ←</a>' : '<button class="btn" type="button" data-tour-next="1">השלב הבא</button>'}</div>
+      <div id="tour-out">${state.tour.out ?? ''}</div>
+    </section>`;
+}
+async function runTourAction(type) {
+  const slot = document.getElementById('tour-out');
+  const set = (html) => { state.tour.out = html; if (slot) slot.innerHTML = html; };
+  set('<p class="hello">פועל…</p>');
+  try {
+    if (type === 'approve-responsibility') {
+      const data = await api('/api/connectors');
+      const suggestion = data.sources.find((x) => x.id === 'exchange')?.suggestions.find((x) => x.kind === 'responsibility');
+      if (!suggestion) { set('<div class="err">צריך לחבר קודם את הדואר בלשונית מקורות.</div>'); return; }
+      const result = await api(`/api/suggestions/${encodeURIComponent(suggestion.id)}/approve`, { method: 'POST' });
+      set(`<p class="note ok-note">אושר: <strong>${escapeHtml(result.suggestion.artifact.labelHe)}</strong> — ונרשמה החלטה עם שם המאשר.</p>`);
+      return;
+    }
+    if (type === 'interview') {
+      const existing = await api('/api/interviews');
+      const gap = existing.gaps[0];
+      if (!gap) { set('<div class="err">לא נמצא פער פתוח.</div>'); return; }
+      const opened = await api('/api/interviews/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ gapRef: gap.ref }) });
+      const answered = await api('/api/interviews/answer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: opened.interview.ref, answers: { source_system: 'גזברות - מערכת חיובים', missing_policy: 'להקצות ללא זכאות', who_can_supply: 'משה טל, רכז גזברות' } }) });
+      set(`<p class="note"><strong>${escapeHtml(opened.interview.personName)}</strong> ענה. סתירה לכלל: ${escapeHtml(answered.contradiction ?? 'אין')}</p>
+        <div class="counts">${[['זכאים', answered.whatIf?.eligible, 'good'], ['לא זכאים', answered.whatIf?.notEligible, ''], ['לא ידוע', answered.whatIf?.unknown, 'unknown']].map(([l, v, t]) => `<div class="count ${t}"><b>${num(v)}</b><span>${l}</span></div>`).join('')}</div>
+        <p class="note">אלה המספרים אם תאושר ההצעה. עד אישור בעל הכלל — לא משתנה דבר.</p>`);
+      return;
+    }
+    if (type === 'fill-form') {
+      const pages = await api('/api/pages?type=household');
+      const household = (pages.pages ?? []).find((x) => x.properties.income_band && x.properties.household_size);
+      if (!household) { set('<div class="err">לא נמצא משק בית.</div>'); return; }
+      const result = await api('/api/forms/submit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'household', kind: 'application', subject: household.ref, values: { household_size: 4, income_band: 'LOW', discount_status: 'PENDING' } }) });
+      set(`<p class="note ok-note">נשמרו ${num(result.written)} ערכים על ${escapeHtml(household.title)}: ${Object.entries(result.properties).map(([k, v]) => `${escapeHtml(k)}=${escapeHtml(String(v))}`).join(' · ')}</p>`);
+      return;
+    }
+  } catch (error) {
+    set(`<div class="err">${escapeHtml(error.message)}</div>`);
+  }
+}
+
 const VIEWS = { home: homeView, ask: askView, find: findView, sources: sourcesView, map: mapView, workspace: workspaceView, approvals: approvalsView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
