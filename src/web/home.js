@@ -14,17 +14,9 @@ const PROPOSAL_HE = {
 const TABS = [
   { id: 'home', label: 'בית' },
   { id: 'ask', label: 'שאל' },
-  { id: 'find', label: 'חיפוש' },
   { id: 'sources', label: 'מקורות' },
-  { id: 'map', label: 'מפת התהליך' },
-  { id: 'workspace', label: 'דואר ומסמכים' },
-  { id: 'learning', label: 'למידה' },
   { id: 'approvals', label: 'אישורים' },
-  { id: 'forms', label: 'טפסים' },
-  { id: 'demo', label: 'סיור' },
-  { id: 'people', label: 'אנשים' },
-  { id: 'process', label: 'תהליכים' },
-  { id: 'onboard', label: 'קליטה' },
+  { id: 'workspace', label: 'מערכות' },
 ];
 
 const state = { tab: 'home', answer: null, error: null };
@@ -815,7 +807,79 @@ async function runTourAction(type) {
   }
 }
 
-const VIEWS = { home: homeView, ask: askView, find: findView, sources: sourcesView, map: mapView, workspace: workspaceView, approvals: approvalsView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
+
+/* ------------------------------------------------------------- simple home */
+function simpleAnswer(answer) {
+  const c = answer.counts ?? {};
+  return `<section class="answer">
+    <div class="answer-head">
+      <div><h2>${escapeHtml(answer.question)}</h2>
+      ${answer.rule ? `<p class="rule">${escapeHtml(answer.rule.citation)} · גרסה ${answer.rule.version}</p>` : ''}</div>
+      <button class="engine-btn" type="button" data-engine="eligibility">איך הגענו לזה؟</button>
+    </div>
+    <div class="counts">
+      <div class="count good"><b>${num(c.eligible)}</b><span>זכאים</span></div>
+      <div class="count"><b>${num(c.notEligible)}</b><span>אינם זכאים</span></div>
+      <div class="count unknown"><b>${num(c.unknown)}</b><span>לא ידוע</span></div>
+      <div class="count"><b>${num(c.total)}</b><span>משקי בית</span></div>
+    </div>
+    ${answer.unknownReasons?.length ? `<p class="note">הסיבה ל״לא ידוע״: חסר נתון הכנסה. <button class="engine-btn" type="button" data-engine="interview">איך מטפלים בזה?</button></p>` : ''}
+  </section>`;
+}
+async function simpleHome() {
+  const [overview, answer, org, lic] = await Promise.all([
+    api('/api/overview'), api('/api/answer'), api('/api/org'), api('/api/process?service=LIC'),
+  ]);
+  const top = [...lic.proposals].sort((a, b) => b.annualDaysSaved - a.annualDaysSaved)[0];
+  return `
+    <p class="hello">שלום דנה,</p>
+    <h1>מה תרצו לדעת על העיר?</h1>
+    <p class="lede">שאלו בשפה חופשית. תקבלו מספר, את הכלל שמאחוריו, ומה שלא ידוע.</p>
+    <form class="ask" id="ask-form">
+      <div class="ask-row">
+        <input id="q" name="q" type="search" value="כמה משקי בית זכאים להנחה באגרת תברואה?" aria-label="שאלה" />
+        <button class="btn" type="submit">שאל</button>
+      </div>
+      <div class="chips">
+        <button class="chip" type="button" data-q="כמה עסקים יש בעיר?">עסקים</button>
+        <button class="chip" type="button" data-q="כמה תושבים יש בעיר?">תושבים</button>
+        <button class="chip" type="button" data-q="מי מטפל בפיקוח?">מי מטפל בפיקוח</button>
+      </div>
+    </form>
+    <div id="answer-slot">${simpleAnswer(answer)}</div>
+    <div class="home-grid">
+      <article class="card mini"><h3>אנשים</h3><div class="val">${num(overview.graph.byType.person)}</div><p>${num(org.units.length)} יחידות · ${num(org.responsibilities.length)} אחריויות שזוהו</p><button class="engine-btn" type="button" data-engine="people">מה למדנו?</button></article>
+      <article class="card mini"><h3>תהליכים</h3><div class="val">${num(lic.model.medianTotalDays)} יום</div><p>חציון רישיון עסק · ${num(lic.model.caseCount)} תיקים</p><button class="engine-btn" type="button" data-engine="mail">מה למדנו?</button></article>
+      <article class="card mini"><h3>אוטומציות</h3><div class="val">${num(top?.annualDaysSaved ?? 0)}</div><p>ימי עבודה בשנה שאפשר לחסוך</p><button class="engine-btn" type="button" data-engine="form">איך נראה הפתרון?</button></article>
+    </div>`;
+}
+
+/* --------------------------------------------------------------- engine modal */
+async function openEngine(kind) {
+  const dialog = document.getElementById('engine');
+  const body = document.getElementById('engine-body');
+  const title = document.getElementById('engine-title');
+  if (!dialog || !body) return;
+  const titles = { eligibility: 'איך הגענו למספר', interview: 'איך סוגרים את הפער', mail: 'מה למדנו מהדואר', people: 'מה למדנו מהמערכת הארגונית', form: 'איך נולד הטופס' };
+  title.textContent = titles[kind] ?? 'איך הגענו לזה';
+  body.innerHTML = '<p class="hello">אוסף את הראיות…</p>';
+  dialog.showModal();
+  try {
+    const data = await api('/api/tour');
+    const scenario = data.scenarios.find((sc) => sc.id === kind) ?? data.scenarios[0];
+    body.innerHTML = scenario.steps.map((step) => {
+      if (step.kind === 'source') return `<div class="ev-row"><div class="ev-top"><span class="sys">${escapeHtml(step.system)}</span><code class="locator">${escapeHtml(step.locator)}</code></div><pre class="ev-quote">${escapeHtml(step.excerpt)}</pre><p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
+      if (step.kind === 'sources') return `<div class="ev-row"><div class="ev-top"><span class="sys">${escapeHtml(step.system)}</span></div>${step.items.map((m) => `<pre class="ev-quote">${escapeHtml(m.subject)} — ${escapeHtml(m.from)}</pre>`).join('')}<p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
+      if (step.kind === 'inference' || step.kind === 'fields') return `<div class="ev-row"><div class="ev-top"><strong>${escapeHtml(step.titleHe)}</strong></div><ul class="inferred">${step.items.map((i) => `<li><strong>${escapeHtml(i.name ?? i.label)}</strong> ${escapeHtml(i.summary ?? i.rule ?? '')}</li>`).join('')}</ul><p class="ev-did">${escapeHtml(step.didHe)}</p></div>`;
+      if (step.kind === 'result') return `<div class="ev-row"><strong>${escapeHtml(step.titleHe)}</strong><p class="ev-did">כלל ${escapeHtml(step.rule?.code ?? '')} גרסה ${step.rule?.version ?? ''} · ${escapeHtml(step.rule?.owner ?? '')}</p></div>`;
+      return `<div class="ev-row"><strong>${escapeHtml(step.titleHe)}</strong><p class="ev-did">${escapeHtml(step.textHe)}</p></div>`;
+    }).join('');
+  } catch (error) {
+    body.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+const VIEWS = { home: simpleHome, ask: askView, find: findView, sources: sourcesView, map: mapView, workspace: workspaceView, approvals: approvalsView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -866,7 +930,7 @@ async function submitQuestion(event) {
       slot.innerHTML = `<div class="err">${escapeHtml(answer.refused)}</div>`;
       return;
     }
-    slot.innerHTML = answerBlock(answer);
+    slot.innerHTML = simpleAnswer(answer);
   } catch (error) {
     slot.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`;
   }
@@ -921,6 +985,9 @@ document.addEventListener('click', async (event) => {
       .catch((error) => { out.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`; });
     return;
   }
+  const engineBtn = event.target.closest('[data-engine]');
+  if (engineBtn) { openEngine(engineBtn.dataset.engine); return; }
+  if (event.target.closest('[data-close-engine]')) { document.getElementById('engine')?.close(); return; }
   const approveItem = event.target.closest('[data-approve-kind]');
   if (approveItem) {
     const card = approveItem.closest('.approval');
