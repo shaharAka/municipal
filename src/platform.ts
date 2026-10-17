@@ -103,7 +103,9 @@ export async function buildPlatform(profileId: string, opts: { withTemplate: boo
   }
 
   seedRules(graph, captureTime);
-  const question = 'How many households are eligible for the sanitation fee discount?';
+  // Hebrew-first: the default question the system opens with is the one the
+  // department actually asks, in the language they ask it in.
+  const question = 'כמה משקי בית זכאים להנחה באגרת תברואה?';
   const answer = answerQuestion(graph, question, {
     capturedAt: captureTime,
     sources: report.sources.map((s) => ({ system: s.system, label: s.label })),
