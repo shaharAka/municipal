@@ -689,6 +689,32 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       properties: Object.fromEntries(submission.facts.map((f) => [f.property, f.value])),
     });
   }
+  if (parts[1] === 'find') {
+    const query = String(url.searchParams.get('q') ?? '').trim();
+    if (!query) return json(res, 200, { q: '', groups: [] });
+    const lower = query.toLowerCase();
+    const messages = platform.fixture.messages
+      .filter((m) => m.subject.includes(query) || m.body.content.includes(query))
+      .slice(0, 6)
+      .map((m) => ({ kind: 'הודעה', id: m.id, ref: refFor('message', m.id), title: m.subject, snippet: m.body.content.slice(0, 130), where: 'Exchange' }));
+    const documents = platform.fixture.drives[0].items
+      .filter((d) => d.name.includes(query) || d.contentText.includes(query))
+      .slice(0, 6)
+      .map((d) => ({ kind: 'מסמך', id: d.id, ref: refFor('document', d.id), title: d.name, snippet: d.contentText.slice(0, 130), where: 'SharePoint' }));
+    const pages = [...platform.graph.pages.values()]
+      .filter((p) => p.title.includes(query) && p.type !== 'message' && p.type !== 'document')
+      .slice(0, 8)
+      .map((p) => ({ kind: 'רשומה', id: p.ref, ref: p.ref, title: p.title, snippet: p.type, where: 'גרף הידע' }));
+    const rules = RULES
+      .filter((r) => r.name_he.includes(query) || r.code.toLowerCase().includes(lower))
+      .map((r) => ({ kind: 'כלל', id: `${r.code}-v${r.version}`, ref: refFor('eligibility_rule', `${r.code}-v${r.version}`), title: `${r.name_he} · גרסה ${r.version}`, snippet: r.citation, where: 'קטלוג כללים' }));
+    return json(res, 200, { q: query, groups: [
+      { source: 'דואר', items: messages },
+      { source: 'מסמכים', items: documents },
+      { source: 'גרף הידע', items: pages },
+      { source: 'כללים', items: rules },
+    ].filter((g) => g.items.length) });
+  }
   if (parts[1] === 'tour') return json(res, 200, buildTour(platform));
   if (parts[1] === 'approvals') {
     const suggestions = [...connectors.suggestions.values()]

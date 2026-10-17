@@ -14,6 +14,7 @@ const PROPOSAL_HE = {
 const TABS = [
   { id: 'home', label: 'בית' },
   { id: 'ask', label: 'שאל' },
+  { id: 'find', label: 'חיפוש' },
   { id: 'sources', label: 'מקורות' },
   { id: 'map', label: 'מפת התהליך' },
   { id: 'workspace', label: 'דואר ומסמכים' },
@@ -600,6 +601,39 @@ async function workspaceView() {
     </section>`;
 }
 
+/* -------------------------------------------------------------------- find */
+async function findView() {
+  return `
+    <h1>חיפוש אחד, על כל המערכות</h1>
+    <p class="lede">לא צריך לדעת אם זה היה במייל, במסמך, בגרף או בכלל. מחפשים פעם אחת ומקבלים את המקור עם הציטוט.</p>
+    <form class="ask" data-form="find" role="search">
+      <div class="ask-row">
+        <input name="q" type="search" placeholder="למשל: רישיון, הנחה, פיקוח" aria-label="חיפוש" />
+        <button class="btn" type="submit">חפש</button>
+      </div>
+    </form>
+    <div id="find-out" role="status" aria-live="polite"></div>`;
+}
+async function runFind(form) {
+  const out = document.getElementById('find-out');
+  const query = form.querySelector('input[name="q"]').value.trim();
+  if (!query) return;
+  out.innerHTML = '<p class="hello">מחפש…</p>';
+  try {
+    const data = await api('/api/find?q=' + encodeURIComponent(query));
+    out.innerHTML = data.groups.length
+      ? data.groups.map((group) => `<section class="section"><div class="section-head"><h2>${escapeHtml(group.source)}</h2><p>${num(group.items.length)} תוצאות</p></div>
+          <div class="find-list">${group.items.map((item) => `<button class="card find-hit" type="button" data-find-ref="${escapeHtml(item.ref)}">
+            <span class="badge">${escapeHtml(item.kind)}</span>
+            <strong>${escapeHtml(item.title)}</strong>
+            <p>${escapeHtml(item.snippet)}</p>
+          </button>`).join('')}</div></section>`).join('')
+      : '<p class="hello">לא נמצאו תוצאות. נסו מילה אחרת.</p>';
+  } catch (error) {
+    out.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`;
+  }
+}
+
 /* --------------------------------------------------------------- approvals */
 async function approvalsView() {
   const data = await api('/api/approvals');
@@ -669,7 +703,7 @@ async function sourcesView() {
     </section>` : ''}`;
 }
 
-const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, workspace: workspaceView, approvals: approvalsView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
+const VIEWS = { home: homeView, ask: askView, find: findView, sources: sourcesView, map: mapView, workspace: workspaceView, approvals: approvalsView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -760,6 +794,19 @@ document.addEventListener('click', async (event) => {
     });
     if (location.hash !== '#/sources') location.hash = '#/sources';
     else render();
+    return;
+  }
+  const findHit = event.target.closest('[data-find-ref]');
+  if (findHit) {
+    const out = document.getElementById('find-out');
+    out.innerHTML = '<p class="hello">קורא את הרשומה…</p>';
+    api('/api/page?ref=' + encodeURIComponent(findHit.dataset.findRef))
+      .then((page) => {
+        out.innerHTML = `<div class="card"><p class="eyebrow">מה שמור על הרשומה</p><h3>${escapeHtml(page.title)}</h3>
+          <ul class="inferred">${(page.facts ?? []).map((f) => `<li><strong>${escapeHtml(f.property)}</strong>: ${escapeHtml(String(f.value))} <span class="tiny muted">· ${escapeHtml(f.status)}</span></li>`).join('') || '<li>אין עובדות.</li>'}</ul>
+          <a class="btn quiet" href="#/workspace">חזרה למערכות המקור ←</a></div>`;
+      })
+      .catch((error) => { out.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`; });
     return;
   }
   const approveItem = event.target.closest('[data-approve-kind]');

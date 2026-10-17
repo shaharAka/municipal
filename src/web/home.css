@@ -253,3 +253,7 @@ details ul { margin: 10px 0 0; padding-inline-start: 18px; font-size: 13px; colo
 .approval-list { display: grid; gap: 12px; }
 .approval h3 { margin-top: 8px; }
 .approval .approval-out { margin-top: 10px; }
+.find-list { display: grid; gap: 10px; }
+.find-hit { text-align: start; cursor: pointer; display: grid; gap: 4px; font: inherit; }
+.find-hit:hover { border-color: var(--accent-line); }
+.find-hit p { color: var(--ink-2) !important; }
