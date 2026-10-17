@@ -27,7 +27,7 @@ Then open <http://127.0.0.1:4173> and walk the tabs: **Sources & Mapping** (wher
 (the same documents seen by a head and by a clerk).
 
 **Ask** answers the brief's question — *how many households are eligible for the sanitation-fee discount?* — with
-28 eligible, 10 not eligible and **4 unknown**, the approved rule version and its citation, and the missing attribute
+28 eligible, 10 not eligible and **6 unknown**, the approved rule version and its citation, and the missing attribute
 (household income) already turned into a gap. Unknown is never folded into zero.
 
 ![Sources and mapping](docs/screenshots/mapping.png)
