@@ -540,7 +540,8 @@ function outlookPane(messages, index) {
           <h3>${escapeHtml(current.subject)}</h3>
           <div class="ol-head"><span class="ol-avatar small">${escapeHtml(current.from.slice(0, 1))}</span><div><strong>${escapeHtml(current.from)}</strong><span class="tiny muted">${escapeHtml(current.fromAddress)} · ${escapeHtml(current.received.slice(0, 16).replace('T', ' '))}</span></div></div>
           <div class="ol-body">${escapeHtml(current.body)}</div>
-          <p class="ol-label">רגישות: ${escapeHtml(current.label)}</p>` : ''}
+          <p class="ol-label">רגישות: ${escapeHtml(current.label)}</p>
+          ${current.graphRef ? `<button class="btn small" type="button" data-graph="${current.graphRef}">מה למדנו מההודעה</button>` : ''}` : ''}
       </div>
     </div>`;
 }
@@ -567,15 +568,27 @@ function sharepointPane(documents, index) {
           <h4>${escapeHtml(current.name)}</h4>
           <p class="tiny muted">${num(current.pages)} עמודים · ${escapeHtml(current.label)}</p>
           <pre class="sp-text">${escapeHtml(current.text)}</pre>
+          ${current.graphRef ? `<button class="btn small" type="button" data-graph="${current.graphRef}">מה למדנו מהמסמך</button>` : ''}
         </aside>
       </div>
     </div>`;
 }
 async function workspaceView() {
-  const [outlook, doclib] = await Promise.all([api('/api/outlook'), api('/api/doclib')]);
+  const viewers = (await api('/api/viewers')).viewers;
+  const viewerId = state.ws?.viewer && viewers.some((v) => v.id === state.ws.viewer) ? state.ws.viewer : viewers[0]?.id ?? '';
+  const query = `?viewer=${encodeURIComponent(viewerId)}`;
+  const [outlook, doclib] = await Promise.all([api('/api/outlook' + query), api('/api/doclib' + query)]);
   return `
     <h1>המערכות שהאנשים כבר מכירים</h1>
-    <p class="lede">אותו מידע, במראה של הכלים שהמחלקה עובדת איתם. הקריאה משם היא לקריאה בלבד, והמערכת לומדת מהעותק שלה.</p>
+    <p class="lede">אותו מידע, במראה של הכלים שהמחלקה עובדת איתם. הקריאה משם לקריאה בלבד, והמערכת לומדת מהעותק שלה.</p>
+    <div class="ws-bar">
+      <label for="ws-viewer">צפייה בתור</label>
+      <select id="ws-viewer" data-ws-viewer>
+        ${viewers.map((v) => `<option value="${v.id}" ${v.id === viewerId ? 'selected' : ''}>${escapeHtml(v.label)}</option>`).join('')}
+      </select>
+      <span class="tiny muted">${escapeHtml(doclib.viewer)} רואה ${num(doclib.visible)} מתוך ${num(doclib.total)} מסמכים</span>
+    </div>
+    <div id="ws-graph" role="status"></div>
     <section class="section">
       <div class="section-head"><h2>דואר נכנס</h2><p>${escapeHtml(outlook.mailbox)} · ${num(outlook.messages.length)} הודעות</p></div>
       ${outlookPane(outlook.messages, state.ws?.msg ?? 0)}
@@ -693,6 +706,12 @@ function fromHash() {
   return TABS.some((t) => t.id === id) ? id : 'home';
 }
 
+document.addEventListener('change', (event) => {
+  const select = event.target.closest('[data-ws-viewer]');
+  if (!select) return;
+  state.ws = { ...(state.ws ?? {}), viewer: select.value };
+  render();
+});
 document.addEventListener('click', async (event) => {
   const accept = event.target.closest('[data-accept-candidate]');
   if (accept) {
@@ -716,6 +735,23 @@ document.addEventListener('click', async (event) => {
     });
     if (location.hash !== '#/sources') location.hash = '#/sources';
     else render();
+    return;
+  }
+  const graphBtn = event.target.closest('[data-graph]');
+  if (graphBtn) {
+    const slot = document.getElementById('ws-graph');
+    if (slot) {
+      slot.innerHTML = '<p class="hello">קורא את מה שנשמר על המקור…</p>';
+      const page = await api('/api/page?ref=' + encodeURIComponent(graphBtn.dataset.graph));
+      const facts = (page.facts ?? []).map((f) => `<li><strong>${escapeHtml(f.property)}</strong>: ${escapeHtml(String(f.value))} <span class="tiny muted">· ${escapeHtml(f.status)} · ${escapeHtml(f.provenance?.evidence_class ?? '')}</span></li>`).join('');
+      const evidence = (page.facts ?? []).flatMap((f) => f.evidence ?? []).slice(0, 3);
+      slot.innerHTML = `<div class="card ws-learned"><p class="eyebrow">מה נשמר בגרף</p><h3>${escapeHtml(page.title)}</h3>
+        <ul class="inferred">${facts || '<li>אין עובדות שמורות.</li>'}</ul>
+        ${evidence.map((e) => `<pre class="evid">${escapeHtml(e.excerpt ?? '')}</pre>`).join('')}
+        ${page.hiddenFactCount ? `<p class="note">${num(page.hiddenFactCount)} עובדות מוסתרות מהצופה הזה.</p>` : ''}
+      </div>`;
+      slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     return;
   }
   const msg = event.target.closest('[data-msg]');

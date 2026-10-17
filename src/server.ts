@@ -609,6 +609,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
   }
   if (parts[1] === 'outlook') {
     const messages = platform.fixture.messages.map((m) => ({
+      graphRef: refFor('message', m.id),
       id: m.id,
       subject: m.subject,
       from: m.from.emailAddress.name,
@@ -618,11 +619,27 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       label: m.sensitivityLabel.name,
       body: m.body.content,
     }));
-    return json(res, 200, { mailbox: platform.fixture.users[0]?.mail ?? '', messages });
+    return json(res, 200, {
+      mailbox: platform.fixture.users[0]?.mail ?? '',
+      viewer: viewerName(platform, viewer),
+      messages,
+    });
   }
   if (parts[1] === 'doclib') {
     const drive = platform.fixture.drives[0];
-    const documents = drive.items.map((d) => ({
+    const viewerUser = platform.fixture.users.find((u) => u.id === viewer.id);
+    const viewerGroups = viewerUser?.groupIds ?? [];
+    const canRead = (itemId: string) => {
+      const permissions = platform.fixture.permissions[itemId] ?? [];
+      if (!permissions.length) return true;
+      return permissions.some((perm) => {
+        const userId = perm.grantedToV2?.user?.id;
+        const groupId = perm.grantedToV2?.group?.id;
+        return (userId && userId === viewer.id) || (groupId && viewerGroups.includes(groupId));
+      });
+    };
+    const documents = drive.items.filter((d) => canRead(d.id)).map((d) => ({
+      graphRef: refFor('document', d.id),
       id: d.id,
       name: d.name,
       modified: d.lastModifiedDateTime,
@@ -632,7 +649,14 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       pages: d.pageBreaks.length + 1,
       text: d.contentText.slice(0, 900),
     }));
-    return json(res, 200, { library: drive.name, webUrl: drive.webUrl, documents });
+    return json(res, 200, {
+      library: drive.name,
+      webUrl: drive.webUrl,
+      viewer: viewerName(platform, viewer),
+      visible: documents.length,
+      total: drive.items.length,
+      documents,
+    });
   }
   if (parts[1] === 'forms' && parts[2] === 'submit' && req.method === 'POST') {
     const body = await readBody(req);
