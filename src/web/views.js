@@ -128,6 +128,7 @@ export function landingView({ viewers, answer, overview, approvals, rights = nul
           <div class="role-list" role="list">${roles}</div>
           <div class="who-foot">
             <span>${pending} החלטות ממתינות במחלקה כרגע</span>
+            <button class="btn btn-quiet btn-small demo-trigger" type="button" data-demo-open>${icon('spark')} סיור מודרך</button>
           </div>
         </section>
       </div>

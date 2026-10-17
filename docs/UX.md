@@ -88,6 +88,12 @@ The home is a role-shaped first block, then the attention list, then the rail:
 understood and falls back to search. The landing page keeps one live answer as
 the flagship scenario; home does not.
 
+**Guided demo.** A **סיור** button in the top bar opens four scenarios. Each
+switches to the role that owns the work, navigates to the real screen and opens
+the first action or target in place (a letter, the meeting alerts, the answer,
+the gap). It is a launcher, not a second product: the same screens, data and
+permissions.
+
 ![Home on a phone](screenshots/mobile-home.png)
 
 ### Decisions

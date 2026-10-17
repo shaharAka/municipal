@@ -1292,3 +1292,40 @@ button.case-row:hover { border-color: var(--primary-line); background: var(--sur
 .consent-block h3 .icon { width: 13px; height: 13px; color: var(--primary); }
 .consent-block p { font-size: 11.5px; color: var(--ink-2); line-height: 1.55; }
 .consent-block ul { padding-inline-start: 17px; font-size: 11.5px; color: var(--ink-2); margin-bottom: 5px; }
+
+/* ----------------------------------------------------------- guided demo */
+.demo-trigger { flex: none; gap: 5px; }
+.demo-trigger .icon { width: 15px; height: 15px; }
+.demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.demo-card {
+  min-width: 0; display: grid; gap: 9px; align-content: start;
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--surface-2); padding: 15px;
+}
+.demo-head { display: flex; align-items: flex-start; gap: 10px; }
+.demo-number {
+  width: 26px; height: 26px; border-radius: 8px; flex: none;
+  display: grid; place-items: center; background: var(--primary); color: #fff;
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.demo-head h3 { font-size: 15.5px; margin: 0 0 3px; }
+.demo-head p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.demo-role {
+  width: fit-content; display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--primary-line); background: var(--primary-soft);
+  color: var(--primary-strong); border-radius: 999px; padding: 2px 9px;
+  font-size: 10.5px; font-weight: 600;
+}
+.demo-role .icon { width: 12px; height: 12px; }
+.demo-steps { margin: 0; padding-inline-start: 17px; display: grid; gap: 2px; font-size: 11.5px; color: var(--ink-2); }
+.demo-foot {
+  margin-top: 3px; padding-top: 10px; border-top: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+}
+.demo-foot b { font-size: 11px; color: var(--ink); font-weight: 600; }
+.is-demo-focus { outline: 3px solid var(--sand); outline-offset: 5px; border-radius: 12px; }
+@media (max-width: 760px) {
+  .demo-grid { grid-template-columns: 1fr; }
+  .top-actions .demo-trigger { width: 38px; padding: 0; justify-content: center; }
+  .top-actions .demo-trigger span { display: none; }
+}

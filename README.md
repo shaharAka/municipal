@@ -63,6 +63,13 @@ and what is deliberately still open, is in
 customer-demo value pages — rights and meetings — are documented in
 [docs/value-pages/README.md](docs/value-pages/README.md).
 
+A **סיור** button in the top bar, and **סיור מודרך** on the landing page, opens
+four guided scenarios. Each switches to the role that owns the work and opens
+the real screen: rights with Hila, meetings with Dana, the eligibility question,
+and the income gap with Michal. A scenario can be stopped at any point.
+
+![The guided demo chooser](docs/screenshots/demo.png)
+
 ![The front door](docs/screenshots/landing.png)
 ![Home: department health and what needs a person](docs/screenshots/home.png)
 ![The decision queue and its detail pane](docs/screenshots/decisions.png)

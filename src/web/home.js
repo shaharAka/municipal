@@ -16,6 +16,7 @@ import {
 } from './ui.js';
 import * as views from './views.js';
 import * as value from './value.js';
+import * as demo from './demo.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 
@@ -37,6 +38,7 @@ const state = {
   formSubjects: [],
   find: null,
   signedIn: false,
+  demo: null,
 };
 
 /* --------------------------------------------------------------------- data */
@@ -226,6 +228,9 @@ function renderChrome() {
       <button class="search-trigger" type="button" data-open-palette aria-label="שאלו או חפשו">
         ${icon('search')}<span>שאלו או חפשו</span><kbd>⌘K</kbd>
       </button>
+      <button class="btn btn-quiet btn-small demo-trigger" type="button" data-demo-open aria-label="סיור מודרך">
+        ${icon('spark')}<span>סיור</span>
+      </button>
       <button class="user-btn" type="button" data-switch-role aria-label="החלפת זהות">
         <span class="avatar avatar-2">${esc(initials(person.name))}</span>
         <span>${esc(person.name)}</span>${icon('chevronDown')}
@@ -312,11 +317,11 @@ async function renderMain() {
 
 /* --------------------------------------------------------------- interaction */
 
-async function selectRole(id, label) {
+async function selectRole(id, label, { tab = 'home' } = {}) {
   state.role = id;
   state.roleLabel = label || state.viewers?.find((v) => v.id === id)?.label || '';
   state.signedIn = true;
-  state.tab = 'home';
+  state.tab = tab;
   state.answer = null;
   state.filter = 'all';
   state.approvalPick = '';
@@ -325,7 +330,7 @@ async function selectRole(id, label) {
   invalidate();
   setUrlRole(id);
   const url = new URL(location.href);
-  url.hash = '#/home';
+  url.hash = `#/${tab}`;
   history.replaceState(null, '', url);
   closeSheet();
   await render();
@@ -340,6 +345,72 @@ function exitRole() {
   history.replaceState(null, '', location.pathname);
   closeSheet();
   render();
+}
+
+function openDemo() {
+  openSheet({
+    title: 'סיור מודרך',
+    eyebrow: 'ארבעה תרחישים · ארבעה מסכים אמיתיים',
+    body: demo.hubBody(),
+    wide: true,
+  });
+}
+
+const waitFor = async (selector, timeout = 2600) => {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const found = document.querySelector(selector);
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  }
+  return null;
+};
+
+async function runDemoAction(action) {
+  if (!action) return true;
+  if (action.kind === 'palette') {
+    openPalette(action.question);
+    return true;
+  }
+  const target = await waitFor(action.selector);
+  if (!target) return false;
+  if (action.kind === 'focus') {
+    target.classList.add('is-demo-focus');
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    window.setTimeout(() => target.classList.remove('is-demo-focus'), 5200);
+    return true;
+  }
+  target.click();
+  return true;
+}
+
+async function startDemo(id) {
+  const scenario = demo.scenarioById(id);
+  if (!scenario) return;
+  const viewer = (state.viewers ?? []).find((entry) => roleKind(entry.label) === scenario.roleKind);
+  if (!viewer) {
+    toast('לא נמצא תפקיד מתאים לתרחיש הזה.', 'error');
+    return;
+  }
+  closeSheet();
+  state.demo = scenario.id;
+  if (state.role !== viewer.id) {
+    await selectRole(viewer.id, viewer.label, { tab: scenario.tab });
+  } else if (state.tab !== scenario.tab) {
+    state.tab = scenario.tab;
+    const url = new URL(location.href);
+    url.hash = `#/${scenario.tab}`;
+    history.replaceState(null, '', url);
+    renderChrome();
+    await renderMain();
+    window.scrollTo({ top: 0 });
+  }
+  const ran = await runDemoAction(scenario.action);
+  if (!ran) {
+    toast('התרחיש לא מצא את היעד במסך. נסו שוב מהסיור.', 'error');
+    return;
+  }
+  toast(`התרחיש התחיל · ${scenario.titleHe}`);
 }
 
 function openRoleSheet() {
@@ -705,6 +776,15 @@ async function toggleSource(id, button) {
 /* ------------------------------------------------------------------- events */
 
 document.addEventListener('click', async (event) => {
+  if (event.target.closest('[data-demo-open]')) {
+    openDemo();
+    return;
+  }
+  const demoStart = event.target.closest('[data-demo-start]');
+  if (demoStart) {
+    startDemo(demoStart.dataset.demoStart);
+    return;
+  }
   const role = event.target.closest('[data-role]');
   if (role) {
     selectRole(role.dataset.role, role.dataset.roleLabel);

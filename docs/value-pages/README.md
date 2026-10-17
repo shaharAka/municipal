@@ -147,6 +147,10 @@ One test assertion moves with the business names: `'מאפייה השכונה'` 
 
 ## Screens
 
+The app exposes the guided scenarios through the **סיור** button in the top bar
+(and **סיור מודרך** on the landing page). Scenario 1 opens Hila's rights page
+and the first letter; scenario 2 opens Dana's meetings page.
+
 - `screens/before/` and `screens/after/`: landing, the head's home, Michal's
   home and Hila's home side by side; plus every new page and mobile.
 - `screens/flows/`, in order:
