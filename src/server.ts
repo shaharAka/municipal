@@ -73,6 +73,123 @@ function viewerName(platform: Platform, viewer: Viewer): string {
   return user ? `${user.displayName} (${user.jobTitle})` : viewer.id;
 }
 
+/** The raw evidence behind a page, so a demo can show the source, not the conclusion. */
+function evidenceOf(platform: Platform, pageRef: string, property?: string) {
+  const facts = platform.graph.currentFacts(pageRef);
+  const fact = (property ? facts.find((f) => f.property === property) : undefined) ?? facts[0];
+  const evidence = fact?.evidenceIds.map((id) => platform.graph.evidence.get(id)).find(Boolean);
+  if (!evidence) return null;
+  return {
+    system: evidence.sourceSystem,
+    locator: Object.entries(evidence.locator).map(([k, v]) => `${k}=${v}`).join(' · '),
+    excerpt: evidence.excerpt.slice(0, 220),
+  };
+}
+
+function buildTour(platform: Platform) {
+  const g = platform.graph;
+  const households = g.ofType('household');
+  const missing = households.filter((h) => !h.properties.income_band).slice(0, 2);
+  const senior = g.ofType('resident').find((r) => {
+    const birth = String(r.properties.birth_date ?? '');
+    return birth && 2026 - Number(birth.slice(0, 4)) >= 67;
+  });
+  const missingEvidence = missing.length ? evidenceOf(platform, missing[0].ref, 'income_band') : null;
+  const seniorEvidence = senior ? evidenceOf(platform, senior.ref, 'birth_date') : null;
+  const messages = g.ofType('message')
+    .filter((m) => /הנחה|רישיון|פיקוח|מסמכים/.test(String(m.properties.subject)))
+    .slice(0, 3)
+    .map((m) => ({ subject: m.properties.subject, from: m.properties.from_address, received: String(m.properties.received_at).slice(0, 10) }));
+  const responsibilities = platform.org.responsibilities.filter((r) => r.signal === 'mail').slice(0, 3);
+  const document = platform.report.documents.find((d) => /הנחה|תעריף/.test(d.name));
+  const form = generateForm(platform.ontology, 'household', 'application', { only: ['household_size', 'income_band', 'discount_status'] });
+  const answer = platform.answer;
+
+  return {
+    scenarios: [
+      {
+        id: 'eligibility',
+        titleHe: 'כמה משקי בית זכאים להנחה',
+        promiseHe: 'שאלה אחת, ותשובה שאפשר לעמוד מאחוריה.',
+        steps: [
+          {
+            kind: 'source',
+            system: 'Azure SQL · dbo.households',
+            locator: missingEvidence?.locator ?? 'dbo.households',
+            excerpt: missingEvidence?.excerpt ?? 'income_band = NULL',
+            didHe: 'המערכת קראה את טבלת משקי הבית. אין צורך שאף אחד יפיק קובץ או יבנה אקסל.',
+          },
+          {
+            kind: 'source',
+            system: 'Azure SQL · dbo.residents',
+            locator: seniorEvidence?.locator ?? 'dbo.residents',
+            excerpt: seniorEvidence?.excerpt ?? 'birth_date',
+            didHe: `שדה תאריך הלידה הופך לגיל מול תאריך הייחוס. ${senior ? 'אחד התושבים עובר את גיל 67 ולכן משק הבית זכאי.' : ''}`,
+          },
+          {
+            kind: 'result',
+            titleHe: 'התשובה, עם הכלל שמאחוריה',
+            counts: answer.counts,
+            rule: answer.rule,
+            unknown: answer.unknownReasons,
+          },
+        ],
+      },
+      {
+        id: 'mail',
+        titleHe: 'מה למדנו מדואר העבודה',
+        promiseHe: 'הדואר לא נכתב בשבילנו, אבל הוא מספר מי עושה מה.',
+        steps: [
+          {
+            kind: 'sources',
+            system: 'Exchange Online',
+            items: messages,
+            didHe: 'המערכת קראה הודעות אמיתיות של המחלקה: מי כתב, על מה, ומתי.',
+          },
+          {
+            kind: 'inference',
+            titleHe: 'מה נגזר מהן',
+            items: responsibilities.map((r) => ({ name: platform.org.people.find((p) => p.ref === r.personRef)?.name ?? '', summary: r.summary })),
+            didHe: 'כל אחריות היא הצעה עם מספר האירועים שמאחוריה — לא קביעה.',
+          },
+          {
+            kind: 'action',
+            titleHe: 'מה האדם עושה',
+            textHe: 'מאשר את האחריויות בקליק אחד. מרגע האישור הן הופכות לבסיס לניתוב ולשאלות.',
+            action: { type: 'approve-responsibility', labelHe: 'אשר את האחריויות' },
+          },
+        ],
+      },
+      {
+        id: 'form',
+        titleHe: 'טופס מתוך המודל',
+        promiseHe: 'לא כותבים טופס. מגזירים אותו מהמודל.',
+        steps: [
+          {
+            kind: 'source',
+            system: 'SharePoint · מסמכי המחלקה',
+            locator: document?.ref ?? '',
+            excerpt: document ? `${document.name} · ${document.label}` : '',
+            didHe: 'הנוהל והתעריף הם המקור לשדות שנדרשים מבקש.',
+          },
+          {
+            kind: 'fields',
+            titleHe: 'השדות שנגזרו מהמודל',
+            items: form.fields.map((f) => ({ label: f.labelHe, rule: f.widget === 'select' ? `בחירה: ${f.options.join(' / ')}` : f.widget })),
+            didHe: 'אותו מקור משמש גם ליצירת הטופס וגם לבדיקת התקינות. לכן הם לא יכולים לסתור זה את זה.',
+          },
+          {
+            kind: 'action',
+            titleHe: 'ממלאים ומגישים',
+            textHe: 'המילוי נשמר על משק הבית עם מקור וזהות המגיש.',
+            action: { type: 'fill-form', labelHe: 'צור טופס ומלא דוגמה' },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function assist(platform: Platform, question: string) {
   const keywords = ['פיקוח', 'רישיון', 'הנחה', 'קריאה', 'תעריף', 'ביקורת', 'מסמכים', 'בקשות'];
   if (/(^|\s)(מי|who|אחראי|מטפל)/i.test(question)) {
@@ -401,6 +518,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       properties: Object.fromEntries(submission.facts.map((f) => [f.property, f.value])),
     });
   }
+  if (parts[1] === 'tour') return json(res, 200, buildTour(platform));
   if (parts[1] === 'learning') {
     const decisions = platform.graph.ofType('decision').map((p) => ({
       ref: p.ref, title: p.title, kind: p.properties.kind, status: p.properties.status,

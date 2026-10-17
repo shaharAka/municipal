@@ -18,7 +18,7 @@ const TABS = [
   { id: 'map', label: 'מפת התהליך' },
   { id: 'learning', label: 'למידה' },
   { id: 'forms', label: 'טפסים' },
-  { id: 'demo', label: 'תרחישים' },
+  { id: 'demo', label: 'סיור' },
   { id: 'people', label: 'אנשים' },
   { id: 'process', label: 'תהליכים' },
   { id: 'onboard', label: 'קליטה' },
@@ -555,7 +555,7 @@ async function sourcesView() {
     </section>` : ''}`;
 }
 
-const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, learning: learningView, forms: formsView, demo: demoView, people: peopleView, process: processView, onboard: onboardView };
+const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -642,6 +642,16 @@ document.addEventListener('click', async (event) => {
     else render();
     return;
   }
+  const tourScenario = event.target.closest('[data-tour-scenario]');
+  if (tourScenario) {
+    state.tour = { pick: Number(tourScenario.dataset.tourScenario), shown: 1, out: null };
+    render();
+    return;
+  }
+  const tourNext = event.target.closest('[data-tour-next]');
+  if (tourNext) { state.tour.shown += 1; state.tour.out = null; render(); return; }
+  const tourAction = event.target.closest('[data-tour-action]');
+  if (tourAction) { runTourAction(tourAction.dataset.tourAction); return; }
   const demo = event.target.closest('[data-demo-action]');
   if (demo) {
     const scenarioId = demo.closest('.scenario')?.querySelector('.demo-out')?.id?.replace('out-', '');
