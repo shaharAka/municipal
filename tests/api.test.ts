@@ -119,3 +119,35 @@ test('a person approving an automation creates a decision with their name on it'
   const updated = after.automations.find((a: any) => a.ref === proposal.ref);
   assert.equal(updated.status, 'approved');
 });
+
+test('the eligibility question answers over HTTP with its rule and unknowns', async () => {
+  const rules = await get('/api/rules');
+  assert.equal(rules.rules.length, 2);
+  assert.equal(rules.reference_date, '2026-10-17');
+  assert.equal(rules.rules.find((r: any) => r.version === 2).in_force, true);
+  assert.equal(rules.rules.find((r: any) => r.version === 1).in_force, false);
+
+  const answer = await get('/api/answer');
+  assert.equal(answer.rule.version, 2);
+  assert.equal(answer.counts.eligible + answer.counts.notEligible + answer.counts.unknown, answer.counts.total);
+  assert.ok(answer.unknownReasons.some((r: any) => r.property === 'income_band'));
+
+  const ask = await fetch(`${BASE}/api/ask`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ question: 'How many households are eligible for the sanitation fee discount?' }),
+  });
+  assert.equal(ask.status, 200);
+  const fresh = await ask.json();
+  assert.equal(fresh.refused, null);
+  assert.equal(fresh.rule.version, 2);
+
+  const refused = await fetch(`${BASE}/api/ask`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ question: 'Who won the match last night?' }),
+  });
+  const refusedBody = await refused.json();
+  assert.ok(refusedBody.refused);
+  assert.equal(refusedBody.counts.eligible, null);
+});

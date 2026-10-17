@@ -37,6 +37,7 @@ const list = (items, fallback = 'None.') =>
   items.length ? h`<div class="chips">${items.map((item) => h`<span class="chip">${item}</span>`)}</div>` : h`<p class="tiny muted">${fallback}</p>`;
 const SECTIONS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'ask', label: 'Ask' },
   { id: 'mapping', label: 'Sources & Mapping' },
   { id: 'organization', label: 'Organization' },
   { id: 'workflows', label: 'Workflows' },
@@ -48,6 +49,7 @@ const state = {
   tab: 'overview', service: null, viewer: null, coverageFilter: 'all',
   search: { q: '', ran: false, loading: false, error: null, results: [], seq: 0 },
   approvals: new Map(), overlays: new Map(), focusService: null, focusViewer: false,
+  ask: { answer: null, error: null },
 };
 const cache = new Map();
 async function fetchJson(path, params = {}) {
@@ -760,6 +762,14 @@ function onPanelClick(event) {
     if (action === 'coverage-filter') { state.coverageFilter = actionElement.dataset.filter; applyCoverageFilter(); return; }
     if (action === 'accept') { acceptCandidate(actionElement); return; }
     if (action === 'approve') { approveProposal(actionElement); return; }
+    if (action === 'ask-suggestion') {
+      const form = $('form[data-form="ask"]');
+      if (!form) return;
+      const input = $('input[name="q"]', form);
+      input.value = actionElement.dataset.q ?? '';
+      runAsk(form);
+      return;
+    }
   }
   const serviceLink = event.target.closest('[data-service]');
   if (serviceLink) state.service = serviceLink.dataset.service;
@@ -771,13 +781,122 @@ function onPanelChange(event) {
   renderTab();
 }
 function onPanelSubmit(event) {
-  const form = event.target.closest('form[data-form="search"]');
+  const form = event.target.closest('form[data-form]');
   if (!form) return;
   event.preventDefault();
-  runSearch(form);
+  if (form.dataset.form === 'search') runSearch(form);
+  if (form.dataset.form === 'ask') runAsk(form);
+}
+
+
+/* --------------------------------------------------------------------- ask */
+async function loadAsk() {
+  const [answer, rules] = await Promise.all([
+    state.ask.answer ? Promise.resolve(state.ask.answer) : fetchJson('/api/answer'),
+    fetchJson('/api/rules'),
+  ]);
+  return { answer, rules };
+}
+async function runAsk(form) {
+  const input = $('input[name="q"]', form);
+  const question = input.value.trim();
+  if (!question) return;
+  const errorBox = $('.action-error', form);
+  if (errorBox) errorBox.textContent = '';
+  state.ask = { answer: null, error: null };
+  try {
+    const answer = await postJson('/api/ask', { question });
+    state.ask.answer = answer;
+    renderTab();
+  } catch (error) {
+    state.ask.error = error.message;
+    if (errorBox) errorBox.textContent = error.message;
+  }
+}
+function askView({ answer, rules }) {
+  const a = state.ask.answer ?? answer;
+  const counts = a.counts ?? {};
+  const isRule = Boolean(a.rule);
+  const current = isRule ? rules.rules.find((rule) => rule.code === a.rule.code && rule.version === a.rule.version) : null;
+  const criteria = current?.criteria ?? [];
+  const sources = (a.sources ?? []).map((source) => source.label).join(' · ');
+  return h`
+    ${pageHead('Ask the record', 'A question, the rule behind it, and what could not be decided',
+      'Answers are computed from the graph with the rule version in force. Unknown is reported, never folded into a zero: it is the list of gaps the next interview or lookup has to close.')}
+    <section class="section">
+      <form class="search-form" data-form="ask" role="form">
+        <label for="ask-input">Question</label>
+        <div class="search-row">
+          <input id="ask-input" name="q" type="search" value="${a.question ?? ''}" placeholder="How many households are eligible for the sanitation fee discount?" autocomplete="off" />
+          <button class="btn" type="submit">Ask</button>
+        </div>
+        <div class="chips suggestion-row">${(rules.suggested ?? []).map((question) => h`<button type="button" class="chip activity suggestion" data-action="ask-suggestion" data-q="${question}">${question}</button>`)}</div>
+        <p class="action-error" role="alert"></p>
+      </form>
+    </section>
+    ${a.refused ? h`<section class="banner warn"><div class="banner-body"><p class="eyebrow">Not answered</p><h3>${a.refused}</h3><p>The planner refuses rather than guessing, and nothing was executed.</p></div></section>` : ''}
+    ${!a.refused && isRule ? h`
+      <section class="section">
+        <div class="stats">
+          ${statTile('Eligible', n(counts.eligible), 'households')}
+          ${statTile('Not eligible', n(counts.notEligible), 'households')}
+          ${statTile('Unknown', n(counts.unknown), a.unknownReasons.length ? 'missing ' + a.unknownReasons.map((reason) => reason.property).join(', ') : 'nothing missing')}
+          ${statTile('Total', n(counts.total), 'rule v' + a.rule.version)}
+        </div>
+        ${a.suppression?.applied ? h`<p class="tiny muted note-line">Suppressed: the minimum cell size is ${a.suppression.minCellSize}, declared by ${heb(a.suppression.owner)}.</p>` : ''}
+      </section>
+      <section class="section">
+        ${sectionHead('The rule that decided it', 'A count without its rule version is not an answer.')}
+        <div class="card">
+          <div class="row-between">
+            <div><p class="eyebrow">${a.rule.code}</p><h3 class="card-title">${a.rule.citation}</h3></div>
+            <div class="chips">${badge('v' + a.rule.version)}${badge(a.rule.status, 'ok')}</div>
+          </div>
+          <dl class="proposal-metrics">
+            <div><dt>Owner</dt><dd>${heb(a.rule.owner)}</dd></div>
+            <div><dt>In force from</dt><dd>${date(a.rule.effective_from)}</dd></div>
+            <div><dt>Combination</dt><dd>${a.rule.logic === 'any' ? 'any ground qualifies' : 'every ground required'}</dd></div>
+          </dl>
+          <div class="table-wrap inline-table"><table class="data">
+            <thead><tr><th>Ground</th><th>Reads</th><th>Operator</th><th>Value</th></tr></thead>
+            <tbody>${criteria.map((criterion) => h`<tr>
+              <td>${criterion.label_en} <span class="tiny muted">${heb(criterion.label_he)}</span></td>
+              <td>${mono(criterion.property)}</td><td>${mono(criterion.operator)}</td><td>${mono(String(criterion.value))}</td>
+            </tr>`)}</tbody>
+          </table></div>
+        </div>
+      </section>` : ''}
+    ${!a.refused && !isRule && counts.value != null ? h`
+      <section class="section"><div class="stats">${statTile('Count', n(counts.value), a.plan.entity + ' pages')}</div></section>` : ''}
+    ${a.unknownReasons.length ? h`
+      <section class="section">
+        ${sectionHead('What could not be decided', 'Every unknown has a cause, and each cause is already a knowledge candidate in the graph.')}
+        <div class="table-wrap"><table class="data">
+          <thead><tr><th>Missing attribute</th><th>Ground</th><th class="num">Households</th><th>Next step</th></tr></thead>
+          <tbody>${a.unknownReasons.map((reason) => h`<tr>
+            <td>${mono(reason.property)}</td>
+            <td>${reason.label_en} <span class="tiny muted">${heb(reason.label_he)}</span></td>
+            <td class="num">${n(reason.count)}</td>
+            <td>${badge('gap → interview or lookup', 'candidate')}</td>
+          </tr>`)}</tbody>
+        </table></div>
+      </section>` : ''}
+    <section class="section">
+      ${sectionHead('Explain', 'The plan, the steps, and what was not checked.')}
+      <div class="card explain-card">
+        <p class="eyebrow">Plan</p>
+        <pre class="code-block">${JSON.stringify(a.explain.plan, null, 2)}</pre>
+        <p class="eyebrow">Steps</p>
+        <ol class="steps">${(a.explain.steps ?? []).map((step) => h`<li>${step}</li>`)}</ol>
+        <p class="eyebrow">What was not checked</p>
+        <ul class="steps">${(a.explain.whatWasNotChecked ?? []).map((step) => h`<li>${step}</li>`)}</ul>
+        <p class="tiny muted">Sources: ${sources || 'none'} · data captured ${date(a.freshness)} · answer ${mono(a.answer_id)}</p>
+      </div>
+    </section>`;
 }
 
 /* ----------------------------------------------------------------- loaders */
+
 async function loadWorkflows() {
   const overview = await fetchJson('/api/overview');
   const codes = overview.services.map((service) => service.code);
@@ -808,6 +927,7 @@ async function loadAccess() {
 }
 const LOADERS = {
   overview: () => fetchJson('/api/overview'),
+  ask: loadAsk,
   mapping: () => fetchJson('/api/mapping'),
   organization: () => fetchJson('/api/org'),
   workflows: loadWorkflows,
@@ -816,7 +936,7 @@ const LOADERS = {
   access: loadAccess,
 };
 const VIEWS = {
-  overview: overviewView, mapping: mappingView, organization: organizationView,
+  overview: overviewView, ask: askView, mapping: mappingView, organization: organizationView,
   workflows: workflowsView, automations: automationsView, onboarding: onboardingView, access: accessView,
 };
 

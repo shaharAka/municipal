@@ -14,6 +14,8 @@ import { ingest, type IngestReport } from './ingest/ingest.ts';
 import { buildOrgMap, type OrgMap } from './org/orgmap.ts';
 import { discoverProcess, persistProcess, type AutomationProposal, type ProcessModel } from './process/discover.ts';
 import { exportTemplate, diffAgainstTemplate, type OrgTemplate, type DiffReport } from './template/diff.ts';
+import { answerQuestion, seedRules, type QueryAnswer } from './query/eligibility.ts';
+import { RULES } from './seed/eligibility-rules.ts';
 
 export const captureTime = '2026-10-17T08:00:00.000Z';
 
@@ -31,6 +33,8 @@ export type Platform = {
   viewers: Viewer[];
   template: OrgTemplate;
   diff: DiffReport | null;
+  answer: QueryAnswer;
+  question: string;
   baseUrl: string;
   close: () => Promise<void>;
 };
@@ -98,6 +102,13 @@ export async function buildPlatform(profileId: string, opts: { withTemplate: boo
     proposals.push(...persisted.proposals);
   }
 
+  seedRules(graph, captureTime);
+  const question = 'How many households are eligible for the sanitation fee discount?';
+  const answer = answerQuestion(graph, question, {
+    capturedAt: captureTime,
+    sources: report.sources.map((s) => ({ system: s.system, label: s.label })),
+  });
+
   const platform: Platform = {
     profileId,
     organization: PROFILES[profileId].cityEn,
@@ -112,6 +123,8 @@ export async function buildPlatform(profileId: string, opts: { withTemplate: boo
     viewers: makeViewers(fixture),
     template: undefined as unknown as OrgTemplate,
     diff: null,
+    answer,
+    question,
     baseUrl,
     close: () => cloud.close(),
   };

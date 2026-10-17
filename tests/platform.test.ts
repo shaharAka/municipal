@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { buildDemo, buildPlatform, type Demo } from '../src/platform.ts';
 import { composeBaseline, applyOverlay, loadPacks, pageProblems } from '../src/ontology/compose.ts';
 import { buildFixture } from '../src/cloud/fixtures.ts';
-import { refFor } from '../src/graph/graph.ts';
+import { Graph, refFor } from '../src/graph/graph.ts';
+import { answerQuestion, evaluateRule } from '../src/query/eligibility.ts';
+import { RULES } from '../src/seed/eligibility-rules.ts';
 
 let demo: Demo;
 
@@ -212,3 +214,73 @@ test('approving an automation creates a decision page that records who decided',
 function serverPort(): number {
   return Number(process.env.PORT ?? 4173);
 }
+
+// ---------------------------------------------------------------- eligibility
+
+test('the discount question answers with eligible, not eligible and unknown', () => {
+  const answer = demo.primary.answer;
+  assert.equal(answer.rule?.code, 'SAN-FEE-DISCOUNT');
+  assert.equal(answer.rule?.version, 2);
+  const { eligible, notEligible, unknown, total } = answer.counts;
+  assert.ok(eligible! > 0 && notEligible! > 0 && unknown! > 0);
+  assert.equal(eligible! + notEligible! + unknown!, total);
+  assert.equal(total, 44);
+  assert.equal(answer.unknownReasons[0].property, 'income_band');
+  assert.equal(answer.unknownReasons[0].count, unknown);
+  assert.equal(answer.provisional, false);
+});
+
+test('the answer names the rule version that decided it, and an older version decides differently', () => {
+  const answer = demo.primary.answer;
+  assert.match(String(answer.rule?.citation), /תשפ"ו/);
+  assert.match(String(answer.rule?.owner), /משה טל/);
+  assert.equal(answer.rule?.effective_from, '2026-01-01');
+
+  const v1 = evaluateRule(demo.primary.graph, RULES.find((r) => r.version === 1)!, {
+    capturedAt: '2026-10-17T08:00:00.000Z',
+  });
+  const v2 = evaluateRule(demo.primary.graph, RULES.find((r) => r.version === 2)!, {
+    capturedAt: '2026-10-17T08:00:00.000Z',
+  });
+  assert.ok(v1.counts.eligible < v2.counts.eligible, 'the older age threshold must qualify fewer households');
+});
+
+test('unknowns become gaps that name the attribute and what it blocks', () => {
+  const gaps = demo.primary.graph
+    .ofType('knowledge_candidate')
+    .filter((p) => String(p.properties.proposed_by) === 'eligibility gap detection v1');
+  assert.equal(gaps.length, 1);
+  const proposal = gaps[0].properties.proposal as Record<string, unknown>;
+  assert.equal(proposal.property, 'income_band');
+  assert.ok(Number(proposal.blocked_decisions) > 0);
+  assert.match(String(gaps[0].properties.evidence_summary), /cannot be made because income_band is missing/);
+});
+
+test('a question the catalogue cannot answer is refused instead of guessed', () => {
+  const refused = answerQuestion(demo.primary.graph, 'What is the weather in Tel Aviv?', {
+    capturedAt: '2026-10-17T08:00:00.000Z',
+    sources: [],
+  });
+  assert.ok(refused.refused);
+  assert.equal(refused.counts.eligible, null);
+  assert.equal(refused.gapsCreated, 0);
+});
+
+test('counts below the minimum cell size are suppressed', () => {
+  const tiny = new Graph();
+  for (const id of ['1', '2']) {
+    tiny.addPage({ ref: refFor('household', id), type: 'household', title: id, properties: { income_band: 'LOW' }, createdAt: '2026-10-17T08:00:00.000Z' });
+  }
+  const evaluation = evaluateRule(tiny, RULES[1], { capturedAt: '2026-10-17T08:00:00.000Z' });
+  assert.equal(evaluation.counts.eligible, 2);
+  assert.equal(evaluation.suppressed, true);
+  assert.match(String(evaluation.suppressionNote), /Fewer than 5/);
+});
+
+test('the sanitisation fee question is persisted as an answer page', () => {
+  const pages = demo.primary.graph.ofType('query_answer');
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].properties.eligible, demo.primary.answer.counts.eligible);
+  assert.equal(pages[0].properties.rule_version, 2);
+  assert.equal(pages[0].properties.unknown_reasons.income_band_missing, demo.primary.answer.counts.unknown);
+});

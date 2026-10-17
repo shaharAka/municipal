@@ -466,7 +466,7 @@ export function buildFixture(profileId: string): Fixture {
       household_id: 'HHD-' + pad(i, 3),
       property_id: property.property_id,
       household_size: int(rng, 1, 6),
-      income_band: chance(rng, 0.18) ? null : pick(rng, ['LOW', 'MID', 'HIGH']),
+      income_band: chance(rng, 0.3) ? null : pick(rng, ['LOW', 'MID', 'HIGH']),
       discount_status: chance(rng, 0.35) ? 'GRANTED' : 'NOT_REQUESTED',
     });
   }

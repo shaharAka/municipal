@@ -12,6 +12,8 @@ import { publicView, stats as ontologyStats } from './ontology/compose.ts';
 import { MAPPINGS } from './ontology/mappings.ts';
 import { PARAMS } from './process/discover.ts';
 import { whoHandles } from './org/orgmap.ts';
+import { answerQuestion } from './query/eligibility.ts';
+import { REFERENCE_DATE, RULES, SUPPRESSION } from './seed/eligibility-rules.ts';
 import { refFor, type Viewer } from './graph/graph.ts';
 
 const WEB = new URL('./web/', import.meta.url).pathname;
@@ -259,6 +261,34 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
         models: demo.secondary.models.map((m) => ({ code: m.serviceCode, cases: m.caseCount, medianDays: m.medianTotalDays, variants: m.variants.length })),
       },
     });
+  }
+  if (parts[1] === 'answer') return json(res, 200, platform.answer);
+  if (parts[1] === 'rules') {
+    return json(res, 200, {
+      reference_date: REFERENCE_DATE,
+      suppression: SUPPRESSION,
+      rules: RULES.map((rule) => ({
+        ...rule,
+        in_force:
+          rule.status === 'approved' &&
+          rule.effective_from <= REFERENCE_DATE &&
+          (!rule.effective_to || rule.effective_to >= REFERENCE_DATE),
+      })),
+      suggested: [
+        'How many households are eligible for the sanitation fee discount?',
+        'How many businesses are there?',
+        'How many residents are there?',
+      ],
+    });
+  }
+  if (parts[1] === 'ask') {
+    const body = await readBody(req);
+    const question = String(body.question ?? '').trim();
+    const answer = answerQuestion(platform.graph, question, {
+      capturedAt: captureTime,
+      sources: platform.report.sources.map((s) => ({ system: s.system, label: s.label })),
+    });
+    return json(res, 200, answer);
   }
   if (parts[1] === 'security') {
     const labelCounts: Record<string, number> = {};

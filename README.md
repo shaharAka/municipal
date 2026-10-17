@@ -18,7 +18,7 @@ Nothing to install. Node 22.18+:
 ```bash
 npm run demo   # the whole loop, narrated in the terminal with real numbers
 npm start      # the workbench at http://127.0.0.1:4173
-npm test       # 20 tests over the pipeline, the ontology, the API and the access rules
+npm test       # 27 tests over the pipeline, the ontology, eligibility, the API and the access rules
 ```
 
 Then open <http://127.0.0.1:4173> and walk the tabs: **Sources & Mapping** (where the data lands in the ontology),
@@ -26,7 +26,12 @@ Then open <http://127.0.0.1:4173> and walk the tabs: **Sources & Mapping** (wher
 **Automations** (proposals with their evidence), **Onboarding** (the template diff) and **Access**
 (the same documents seen by a head and by a clerk).
 
+**Ask** answers the brief's question — *how many households are eligible for the sanitation-fee discount?* — with
+28 eligible, 10 not eligible and **4 unknown**, the approved rule version and its citation, and the missing attribute
+(household income) already turned into a gap. Unknown is never folded into zero.
+
 ![Sources and mapping](docs/screenshots/mapping.png)
+![Ask the record](docs/screenshots/ask.png)
 
 ## What it actually does
 
@@ -69,7 +74,12 @@ a 26-day median case, and a bottleneck at inspection scheduling: 12 days,
 parameters and stated assumptions — see `PARAMS` in
 [discover.ts](src/process/discover.ts).
 
-**6 · The next municipality is a diff.** ([src/template](src/template))
+**6 · Answers keep their unknowns.** ([src/query](src/query)) A question becomes a typed plan, never SQL. The
+executor applies the rule version in force, per household, and returns three counts plus the reason each unknown is
+unknown. Counts below the declared minimum cell size are suppressed. Every answer is stored as a `query_answer` page
+with its plan, so it can be re-checked when the data or the rule changes. Unknowns become `knowledge_candidate` gaps.
+
+**7 · The next municipality is a diff.** ([src/template](src/template))
 The learned graph exports a versioned template (units, roles, services, process
 shapes). Onboarding compares a new organization to it and reports matched,
 renamed, added and missing — with an overlay draft recording only the
@@ -79,8 +89,8 @@ differences. See [ADR-0007](docs/decisions/0007-reuse-the-graph-for-the-next-mun
 
 | | |
 |---|---|
-| Pages / edges / facts | 1,574 / 2,637 / 8,078 |
-| Facts confirmed by rule / candidate | 7,471 / 607 |
+| Pages / edges / facts | 1,578 / 2,640 / 8,123 |
+| Facts confirmed by rule / candidate | 7,508 / 615 |
 | Licence cases analysed | 62 over 547 days, 3 variants |
 | Median licence case | 26 days (p90 35) |
 | Bottleneck | inspection scheduling, 12-day median wait |

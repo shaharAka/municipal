@@ -467,3 +467,17 @@ code, pre { font-family: var(--mono); }
   .spinner { animation: none; }
   * { scroll-behavior: auto !important; }
 }
+
+/* ------------------------------------------------------------------- ask */
+.suggestion-row { margin-top: 10px; }
+.chip.suggestion { cursor: pointer; font: inherit; color: var(--ink-2); background: var(--surface); }
+.chip.suggestion:hover { border-color: var(--accent-line); color: var(--accent-strong); background: var(--accent-soft); }
+.note-line { margin-top: 10px; }
+.inline-table { border: 0; border-radius: 0; margin-top: 12px; }
+.inline-table .data { min-width: 0; }
+.banner.warn { border-color: var(--warn-line); background: var(--warn-bg); }
+.explain-card .code-block { margin: 4px 0 16px; }
+.explain-card .eyebrow { margin-top: 14px; }
+.explain-card .eyebrow:first-child { margin-top: 0; }
+.steps { margin: 6px 0 14px; padding-left: 20px; color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+.steps li { margin-bottom: 4px; }
