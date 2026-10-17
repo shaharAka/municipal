@@ -55,7 +55,7 @@ export const CONNECTIONS: Connection[] = [
     kind: 'database',
     access: 'read',
     localEndpoint: 'in-process fixture tables',
-    productionEndpoint: 'sqlsrv://gi<span>vatrimon</span>.database.windows.net:1433/municipal',
+    productionEndpoint: 'sqlsrv://givatrimon.database.windows.net:1433/municipal',
     auth: 'Entra service principal (managed identity)',
     scopes: ['db_datareader on the read replica'],
     swap: 'Replace LocalSqlClient with the mssql driver; the SqlPort contract is the same.',

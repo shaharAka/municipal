@@ -88,7 +88,7 @@ function overview(platform: Platform, demo: Demo) {
       medianDays: m.medianTotalDays,
       bottleneck: m.bottleneck?.activity ?? null,
       bottleneckDays: m.bottleneck?.medianWaitDays ?? null,
-      proposals: platform.proposals.filter((p) => p.id.includes(m.serviceCode)).length,
+      proposals: platform.proposals.filter((p) => p.serviceCode === m.serviceCode).length,
     })),
     secondOrganization: {
       name: demo.secondary.organization,
@@ -104,6 +104,7 @@ function mappingView(platform: Platform) {
       id: m.id,
       system: m.system,
       source: m.source,
+      sourceKind: m.sourceKind,
       pageType: m.pageType,
       fields: m.fields,
       edges: m.edges ?? [],
@@ -262,15 +263,27 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
   if (parts[1] === 'security') {
     const labelCounts: Record<string, number> = {};
     for (const doc of platform.report.documents) labelCounts[doc.label] = (labelCounts[doc.label] ?? 0) + 1;
+    const documents = platform.graph.ofType('document').map((page) => {
+      const view = platform.graph.view(viewer, page.ref);
+      return {
+        ref: page.ref,
+        name: page.title,
+        label: String(page.properties.sensitivity_label ?? ''),
+        facts: view?.facts.length ?? 0,
+        hiddenFactCount: view?.hiddenFactCount ?? 0,
+        visible: Boolean(view?.facts.length),
+        flags: platform.report.documents.find((d) => d.ref === page.ref)?.flags ?? 0,
+      };
+    });
+    // A finding quoted from a document the asker cannot see is itself a leak.
+    const visibleNames = new Set(documents.filter((d) => d.visible).map((d) => d.name));
     return json(res, 200, {
-      findings: platform.report.findings,
-      documents: platform.report.documents,
+      findings: platform.report.findings.filter((f) => visibleNames.has(f.document)),
+      findingsWithheld: platform.report.findings.filter((f) => !visibleNames.has(f.document)).length,
+      documents,
       labelCounts,
       viewer: viewerName(platform, viewer),
-      exampleHidden: platform.graph
-        .ofType('document')
-        .map((p) => ({ ref: p.ref, title: p.title, visible: Boolean(platform.graph.view(viewer, p.ref)?.facts.length) }))
-        .filter((d) => !d.visible),
+      exampleHidden: documents.filter((d) => !d.visible),
     });
   }
   if (parts[1] === 'candidates') {
@@ -301,8 +314,11 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
       }
       return json(res, 200, {
         ok: true,
+        candidate: { id: candidate.id, status: candidate.status, proposition: candidate.proposal },
         overlayDraft: {
           overlay: platform.profileId,
+          organization_id: platform.organizationId,
+          description: `Tenant addition accepted from candidate ${candidate.id} on ${new Date().toISOString().slice(0, 10)}. It is namespaced and additive; the packs are not edited.`,
           extend_page_types: Object.fromEntries(
             (candidate.proposal.page_types ?? [candidate.proposal.page_type]).map((type) => [
               type,

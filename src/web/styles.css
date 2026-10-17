@@ -403,6 +403,7 @@ code, pre { font-family: var(--mono); }
 .doc-table tr.is-hidden { background: #fbf3f1; }
 .doc-table tr.is-hidden:hover { background: #f8ece9; }
 .doc-table tr.is-hidden td:first-child { box-shadow: inset 3px 0 0 var(--danger-line); }
+.doc-name { display: block; text-align: start; unicode-bidi: plaintext; line-height: 1.45; }
 .label-chip { font-weight: 600; }
 .finding-card { border-left: 4px solid var(--danger); }
 .finding-head { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }

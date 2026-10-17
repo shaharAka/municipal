@@ -67,6 +67,10 @@ test('the API answers every surface the workbench reads', async () => {
 
   const security = await get('/api/security');
   assert.ok(security.findings.some((f: any) => f.kind === 'instruction-injection'));
+
+  // A service's proposals are counted from the process they belong to.
+  const licService = overview.services.find((s: any) => s.code === 'LIC');
+  assert.equal(licService.proposals, 4);
 });
 
 test('access filtering holds through the HTTP surface', async () => {
@@ -81,6 +85,19 @@ test('access filtering holds through the HTTP surface', async () => {
   const inspectorVisible = asInspector.pages.filter((p: any) => p.facts.length > 0).length;
   assert.ok(inspectorVisible < headVisible, 'a restricted document must disappear for the inspector');
   assert.ok(asInspector.pages.some((p: any) => p.hiddenFactCount > 0));
+});
+
+test('a finding quoted from a document the viewer cannot see is withheld', async () => {
+  const { viewers } = await get('/api/viewers');
+  const clerk = viewers[viewers.length - 1];
+  const asClerk = await get(`/api/security?viewer=${clerk.id}`);
+  const asHead = await get(`/api/security?viewer=${viewers[0].id}`);
+
+  assert.ok(asHead.findings.length >= 1);
+  assert.equal(asClerk.findings.length, 0);
+  assert.equal(asClerk.findingsWithheld, asHead.findings.length);
+  assert.equal(asClerk.documents.filter((d: any) => d.visible).length, 4);
+  assert.equal(asClerk.documents.filter((d: any) => !d.visible).length, 2);
 });
 
 test('a person approving an automation creates a decision with their name on it', async () => {

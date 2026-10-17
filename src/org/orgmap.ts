@@ -8,6 +8,7 @@
 
 import { Graph, refFor, stableId, type Provenance } from '../graph/graph.ts';
 import { ACTIVITY_LABELS } from '../cloud/fixtures.ts';
+import { UNIT_LABELS_EN } from '../seed/unit-labels.ts';
 
 export type Responsibility = {
   candidateRef: string;
@@ -79,7 +80,7 @@ export function buildOrgMap(graph: Graph, capturedAt: string): OrgMap {
   const units: OrgMap['units'] = [];
   for (const [name, members] of unitsByKey) {
     const ref = refFor('org_unit', name);
-    const nameEn = String(members[0]?.properties.department_en ?? name);
+    const nameEn = UNIT_LABELS_EN[name] ?? String(members[0]?.properties.department_en ?? name);
     graph.addPage({ ref, type: 'org_unit', title: name, properties: {}, createdAt: capturedAt });
 
     // The head is the senior person whose manager is outside the unit, and

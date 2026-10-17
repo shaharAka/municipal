@@ -11,6 +11,7 @@
 import type { Graph } from '../graph/graph.ts';
 import type { OrgMap } from '../org/orgmap.ts';
 import type { ProcessModel } from '../process/discover.ts';
+import { ACTIVITY_LABELS } from '../cloud/fixtures.ts';
 
 export type OrgTemplate = {
   template_id: string;
@@ -109,6 +110,8 @@ export type DiffReport = {
   process: {
     service_code: string;
     steps: { matched: string[]; added: string[]; missing: string[] };
+    /** Activity code -> what a person reads. Codes alone are not a demo. */
+    step_labels: Record<string, string>;
     variant_delta: number;
     median_days_delta: number;
   }[];
@@ -204,6 +207,7 @@ export function diffAgainstTemplate(
       process.push({
         service_code: pm.service_code,
         steps: { matched: [], added: [], missing: pm.steps },
+        step_labels: labelsFor(pm.steps),
         variant_delta: -pm.variant_count,
         median_days_delta: 0,
       });
@@ -218,6 +222,7 @@ export function diffAgainstTemplate(
         added: [...currentSteps].filter((s) => !templateSteps.has(s)),
         missing: pm.steps.filter((s) => !currentSteps.has(s)),
       },
+      step_labels: labelsFor([...pm.steps, ...currentSteps]),
       variant_delta: current.variants.length - pm.variant_count,
       median_days_delta: Number((current.medianTotalDays - pm.median_total_days).toFixed(1)),
     });
@@ -264,6 +269,10 @@ export function diffAgainstTemplate(
       ),
     },
   };
+}
+
+function labelsFor(codes: string[]): Record<string, string> {
+  return Object.fromEntries(codes.map((code) => [code, ACTIVITY_LABELS[code] ?? code]));
 }
 
 function jaccard(a: Set<string>, b: Set<string>): number {

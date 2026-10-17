@@ -18,8 +18,15 @@ Nothing to install. Node 22.18+:
 ```bash
 npm run demo   # the whole loop, narrated in the terminal with real numbers
 npm start      # the workbench at http://127.0.0.1:4173
-npm test       # 16 tests over the pipeline, the ontology and the access rules
+npm test       # 20 tests over the pipeline, the ontology, the API and the access rules
 ```
+
+Then open <http://127.0.0.1:4173> and walk the tabs: **Sources & Mapping** (where the data lands in the ontology),
+**Organization** (units, heads, inferred responsibilities), **Workflows** (variants, waits, bottleneck),
+**Automations** (proposals with their evidence), **Onboarding** (the template diff) and **Access**
+(the same documents seen by a head and by a clerk).
+
+![Sources and mapping](docs/screenshots/mapping.png)
 
 ## What it actually does
 
@@ -72,8 +79,8 @@ differences. See [ADR-0007](docs/decisions/0007-reuse-the-graph-for-the-next-mun
 
 | | |
 |---|---|
-| Pages / edges / facts | 1,571 / 2,637 / 8,054 |
-| Facts confirmed by rule / candidate | 7,471 / 583 |
+| Pages / edges / facts | 1,574 / 2,637 / 8,078 |
+| Facts confirmed by rule / candidate | 7,471 / 607 |
 | Licence cases analysed | 62 over 547 days, 3 variants |
 | Median licence case | 26 days (p90 35) |
 | Bottleneck | inspection scheduling, 12-day median wait |

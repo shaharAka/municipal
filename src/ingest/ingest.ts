@@ -477,6 +477,8 @@ export async function ingest(deps: IngestDeps): Promise<IngestReport> {
     const created = graph.addEdge({ kind: pending.kind, from: pending.from, to: pending.to });
     if (created) {
       edgesByKind.set(pending.kind, (edgesByKind.get(pending.kind) ?? 0) + 1);
+      const run = mappings.find((m) => m.id === pending.mapping.id);
+      if (run) run.edges++;
     } else if (!graph.page(pending.from) || !graph.page(pending.to)) {
       problems.push(
         `edge ${pending.kind}: ${pending.from} -> ${pending.to} has a missing endpoint (${pending.mapping.source})`,
