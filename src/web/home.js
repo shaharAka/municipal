@@ -15,6 +15,8 @@ const TABS = [
   { id: 'home', label: 'בית' },
   { id: 'ask', label: 'שאל' },
   { id: 'sources', label: 'מקורות' },
+  { id: 'map', label: 'מפת התהליך' },
+  { id: 'learning', label: 'למידה' },
   { id: 'people', label: 'אנשים' },
   { id: 'process', label: 'תהליכים' },
   { id: 'onboard', label: 'קליטה' },
@@ -231,6 +233,117 @@ async function onboardView() {
     </section>`;
 }
 
+
+/* ------------------------------------------------------------------- map */
+function canvas(process) {
+  const model = process.model;
+  const proposals = process.proposals ?? [];
+  const steps = model.steps;
+  const seq = model.variants[0]?.sequence ?? steps.map((s) => s.activity);
+  const byActivity = new Map(steps.map((s) => [s.activity, s]));
+  const proposedSteps = new Set(proposals.map((p) => p.step).filter(Boolean));
+  const maxWait = Math.max(...steps.map((s) => s.medianWaitDays), 1);
+  const W = 1120;
+  const gap = 138;
+  const startX = W - 70;
+  const y = 92;
+  const nodes = seq.map((activity, i) => {
+    const step = byActivity.get(activity) ?? { activity, labels: activity, medianWaitDays: 0, occurrences: 0, role: '', isRework: false };
+    const isGate = /APPROVED|LICENCE_ISSUED|DISCOUNT_APPROVED/.test(activity);
+    const isBottleneck = step.medianWaitDays >= maxWait * 0.9 && maxWait > 0;
+    const isProposed = proposedSteps.has(activity);
+    const x = startX - i * gap;
+    return { ...step, x, y, isGate, isBottleneck, isProposed };
+  });
+  const width = Math.max(W, 140 + nodes.length * gap);
+  return `
+    <div class="canvas-wrap">
+      <svg class="flow" viewBox="0 0 ${width} 330" role="img" aria-label="מפת התהליך">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#b9cdc7" />
+          </marker>
+        </defs>
+        <text x="${startX}" y="26" class="lane">מסלול נפוץ · ${num(model.caseCount)} תיקים · חציון ${num(model.medianTotalDays)} יום</text>
+        <text x="${startX}" y="44" class="lane-sub">כיוון הזרימה: מימין לשמאל</text>
+        ${nodes.map((n, i) => {
+          const prev = nodes[i - 1];
+          const arrow = prev ? `<line x1="${prev.x - 58}" y1="${n.y}" x2="${n.x + 62}" y2="${n.y}" class="edge" marker-end="url(#arrow)" />` : '';
+          const wait = n.medianWaitDays > 0 ? `<text x="${(n.x + 62 + (prev?.x ?? n.x) - 58) / 2}" y="${n.y - 10}" class="wait" text-anchor="middle">${num(n.medianWaitDays)} ימים</text>` : '';
+          return `${arrow}${wait}`;
+        }).join('')}
+        ${nodes.map((n) => `
+          <g class="node-group ${n.isBottleneck ? 'bottleneck' : ''}">
+            <rect x="${n.x - 58}" y="${n.y - 30}" width="116" height="60" rx="12" class="box ${n.isBottleneck ? 'is-bottleneck' : ''} ${n.isGate ? 'is-gate' : ''}" />
+            <text x="${n.x}" y="${n.y - 6}" text-anchor="middle" class="node-label">${escapeHtml(n.labels)}</text>
+            <text x="${n.x}" y="${n.y + 12}" text-anchor="middle" class="node-meta">${num(n.medianWaitDays)} ימים</text>
+            ${n.isProposed ? `<circle cx="${n.x + 50}" cy="${n.y - 30}" r="7" class="suggest-dot" /><text x="${n.x + 50}" y="${n.y - 26}" text-anchor="middle" class="dot-label">!</text>` : ''}
+            ${n.isGate ? `<text x="${n.x}" y="${n.y + 46}" text-anchor="middle" class="gate-label">אישור אדם</text>` : ''}
+          </g>`).join('')}
+        <text x="${startX}" y="300" class="lane">מקורות: מערכות הפעלה · דואר העבודה · מסמכי המחלקה</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i class="sw measured"></i> נמדד מהנתונים</span>
+      <span><i class="sw bottleneck"></i> צוואר בקוק</span>
+      <span><i class="sw proposed"></i> מוצע לאישור</span>
+      <span><i class="sw gate"></i> שער אישור אדם</span>
+    </div>`;
+}
+
+async function mapView() {
+  const process = await api('/api/process?service=LIC');
+  const { model, proposals } = process;
+  return `
+    <h1>תהליך רישוי העסק — כמו שהוא קורה</h1>
+    <p class="lede">${num(model.caseCount)} תיקים, ${num(model.variants.length)} מסלולים. הזמן נמדד בין שלב לשלב; האוטומציות המוצעות מסומנות ולא מופעלות.</p>
+    ${canvas(process)}
+    <section class="section">
+      <div class="section-head"><h2>הצעות על גבי התהליך</h2><p>כל הצעה מבוססת מדידה, וממתינה לאישור</p></div>
+      <div class="grid-3">
+        ${proposals.slice(0, 3).map((p) => `<article class="card"><h3>${escapeHtml(PROPOSAL_HE[p.kind] ?? p.title)}</h3><div class="big">${num(p.annualDaysSaved)} ימים</div><p>${escapeHtml(p.rationale)}</p><p class="meta">${p.status === 'approved' ? 'אושר' : 'ממתין לאישור'}</p></article>`).join('')}
+      </div>
+    </section>`;
+}
+
+/* ---------------------------------------------------------------- learning */
+async function learningView() {
+  const [data, mapping] = await Promise.all([api('/api/learning'), api('/api/mapping')]);
+  const open = data.candidates.filter((c) => c.status === 'open');
+  const accepted = data.candidates.filter((c) => c.status === 'accepted');
+  return `
+    <h1>איך המודל משתנה</h1>
+    <p class="lede">המודל לא משתנה מעצמו. המערכת מציעה, אדם מאשר, והשינוי נרשם כשכבת הרחבה של העיר — לא כעריכה של החלקים המשותפים.</p>
+    <div class="counts">
+      <div class="count good"><b>${num(data.counts.accepted)}</b><span>שינויים שאושרו</span></div>
+      <div class="count"><b>${num(data.counts.proposed)}</b><span>הצעות פתוחות</span></div>
+      <div class="count"><b>${num(data.counts.decisions)}</b><span>החלטות מתועדות</span></div>
+      <div class="count"><b>${num(data.counts.forms)}</b><span>טפסים שנוצרו</span></div>
+    </div>
+    <section class="section">
+      <div class="section-head"><h2>הצעות לשינוי המודל</h2><p>שדות שקיימים בנתונים ואין להם מקום באונטולוגיה</p></div>
+      <div class="grid-3">
+        ${open.filter((c) => c.kind === 'property').map((c) => `<article class="card">
+          <h3>${escapeHtml(c.proposal?.property ?? 'שדה')}</h3>
+          <p>${escapeHtml(c.summary)}</p>
+          <p class="meta">${num(c.support)} רשומות · ${escapeHtml((c.proposal?.page_types ?? []).join(', '))}</p>
+          <button class="btn small" type="button" data-accept-candidate="${c.ref}" style="margin-top:10px">הוספה כשכבת הרחבה</button>
+        </article>`).join('')}
+      </div>
+      <div id="overlay-slot"></div>
+    </section>
+    <section class="section">
+      <div class="section-head"><h2>מה כבר נכנס למודל</h2><p>כל שינוי נרשם עם מי אישר ומתי</p></div>
+      <div class="grid-3">
+        ${accepted.slice(0, 6).map((c) => `<article class="card"><h3>${escapeHtml(c.proposal?.property ?? c.kind)}</h3><p>${escapeHtml(c.summary)}</p><p class="meta">אושר · ${escapeHtml(String(c.proposed_by ?? ''))}</p></article>`).join('') || '<p class="hello">עדיין אין שינויים מאושרים.</p>'}
+      </div>
+    </section>
+    <section class="section">
+      <div class="section-head"><h2>אחריויות שממתינות לאישור האדם</h2><p>${num(data.candidates.filter((c) => c.kind === 'responsibility' && c.status === 'open').length)} אחריויות זוהו מהעבודה</p></div>
+      <p class="hello">אישורן מתבצע בשאלה אישית (לשונית אנשים) — לא בהודעה גורפת.</p>
+    </section>`;
+}
+
 /* ------------------------------------------------------------------ render */
 
 async function sourcesView() {
@@ -276,7 +389,7 @@ async function sourcesView() {
     </section>` : ''}`;
 }
 
-const VIEWS = { home: homeView, ask: askView, sources: sourcesView, people: peopleView, process: processView, onboard: onboardView };
+const VIEWS = { home: homeView, ask: askView, sources: sourcesView, map: mapView, learning: learningView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
@@ -325,6 +438,19 @@ function fromHash() {
 }
 
 document.addEventListener('click', async (event) => {
+  const accept = event.target.closest('[data-accept-candidate]');
+  if (accept) {
+    accept.disabled = true;
+    const res = await fetch('/api/candidates/accept', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: accept.dataset.acceptCandidate }),
+    });
+    const body = await res.json();
+    const slot = document.getElementById('overlay-slot');
+    if (slot) slot.innerHTML = `<pre class="code-block" style="margin-top:16px;direction:ltr;text-align:left">${escapeHtml(JSON.stringify(body.overlayDraft, null, 2))}</pre>`;
+    accept.textContent = 'נוסף';
+    return;
+  }
   const toggle = event.target.closest('[data-toggle-source]');
   if (toggle) {
     const enabled = toggle.getAttribute('aria-pressed') !== 'true';

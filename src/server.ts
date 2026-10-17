@@ -341,6 +341,36 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     suggestion.artifact = artifact;
     return json(res, 200, { suggestion });
   }
+  if (parts[1] === 'learning') {
+    const decisions = platform.graph.ofType('decision').map((p) => ({
+      ref: p.ref, title: p.title, kind: p.properties.kind, status: p.properties.status,
+      decided_by: p.properties.decided_by ?? null, decided_at: p.properties.decided_at ?? null,
+      subject_ref: p.properties.subject_ref ?? null,
+    }));
+    const candidates = platform.graph.ofType('knowledge_candidate').map((p) => ({
+      ref: p.ref, kind: p.properties.candidate_kind, status: p.properties.status,
+      summary: p.properties.evidence_summary, support: p.properties.support_count,
+      proposed_by: p.properties.proposed_by, proposal: p.properties.proposal,
+    }));
+    const forms = platform.graph.ofType('form_definition').map((p) => ({
+      ref: p.ref, name: p.title, page_type: p.properties.page_type, kind: p.properties.kind,
+      field_count: p.properties.field_count, status: p.properties.status,
+    }));
+    const queries = platform.graph.ofType('query_answer').map((p) => ({
+      ref: p.ref, question: p.properties.question, rule_version: p.properties.rule_version,
+      eligible: p.properties.eligible, not_eligible: p.properties.not_eligible, unknown: p.properties.unknown,
+    }));
+    return json(res, 200, {
+      decisions, candidates, forms, queries,
+      counts: {
+        accepted: candidates.filter((c) => c.status === 'accepted').length,
+        proposed: candidates.filter((c) => c.status === 'open').length,
+        decisions: decisions.length,
+        forms: forms.length,
+      },
+      ontology: { version: platform.ontology.version, packs: platform.ontology.packs, page_types: Object.keys(platform.ontology.pageTypes).length },
+    });
+  }
   if (parts[1] === 'forms') {
     const pageType = url.searchParams.get('type') ?? 'household';
     const kind = (url.searchParams.get('kind') ?? 'application') as FormKind;
