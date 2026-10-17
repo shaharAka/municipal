@@ -76,7 +76,8 @@ function viewerName(platform: Platform, viewer: Viewer): string {
 /** The raw evidence behind a page, so a demo can show the source, not the conclusion. */
 function evidenceOf(platform: Platform, pageRef: string, property?: string) {
   const facts = platform.graph.currentFacts(pageRef);
-  const fact = (property ? facts.find((f) => f.property === property) : undefined) ?? facts[0];
+  const fact = property ? facts.find((f) => f.property === property) : facts[0];
+  if (!fact) return null;
   const evidence = fact?.evidenceIds.map((id) => platform.graph.evidence.get(id)).find(Boolean);
   if (!evidence) return null;
   return {
@@ -94,7 +95,14 @@ function buildTour(platform: Platform) {
     const birth = String(r.properties.birth_date ?? '');
     return birth && 2026 - Number(birth.slice(0, 4)) >= 67;
   });
-  const missingEvidence = missing.length ? evidenceOf(platform, missing[0].ref, 'income_band') : null;
+  // The absence of a value is itself the evidence: no fact exists for income_band.
+  const missingEvidence = missing.length
+    ? evidenceOf(platform, missing[0].ref, 'income_band') ?? {
+        system: 'Azure SQL · dbo.households',
+        locator: `dbo.households#${missing[0].title}`,
+        excerpt: 'income_band = NULL — אין ערך רשום',
+      }
+    : null;
   const seniorEvidence = senior ? evidenceOf(platform, senior.ref, 'birth_date') : null;
   const messages = g.ofType('message')
     .filter((m) => /הנחה|רישיון|פיקוח|מסמכים/.test(String(m.properties.subject)))
