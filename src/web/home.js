@@ -642,6 +642,8 @@ document.addEventListener('click', async (event) => {
     else render();
     return;
   }
+  const replay = event.target.closest('[data-action="replay"]');
+  if (replay) { startReplay(replay); return; }
   const tourScenario = event.target.closest('[data-tour-scenario]');
   if (tourScenario) {
     state.tour = { pick: Number(tourScenario.dataset.tourScenario), shown: 1, out: null };

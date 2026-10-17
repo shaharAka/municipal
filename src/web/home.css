@@ -188,3 +188,10 @@ details ul { margin: 10px 0 0; padding-inline-start: 18px; font-size: 13px; colo
 .ok-note { color: var(--accent) !important; font-weight: 600; }
 .saved { font-size: 12px !important; color: var(--accent) !important; margin: 8px 0 0 !important; }
 .saved::before { content: "✓ "; font-weight: 700; }
+
+/* ----------------------------------------------------------------- replay */
+.replay-card { margin-bottom: 18px; }
+.replay-stage { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; animation: fadein 260ms ease-out; }
+.replay-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.replay-count { margin-inline-start: auto; font-size: 12.5px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

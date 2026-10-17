@@ -270,6 +270,46 @@ function buildTour(platform: Platform) {
   };
 }
 
+/** A real ingestion run, stage by stage, with the counts and first records it landed. */
+function buildReplay(platform: Platform) {
+  const g = platform.graph;
+  const sample = (type: string, property: string) => {
+    const page = g.ofType(type)[0];
+    if (!page) return null;
+    const facts = g.currentFacts(page.ref);
+    const fact = facts.find((f) => f.property === property) ?? facts[0];
+    const evidence = fact?.evidenceIds.map((id) => g.evidence.get(id)).find(Boolean);
+    return { ref: page.title, excerpt: String(evidence?.excerpt ?? fact?.value ?? '').slice(0, 140) };
+  };
+  const count = (type: string) => g.ofType(type).length;
+  return [
+    {
+      id: 'entra', system: 'Microsoft Entra ID', titleHe: 'זהות העובדים',
+      unit: 'עובדים', count: count('person'),
+      samples: [sample('person', 'display_name'), sample('group', 'display_name')].filter(Boolean),
+      didHe: 'נקראו העובדים, התפקידים וקווי הדיווח. נגזרו יחידות וקווי דיווח.',
+    },
+    {
+      id: 'sql', system: 'Azure SQL', titleHe: 'מערכות הפעלה',
+      unit: 'רשומות', count: count('resident') + count('household') + count('property') + count('business') + count('case') + count('case_event'),
+      samples: [sample('resident', 'birth_date'), sample('case', 'service_code')].filter(Boolean),
+      didHe: 'כל רשומה הפכה לדף במודל עם ערך, מקור ומיקום מדויק.',
+    },
+    {
+      id: 'exchange', system: 'Exchange Online', titleHe: 'דואר העבודה',
+      unit: 'הודעות', count: count('message'),
+      samples: [sample('message', 'subject')].filter(Boolean),
+      didHe: 'ההודעות נקראו לפי משתתפים. מכאן נגזרו אחריויות כהצעות בלבד.',
+    },
+    {
+      id: 'sharepoint', system: 'SharePoint / OneDrive', titleHe: 'מסמכי המחלקה',
+      unit: 'מסמכים', count: count('document'),
+      samples: [sample('document', 'name')].filter(Boolean),
+      didHe: 'המסמכים נרשמו עם תווית הרגישות והרשאות המקור שלהם.',
+    },
+  ];
+}
+
 function assist(platform: Platform, question: string) {
   const keywords = ['פיקוח', 'רישיון', 'הנחה', 'קריאה', 'תעריף', 'ביקורת', 'מסמכים', 'בקשות'];
   if (/(^|\s)(מי|who|אחראי|מטפל)/i.test(question)) {
@@ -599,6 +639,26 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
     });
   }
   if (parts[1] === 'tour') return json(res, 200, buildTour(platform));
+  if (parts[1] === 'replay') {
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+    });
+    const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const stages = buildReplay(platform);
+    send('start', { stages: stages.length, organization: platform.organization });
+    (async () => {
+      for (const stage of stages) {
+        await new Promise((r) => setTimeout(r, 700));
+        send('stage', stage);
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      send('done', { pages: platform.graph.pages.size, facts: platform.graph.facts.length });
+      res.end();
+    })().catch(() => res.end());
+    return;
+  }
   if (parts[1] === 'learning') {
     const decisions = platform.graph.ofType('decision').map((p) => ({
       ref: p.ref, title: p.title, kind: p.properties.kind, status: p.properties.status,
