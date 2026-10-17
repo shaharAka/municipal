@@ -914,14 +914,68 @@ async function openEngine(kind) {
   }
 }
 
+function roleKind(label) {
+  if (/מנהל|head/i.test(label)) return 'head';
+  if (/רכז|מזכיר|coordinator|clerk|permits/i.test(label)) return 'clerk';
+  return 'field';
+}
+function tabsFor(kind) {
+  const ids = {
+    head: ['home', 'approvals', 'sources', 'workspace'],
+    clerk: ['home', 'ask', 'sources', 'approvals'],
+    field: ['home', 'ask', 'workspace'],
+  }[kind];
+  return TABS.filter((t) => ids.includes(t.id));
+}
+function roleSelectView(viewers) {
+  return `
+    <div class="role-hero">
+      <p class="eyebrow">כניסה למערכת</p>
+      <h1>מי נכנס עכשיו?</h1>
+      <p class="lede">כל תפקיד רואה את מה שהוא צריך לעשות — לא את כל המערכת.</p>
+      <div class="role-grid">
+        ${viewers.map((v) => {
+          const kind = roleKind(v.label);
+          const what = {
+            head: 'אישורים, מצב המחלקה ומקורות המידע',
+            clerk: 'שאלות, בקשות והפערים שממתינים לאדם',
+            field: 'העבודה בשטח והמערכות היומיומיות',
+          }[kind];
+          return `<button class="role-card" type="button" data-pick-role="${v.id}" data-role-label="${escapeHtml(v.label)}">
+            <span class="role-avatar">${escapeHtml(v.label.slice(0, 1))}</span>
+            <strong>${escapeHtml(v.label.split('(')[0].trim())}</strong>
+            <span class="role-title">${escapeHtml(v.label.match(/\(([^)]+)\)/)?.[1] ?? '')}</span>
+            <span class="role-what">${what}</span>
+            <span class="role-go">כניסה ←</span>
+          </button>`;
+        }).join('')}
+      </div>
+      <p class="tiny muted" style="margin-top:22px">התפקיד קובע אילו פריטים בתפריט ובמסך הבית יוצגו. הנתונים עצמם זהים.</p>
+    </div>`;
+}
+
 const VIEWS = { home: simpleHome, ask: askView, find: findView, sources: sourcesView, map: mapView, workspace: workspaceView, approvals: approvalsView, learning: learningView, forms: formsView, demo: tourView, people: peopleView, process: processView, onboard: onboardView };
 
 function renderNav() {
   const nav = $('#nav');
-  nav.innerHTML = TABS.map((t) => `<button type="button" data-tab="${t.id}" ${t.id === state.tab ? 'aria-current="page"' : ''}>${t.label}</button>`).join('');
+  if (!state.role) { nav.innerHTML = ''; return; }
+  const kind = roleKind(state.roleLabel ?? '');
+  const tabs = tabsFor(kind);
+  const roleName = (state.roleLabel ?? '').split('(')[0].trim();
+  nav.innerHTML = tabs.map((t) => `<button type="button" data-tab="${t.id}" ${t.id === state.tab ? 'aria-current="page"' : ''}>${t.label}</button>`).join('')
+    + `<button class="role-switch" type="button" data-reset-role>${escapeHtml(roleName)} · החלפה</button>`;
 }
 
 async function render() {
+  if (!state.viewers) {
+    try { state.viewers = (await api('/api/viewers')).viewers; } catch { state.viewers = []; }
+  }
+  if (!state.role) {
+    $('#nav').innerHTML = '';
+    $('#main').innerHTML = roleSelectView(state.viewers);
+    document.title = 'כניסה · מערכת המידע העירונית';
+    return;
+  }
   renderNav();
   const main = $('#main');
   main.innerHTML = '<p class="hello">טוען נתונים…</p>';
@@ -1020,6 +1074,25 @@ document.addEventListener('click', async (event) => {
       .catch((error) => { out.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`; });
     return;
   }
+  const pick = event.target.closest('[data-pick-role]');
+  if (pick) {
+    state.role = pick.dataset.pickRole;
+    state.roleLabel = pick.dataset.roleLabel;
+    state.tab = 'home';
+    const url = new URL(location.href);
+    url.searchParams.set('role', state.role);
+    history.replaceState(null, '', url);
+    render();
+    return;
+  }
+  if (event.target.closest('[data-reset-role]')) {
+    state.role = null; state.roleLabel = null;
+    const url = new URL(location.href);
+    url.searchParams.delete('role');
+    history.replaceState(null, '', url);
+    render();
+    return;
+  }
   const roleChip = event.target.closest('[data-role]');
   if (roleChip) { state.role = roleChip.dataset.role; render(); return; }
   const engineBtn = event.target.closest('[data-engine]');
@@ -1104,4 +1177,15 @@ $('#nav').addEventListener('click', (e) => {
   if (button) location.hash = '#/' + button.dataset.tab;
 });
 state.tab = fromHash();
-render();
+const urlRole = new URLSearchParams(location.search).get('role');
+if (urlRole) state.role = urlRole;
+if (state.role) {
+  state.viewers = state.viewers ?? null;
+  api('/api/viewers').then((v) => {
+    state.viewers = v.viewers;
+    state.roleLabel = v.viewers.find((x) => x.id === state.role)?.label ?? '';
+    render();
+  }).catch(() => render());
+} else {
+  render();
+}
