@@ -80,7 +80,7 @@ const at = (points: Point[], i: number, f: number) => {
 };
 
 /** Issues that legally stop a bus from running (as opposed to planning-data questions). */
-export const FLEET_CAUSE = /רישיון|רישוי|טיפול|זמין|חסר שיבוץ/;
+export const FLEET_CAUSE = /רישיון|טסט|טיפול|זמין|חסר שיבוץ/;
 
 export function liveFor(trip: any, clock: string, blockedReason: string | null = null): Live {
   const points = pointsFor(trip);
@@ -145,8 +145,12 @@ export function liveFor(trip: any, clock: string, blockedReason: string | null =
 
 export type Alert = {
   id: string; queue: 'road' | 'prep'; level: 'high' | 'medium' | 'low'; kind: string;
-  tripId?: string; entityId?: string; title: string; detail: string;
+  tripId?: string; tripIds?: string[]; entityId?: string; title: string; detail: string;
+  /** Lower is more urgent for children: missing children first, a bus that never came, a late bus, then paperwork. */
+  risk: number;
   call?: { name: string; phone: string } | null;
+  /** A cause that one replacement fixes for every trip it blocks. */
+  fix?: { kind: 'bus' | 'driver'; id: string } | null;
   handled?: { by: string; at: string; note: string } | null;
 };
 
@@ -158,61 +162,70 @@ const DAY = 86_400_000;
  */
 export function alertsFor(trips: any[], drivers: any[], vehicles: any[], date: string, clock: string, acks: Record<string, any> = {}): Alert[] {
   const alerts: Alert[] = [];
-  const now = minutesOf(clock);
   const driverOf = (t: any) => drivers.find(d => d.id === t.driverId);
+  const busOf = (t: any) => vehicles.find(v => v.id === t.vehicleId);
   const call = (t: any) => { const d = driverOf(t); return d?.contact ? { name: d.name, phone: d.contact } : null; };
-  const list = (ts: any[]) => ts.slice(0, 4).map(t => t.number).join(', ') + (ts.length > 4 ? ` ועוד ${ts.length - 4}` : '');
+  const line = (t: any) => `קו ${t.routeCode}`;
+  const lines = (ts: any[]) => { const codes = [...new Set(ts.map(t => t.routeCode))]; return `${codes.length === 1 ? 'קו' : 'קווים'} ${codes.slice(0, 4).join(', ')}${codes.length > 4 ? ` ועוד ${codes.length - 4}` : ''}`; };
+  const who = (t: any) => [t.school, driverOf(t)?.name].filter(Boolean).join(' · ');
+  const notYet = (t: any) => t.live.phase === 'pending' && t.live.status !== 'late';
+  const ddmm = (d: string) => d.split('-').reverse().slice(0, 2).map(Number).join('.');
 
-  // ---- road: children and buses on the move
+  // ---- road: children and buses on the move, by risk to children
+  const blocked = new Map<string, { title: string; trips: any[]; fix: Alert['fix'] }>();
   for (const t of trips) {
-    const label = `${t.school}`;
-    if (t.live.status === 'late' && t.live.blockedReason) alerts.push({ id: `blocked-${t.id}`, queue: 'road', level: 'high', kind: 'late', tripId: t.id, title: `${t.number} לא יצאה · חסומה`, detail: `${t.live.blockedReason} · ${label}`, call: null });
-    else if (t.live.status === 'late') alerts.push({ id: `late-${t.id}`, queue: 'road', level: 'high', kind: 'late', tripId: t.id, title: `${t.number} לא יצאה · ${t.live.lateMinutes} דק׳`, detail: label, call: call(t) });
-    else if (t.live.status === 'delayed') alerts.push({ id: `delay-${t.id}`, queue: 'road', level: 'high', kind: 'delay', tripId: t.id, title: `${t.number} מאחרת ${t.live.lateMinutes} דק׳`, detail: label, call: call(t) });
-    if (t.unaccounted) alerts.push({ id: `unaccounted-${t.id}`, queue: 'road', level: 'high', kind: 'count', tripId: t.id, title: `${t.number}: ${t.unaccounted} תלמידים לא דווחו כיורדים`, detail: `${label} · דיווח נהג`, call: call(t) });
+    if (t.live.status === 'late' && t.live.blockedReason) {
+      const r = t.live.blockedReason, bus = busOf(t), drv = driverOf(t);
+      const [key, title, fix]: [string, string, Alert['fix']] =
+        /טסט|טיפול|הרכב/.test(r) && bus ? [`bus-${bus.id}`, r === 'הטסט של הרכב פג' ? `הטסט של ${bus.label} פג` : `${bus.label}: ${r}`, { kind: 'bus', id: bus.id }]
+        : /רישיון|הנהג/.test(r) && drv ? [`driver-${drv.id}`, r === 'הרישיון של הנהג פג' ? `הרישיון של ${drv.name} פג` : `${drv.name}: ${r}`, { kind: 'driver', id: drv.id }]
+        : [`reason-${r}`, r, null];
+      const group = blocked.get(key) ?? { title, trips: [], fix };
+      group.trips.push(t); blocked.set(key, group);
+      continue;
+    }
+    if (t.live.status === 'late') alerts.push({ id: `late-${t.id}`, queue: 'road', level: 'high', risk: 1, kind: 'late', tripId: t.id, title: `${line(t)} לא יצא · ${t.live.lateMinutes} דק׳ איחור`, detail: who(t), call: call(t) });
+    else if (t.live.status === 'delayed') alerts.push({ id: `delay-${t.id}`, queue: 'road', level: 'high', risk: 2, kind: 'delay', tripId: t.id, title: `${line(t)} מאחר ${t.live.lateMinutes} דק׳`, detail: who(t), call: call(t) });
+    if (t.unaccounted) alerts.push({ id: `unaccounted-${t.id}`, queue: 'road', level: 'high', risk: 0, kind: 'count', tripId: t.id, title: `${line(t)}: ${t.unaccounted} תלמידים לא דווחו כיורדים`, detail: `${t.school} · דיווח נהג`, call: call(t) });
     const off = Object.entries(t.live.stopCounts).filter(([id, c]: any) => c.expected != null && c.count !== c.expected && !(t.unaccounted && (id === 'school' || c.kind === 'dropoff'))) as [string, any][];
     if (off.length) {
       const [id, c] = off[0];
       const name = t.stops.find((x: any) => x.id === id)?.name ?? '';
       const fewer = c.count < c.expected;
       const verb = (c.kind ?? (t.direction === 'morning' ? 'pickup' : 'dropoff')) === 'pickup' ? 'עלו' : 'ירדו';
-      alerts.push({ id: `count-${t.id}`, queue: 'road', level: fewer && c.source === 'driver' ? 'high' : 'medium', kind: 'count', tripId: t.id, title: `${t.number}: ${verb} ${c.count} במקום ${c.expected}${fewer ? ` · ${c.expected - c.count} חסרים` : ''}`, detail: `${name}${c.source === 'driver' ? ' · דיווח נהג' : ''}`, call: call(t) });
+      alerts.push({ id: `count-${t.id}`, queue: 'road', level: fewer ? 'high' : 'medium', risk: fewer ? 0 : 4, kind: 'count', tripId: t.id, title: `${line(t)}: ${verb} ${c.count} במקום ${c.expected}${fewer ? ` · ${c.expected - c.count} חסרים` : ''}`, detail: [name, t.school, c.source === 'driver' ? 'דיווח נהג' : ''].filter(Boolean).join(' · '), call: call(t) });
     }
-    if (t.live.phase === 'active' && t.capacity != null && t.planned > t.capacity) alerts.push({ id: `seats-${t.id}`, queue: 'road', level: 'high', kind: 'seats', tripId: t.id, title: `${t.number} בדרך עם ${t.planned} מתוכננים ל־${t.capacity} מקומות`, detail: label, call: call(t) });
+    if (t.live.phase === 'active' && t.capacity != null && t.planned > t.capacity) alerts.push({ id: `seats-${t.id}`, queue: 'road', level: 'high', risk: 3, kind: 'seats', tripId: t.id, title: `${line(t)} בדרך עם ${t.planned} תלמידים ל־${t.capacity} מקומות`, detail: who(t), call: call(t) });
+  }
+  for (const [key, g] of blocked) {
+    const n = g.trips.length;
+    alerts.push({ id: `blocked-${key}`, queue: 'road', level: 'high', risk: 5, kind: 'blocked', tripId: g.trips[0].id, tripIds: g.trips.map(t => t.id), title: `${n === 1 ? `${line(g.trips[0])} לא יצא` : `${n} נסיעות לא יצאו`} · ${g.title}`, detail: n === 1 ? g.trips[0].school : lines(g.trips), call: null, fix: g.fix });
   }
 
-  // ---- prep: what can still be fixed before a bus leaves
-  const byIssue = new Map<string, any[]>();
-  for (const t of trips) {
-    for (const issue of t.issues) {
-      if (FLEET_CAUSE.test(issue)) continue;
-      const seats = /מקומות/.test(issue);
-      if (seats && t.live.phase !== 'pending') continue; // on the road it is a road alert
-      const key = seats ? 'מתוכננים יותר תלמידים ממקומות ברכב' : /כמויות|מספר התלמידים/.test(issue) ? 'כמויות תלמידים לא מאומתות בקובץ' : issue;
-      const seen = byIssue.get(key) ?? [];
-      if (!seen.includes(t)) byIssue.set(key, [...seen, t]);
-    }
-  }
-  for (const [issue, ts] of byIssue) {
-    alerts.push({ id: `issue-${issue}`, queue: 'prep', level: /מקומות/.test(issue) ? 'high' : 'medium', kind: 'ready', tripId: ts[0].id, title: ts.length === 1 ? `${ts[0].number}: ${issue}` : `${issue} · ${ts.length} נסיעות`, detail: list(ts) });
-  }
-  const unpublished = trips.filter(t => t.live.phase === 'pending' && !t.published && !t.issues.length && minutesOf(t.departure) - now <= 120);
-  if (unpublished.length) alerts.push({ id: 'unpublished', queue: 'prep', level: 'medium', kind: 'publish', tripId: unpublished[0].id, title: `${unpublished.length} נסיעות לא פורסמו לנהג`, detail: list(unpublished) });
+  // ---- prep: what still blocks a trip that has not left yet (file checks live in the schedule, not here)
+  const seats = trips.filter(t => notYet(t) && (t.blockers ?? []).some((i: string) => /מקומות/.test(i)));
+  if (seats.length) alerts.push({ id: 'prep-seats', queue: 'prep', level: 'high', risk: 6, kind: 'ready', tripId: seats[0].id, tripIds: seats.map(t => t.id), title: `${seats.length === 1 ? `${line(seats[0])} מתוכנן` : `${seats.length} נסיעות מתוכננות`} ליותר תלמידים ממקומות ברכב`, detail: lines(seats) });
+  const other = trips.filter(t => notYet(t) && (t.blockers ?? []).some((i: string) => !FLEET_CAUSE.test(i) && !/מקומות/.test(i)));
+  if (other.length) alerts.push({ id: 'prep-other', queue: 'prep', level: 'high', risk: 6, kind: 'ready', tripId: other[0].id, tripIds: other.map(t => t.id), title: `${other.length === 1 ? `${line(other[0])} לא מוכן` : `${other.length} נסיעות לא מוכנות`} ליציאה`, detail: lines(other) });
+  const unpublished = trips.filter(t => notYet(t) && !t.published && !(t.blockers ?? []).length);
+  if (unpublished.length) alerts.push({ id: 'unpublished', queue: 'prep', level: 'medium', risk: 7, kind: 'publish', tripId: unpublished[0].id, tripIds: unpublished.map(t => t.id), title: `${unpublished.length === 1 ? `${line(unpublished[0])} לא פורסם` : `${unpublished.length} נסיעות לא פורסמו`} לנהג`, detail: lines(unpublished) });
   const today = Date.parse(date);
   const days = (d: string) => Math.round((Date.parse(d) - today) / DAY);
-  const waiting = (field: string, id: string) => trips.filter(t => t[field] === id && t.live.phase === 'pending');
+  const late = (field: string, id: string) => trips.some(t => t[field] === id && t.live.status === 'late');
   for (const d of drivers) if (d.licenseUntil && days(d.licenseUntil) < 0) {
-    const ts = waiting('driverId', d.id);
-    alerts.push({ id: `lic-${d.id}`, queue: 'prep', level: 'high', kind: 'fleet', entityId: d.id, tripId: ts[0]?.id, title: `רישיון הנהיגה של ${d.name} פג`, detail: ts.length ? `חוסם ${ts.length} נסיעות היום: ${list(ts)}` : `פג ב־${d.licenseUntil.split('-').reverse().join('.')}` });
+    const ts = trips.filter(t => t.driverId === d.id && notYet(t));
+    if (!ts.length && late('driverId', d.id)) continue; // already on the road list
+    alerts.push({ id: `lic-${d.id}`, queue: 'prep', level: ts.length ? 'high' : 'medium', risk: 6, kind: 'fleet', entityId: d.id, tripId: ts[0]?.id, tripIds: ts.map(t => t.id), title: `הרישיון של ${d.name} פג`, detail: ts.length ? `${ts.length} נסיעות היום עוד לא יצאו · ${lines(ts)}` : `פג ב־${ddmm(d.licenseUntil)}`, fix: { kind: 'driver', id: d.id } });
   }
   for (const v of vehicles) {
     if (v.testUntil && days(v.testUntil) < 0) {
-      const ts = waiting('vehicleId', v.id);
-      alerts.push({ id: `test-${v.id}`, queue: 'prep', level: 'high', kind: 'fleet', entityId: v.id, tripId: ts[0]?.id, title: `הטסט של ${v.label} פג`, detail: ts.length ? `חוסם ${ts.length} נסיעות היום: ${list(ts)}` : `פג ב־${v.testUntil.split('-').reverse().join('.')}` });
-    } else if (v.serviceDue && days(v.serviceDue) <= 7) alerts.push({ id: `svc-${v.id}`, queue: 'prep', level: 'low', kind: 'fleet', entityId: v.id, title: `טיפול ל${v.label} בעוד ${Math.max(0, days(v.serviceDue))} ימים`, detail: v.serviceDue.split('-').reverse().join('.') });
+      const ts = trips.filter(t => t.vehicleId === v.id && notYet(t));
+      if (!ts.length && late('vehicleId', v.id)) continue;
+      alerts.push({ id: `test-${v.id}`, queue: 'prep', level: ts.length ? 'high' : 'medium', risk: 6, kind: 'fleet', entityId: v.id, tripId: ts[0]?.id, tripIds: ts.map(t => t.id), title: `הטסט של ${v.label} פג`, detail: ts.length ? `${ts.length} נסיעות היום עוד לא יצאו · ${lines(ts)}` : `פג ב־${ddmm(v.testUntil)}`, fix: { kind: 'bus', id: v.id } });
+    } else if (v.serviceDue && days(v.serviceDue) <= 7) alerts.push({ id: `svc-${v.id}`, queue: 'prep', level: 'low', risk: 8, kind: 'fleet', entityId: v.id, title: `${v.label} צריך טיפול בעוד ${Math.max(0, days(v.serviceDue))} ימים`, detail: `עד ${ddmm(v.serviceDue)}` });
   }
   const rank = { high: 0, medium: 1, low: 2 };
   return alerts
     .map(a => ({ ...a, handled: acks[a.id] ?? null }))
-    .sort((a, b) => rank[a.level] - rank[b.level]);
+    .sort((a, b) => a.risk - b.risk || rank[a.level] - rank[b.level]);
 }

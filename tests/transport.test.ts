@@ -32,8 +32,10 @@ test('the dispatcher sees a short list of causes, not one alert per trip', () =>
   const d = snapshot(s, DEMO_DATE, 'shuki');
   assert.equal(d.clock, '07:05');
   assert.ok(d.alerts.length <= 8, `${d.alerts.length} alerts`);
-  assert.ok(d.alerts.some((a: any) => a.title.includes('הטסט של אוטובוס 14 פג') && /14-1/.test(a.detail)));
-  assert.ok(d.alerts.some((a: any) => a.title.includes('רישיון הנהיגה') && /21-1/.test(a.detail)));
+  const tripIdOf = (n: string) => d.trips.find((t: any) => t.number === n).id;
+  assert.ok(d.alerts.some((a: any) => a.title === 'הטסט של אוטובוס 14 פג' && a.tripIds.includes(tripIdOf('14-1')) && a.fix?.kind === 'bus'));
+  assert.ok(d.alerts.some((a: any) => /^הרישיון של .+ פג$/.test(a.title) && a.tripIds.includes(tripIdOf('21-1')) && a.fix?.kind === 'driver'));
+  assert.ok(!d.alerts.some((a: any) => a.queue === 'prep' && /מאומת|בירור|לבדיקה/.test(a.title)), 'file checks stay out of the alert queues');
   assert.equal(new Set(d.alerts.map((a: any) => a.id)).size, d.alerts.length);
 });
 
@@ -71,8 +73,8 @@ test('roles are enforced both ways', () => {
 test('the dispatcher fixes an expired bus by swapping it, then publishes', () => {
   const s = createTransportState();
   let t = tripOf(s, 'shuki', '14-1');
-  assert.ok(t.issues.some((i: string) => /רישוי הרכב/.test(i)));
-  assert.throws(() => run(s, 'shuki', 'publish', t), /רישוי הרכב/);
+  assert.ok(t.blockers.includes('הטסט של הרכב פג'));
+  assert.throws(() => run(s, 'shuki', 'publish', t), /הטסט של הרכב פג/);
   run(s, 'shuki', 'assign', t, { driverId: t.driverId, vehicleId: 'bus-spare' });
   t = tripOf(s, 'shuki', '14-1');
   assert.equal(t.published, false);
@@ -81,7 +83,16 @@ test('the dispatcher fixes an expired bus by swapping it, then publishes', () =>
   assert.equal(t.published, true);
   assert.deepEqual(t.issues, []);
   const alert = snapshot(s, DEMO_DATE, 'shuki').alerts.find((a: any) => a.id === 'test-bus-14');
-  assert.doesNotMatch(alert.detail, /14-1/);
+  assert.ok(!alert.tripIds.includes(t.id), 'the swapped trip is no longer blocked by bus 14');
+});
+
+test('file checks from the workbook warn but never block publishing or driving', () => {
+  const s = createTransportState();
+  const d = snapshot(s, DEMO_DATE, 'shuki');
+  const flagged = d.trips.find((t: any) => t.checks.length && !t.blockers.length);
+  assert.ok(flagged, 'the workbook has flagged trips');
+  assert.equal(flagged.published, true);
+  assert.equal(flagged.live.blockedReason, null);
 });
 
 test('an unknown seat count never blocks a driver report', () => {
@@ -120,7 +131,7 @@ test('a driver can always finish: fewer drop-offs than on board completes the tr
   const t = d.trips.find((x: any) => x.number === '10-1');
   assert.equal(t.phase, 'completed');
   assert.equal(t.unaccounted, 2);
-  assert.equal(d.alerts[0].title, '10-1: 2 תלמידים לא דווחו כיורדים');
+  assert.equal(d.alerts[0].title, 'קו 10: 2 תלמידים לא דווחו כיורדים');
   assert.equal(d.alerts.filter((a: any) => a.tripId === t.id).length, 1, 'one alert for one cause');
 });
 

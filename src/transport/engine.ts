@@ -42,7 +42,7 @@ export function actorFor(state: any, id: string) {
 export function dayFor(state: any, date: string) {
   const day = weekday(date);
   if (!state.days[date]) {
-    const trips = schedule.trips.filter(t => t.weekday===day).map(t => ({...clone(t), date, version:1, driverId:'driver-'+t.routeCode, vehicleId:'bus-'+t.routeCode, published:!t.reviewReasons.length, phase:'pending', reports:{}, departures:[], onBoard:0, boarded:null, alighted:0, delayMinutes:0, notes:[], events:[], demoFocus:['10-1','11-1','12-1'].includes(t.number)}));
+    const trips = schedule.trips.filter(t => t.weekday===day).map(t => ({...clone(t), date, version:1, driverId:'driver-'+t.routeCode, vehicleId:'bus-'+t.routeCode, published:true, phase:'pending', reports:{}, departures:[], onBoard:0, boarded:null, alighted:0, delayMinutes:0, notes:[], events:[], demoFocus:['10-1','11-1','12-1'].includes(t.number)}));
     // The day starts just before the presenter's trip; other buses move by the demo clock (simulate.ts).
     state.days[date] = {date, trips, events:[], clock:DEMO_CLOCK, nextId:1};
   }
@@ -54,19 +54,23 @@ export function readiness(state: any, trip: any, date: string): string[] {
   if (!driver) issues.push('חסר שיבוץ נהג');
   else {
     if (!driver.available) issues.push('הנהג אינו זמין');
-    if (!driver.licenseUntil || driver.licenseUntil<date) issues.push('תוקף רישיון הנהג דורש טיפול');
+    if (!driver.licenseUntil || driver.licenseUntil<date) issues.push('הרישיון של הנהג פג');
   }
   if (!bus) issues.push('חסר שיבוץ רכב');
   else {
     if (!bus.available) issues.push('הרכב אינו זמין');
-    if (!bus.testUntil || bus.testUntil<date) issues.push('תוקף רישוי הרכב דורש טיפול');
-    if (!bus.serviceDue || bus.serviceDue<date) issues.push('מועד טיפול הרכב חלף');
+    if (!bus.testUntil || bus.testUntil<date) issues.push('הטסט של הרכב פג');
+    if (!bus.serviceDue || bus.serviceDue<date) issues.push('הרכב לא עבר טיפול בזמן');
     if (numericCount(trip.planned) && bus.capacity!=null && trip.planned>bus.capacity) issues.push(`מתוכננים ${trip.planned} תלמידים לרכב עם ${bus.capacity} מקומות`);
   }
   if (!validTime(trip.departure)) issues.push('חסרה שעת יציאה תקינה');
-  if (!trip.stops.length || trip.stops.some((s:any)=>!numericCount(s.planned))) issues.push('יש להשלים את כמויות התחנות');
+  if (!trip.stops.length || trip.stops.some((s:any)=>!numericCount(s.planned))) issues.push('חסרות כמויות תלמידים בתחנות');
   return [...new Set(issues)];
 }
+/** File checks come from the council's own workbook flags: worth a look, never a reason to stop a bus. */
+export const FILE_CHECKS = new Set(['מספר התלמידים בתחנה אינו מאומת','שם תחנה דורש בירור','המקור מסומן לבדיקה','חסרות כמויות תלמידים בתחנות']);
+/** Blockers stop publishing and driving: an expired licence or test, a missing driver or bus, too few seats, no time. */
+export function blockers(state:any, trip:any, date:string): string[] { return readiness(state,trip,date).filter(i=>!FILE_CHECKS.has(i)); }
 export function nextStop(trip:any) {
   const stops=trip.stops.map((s:any)=>({...s,kind:trip.direction==='morning'?'pickup':'dropoff'}));
   if (trip.direction==='morning') stops.push({id:'school',name:trip.school,time:null,planned:trip.boarded,kind:'dropoff'});
@@ -74,16 +78,17 @@ export function nextStop(trip:any) {
 }
 export function tripView(state:any, trip:any, clock = DEMO_CLOCK) {
   const issues=readiness(state,trip,trip.date);
+  const blocking=issues.filter((i:string)=>!FILE_CHECKS.has(i)), checks=issues.filter((i:string)=>FILE_CHECKS.has(i));
   const reports=Object.values(trip.reports) as any[];
-  // Blocked = cannot legally run (fleet) or a dispatcher change not yet published; workbook data flags do not block.
-  const blockedReason=issues.find((i:string)=>FLEET_CAUSE.test(i)) ?? (!trip.published && !issues.length ? 'לא פורסמה לנהג' : null);
+  // Blocked = cannot legally run (fleet) or a dispatcher change not yet published; workbook file checks never block.
+  const blockedReason=blocking.find((i:string)=>FLEET_CAUSE.test(i)) ?? (!trip.published && !blocking.length ? 'לא פורסמה לנהג' : null);
   const live=liveFor(trip, clock, blockedReason);
   const mismatch=Object.values(live.stopCounts).some((c:any)=>c.expected!=null && c.count!==c.expected);
-  return {...trip, issues, points:pointsFor(trip), live, driverName:state.drivers[trip.driverId]?.name || 'לא משובץ',driverContact:state.drivers[trip.driverId]?.contact || null,vehicleName:state.vehicles[trip.vehicleId]?.label || 'לא משובץ',capacity:state.vehicles[trip.vehicleId]?.capacity || null,status:live.status, mismatch,nextStop:nextStop(trip), actual:live.boarded, reportSource:reports.length ? reports.some(r=>r.source==='driver')?'driver':'demo':null, canPublish:issues.length===0};
+  return {...trip, issues, blockers:blocking, checks, points:pointsFor(trip), live, driverName:state.drivers[trip.driverId]?.name || 'לא משובץ',driverContact:state.drivers[trip.driverId]?.contact || null,vehicleName:state.vehicles[trip.vehicleId]?.label || 'לא משובץ',capacity:state.vehicles[trip.vehicleId]?.capacity || null,status:live.status, mismatch,nextStop:nextStop(trip), actual:live.boarded, reportSource:reports.length ? reports.some(r=>r.source==='driver')?'driver':'demo':null, canPublish:issues.length===0};
 }
 export function snapshot(state:any,date:string,viewer:string) {
   const actor=actorFor(state,viewer),day=dayFor(state,date);
-  const trips=day.trips.filter((t:any)=>actor.role==='dispatcher'||(t.driverId===actor.id&&t.published&&!readiness(state,t,date).length));
+  const trips=day.trips.filter((t:any)=>actor.role==='dispatcher'||(t.driverId===actor.id&&t.published&&!blockers(state,t,date).length));
   const views=trips.map((t:any)=>tripView(state,t,day.clock));
   const dispatcher=actor.role==='dispatcher';
   const drivers=dispatcher?Object.values(state.drivers):[state.drivers[actor.id]];
@@ -152,7 +157,7 @@ export function execute(state:any,viewer:string,command:any) {
     trip.departure=data.departure;trip.stops=data.stops.map((s:any,i:number)=>({id:'stop-'+(i+1),name:String(s.name).slice(0,100),time:s.time,planned:s.planned}));trip.planned=trip.stops.reduce((s:number,t:any)=>s+t.planned,0);trip.reviewReasons=[];trip.published=false;
     event(state,day,trip,actor,'edit','עודכן תכנון התחנות; המקור המקורי נשמר בנפרד');
   } else if(command.type==='publish') {
-    const issues=readiness(state,trip,date);if(issues.length)fail(issues.join(' · '));
+    const issues=blockers(state,trip,date);if(issues.length)fail(issues.join(' · '));
     const clash=day.trips.some((t:any)=>t.id!==trip.id&&t.published&&t.departure===trip.departure&&(t.driverId===trip.driverId||t.vehicleId===trip.vehicleId));
     if(clash)fail('יש חפיפת שיבוץ באותה שעת יציאה.');
     trip.published=true;event(state,day,trip,actor,'publish','הסידור פורסם לנהג');
@@ -162,7 +167,7 @@ export function execute(state:any,viewer:string,command:any) {
   } else if(['start','report','depart','delay'].includes(command.type)) {
     if(actor.role!=='driver')fail('דיווח ביצוע מתקבל מהנהג המשויך בלבד.',403);
     if(data.stationary!==true)fail('יש לאשר שהרכב בעצירה בטוחה לפני דיווח.');
-    const issues=readiness(state,trip,date);if(issues.length)fail(issues.join(' · '));
+    const issues=blockers(state,trip,date);if(issues.length)fail(issues.join(' · '));
     if(trip.phase==='completed')fail('הנסיעה כבר הושלמה.');
     if(command.type==='start') {
       if(trip.phase!=='pending')fail('הנסיעה כבר החלה.');
