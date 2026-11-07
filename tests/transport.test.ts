@@ -93,14 +93,18 @@ test('an unknown seat count never blocks a driver report', () => {
   assert.doesNotThrow(() => run(s, 'driver-304', 'report', t2, { stationary: true, stopId: 'stop-1', count: t2.stops[0].planned }));
 });
 
-test('the demo clock moves simulated buses; the scenario delay shows as a delay', () => {
+test('the demo clock moves simulated buses; the scenario delay shows while on the road and clears on arrival', () => {
   const s = createTransportState();
-  run(s, 'shuki', 'clock', null, { time: '07:40' });
-  const d = snapshot(s, DEMO_DATE, 'shuki');
-  assert.ok(d.trips.some((t: any) => t.status === 'completed'));
+  run(s, 'shuki', 'clock', null, { time: '07:30' });
+  let d = snapshot(s, DEMO_DATE, 'shuki');
   const delayed = d.trips.find((t: any) => t.number === '12-1');
-  assert.ok(['delayed', 'late'].includes(delayed.status));
+  assert.equal(delayed.status, 'delayed');
   assert.equal(delayed.live.lateMinutes, 8);
+  run(s, 'shuki', 'clock', null, { time: '07:40' });
+  d = snapshot(s, DEMO_DATE, 'shuki');
+  assert.ok(d.trips.some((t: any) => t.status === 'completed'));
+  assert.equal(d.trips.find((t: any) => t.number === '12-1').status, 'completed', 'a bus that delivered everyone is not late');
+  assert.ok(!d.alerts.some((a: any) => a.id === `delay-${delayed.id}`), 'and its delay alert is gone');
   assert.equal(d.trips.find((t: any) => t.number === '10-1').status, 'late', 'the presenter trip has not left, so it is late');
 });
 

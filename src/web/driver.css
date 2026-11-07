@@ -142,7 +142,7 @@ svg.i { width: 22px; height: 22px; flex: none; }
 
 /* tab bar */
 .m-tabs { display: grid; grid-template-columns: 1fr 1fr; padding: 6px 8px calc(var(--m-bottom) + 4px); background: color-mix(in srgb, var(--m-card) 94%, transparent); backdrop-filter: blur(16px); border-top: 1px solid var(--m-line); z-index: 2; }
-.m-tab { display: grid; justify-items: center; gap: 2px; font-size: 12px; font-weight: 500; color: var(--m-faint); min-height: 49px; padding-top: 4px; position: relative; }
+.m-tab { display: grid; justify-items: center; gap: 2px; font-size: 12px; font-weight: 500; color: var(--m-muted); min-height: 49px; padding-top: 4px; position: relative; }
 .m-tab svg { width: 26px; height: 26px; }
 .m-tab[aria-current="page"] { color: var(--m-accent); }
 .m-badge { position: absolute; top: 0; inset-inline-start: calc(50% + 6px); min-width: 18px; height: 18px; border-radius: 999px; background: var(--m-bad); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; padding: 0 5px; }

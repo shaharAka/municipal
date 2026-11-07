@@ -125,7 +125,8 @@ export function liveFor(trip: any, clock: string, blockedReason: string | null =
       }
     }
   });
-  const completed = now >= times[times.length - 1] + 3;
+  // Arrival at the last point is completion: a bus that has delivered everyone is never "late".
+  const completed = now >= times[times.length - 1];
   const phase: Live['phase'] = departedIndex < 0 ? 'pending' : completed ? 'completed' : 'active';
   const next = departedIndex + 1;
   const fraction = phase === 'active' && next < times.length ? Math.min(1, Math.max(0, (now - times[departedIndex]) / Math.max(1, times[next] - times[departedIndex]))) : 0;

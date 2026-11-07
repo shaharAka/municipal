@@ -173,7 +173,7 @@ function tripRow(t) {
   const tone = ['upcoming', 'completed', 'blocked'].includes(t.status) ? 'is-quiet' : ['late', 'delayed'].includes(t.status) ? 'is-bad' : '';
   return `<button class="t-row ${t.id === S.selected ? 'is-selected' : ''}" data-trip="${t.id}">
     <span class="t-code ${tone}">${esc(t.routeCode)}</span>
-    <span><b>${esc(t.school)}</b><span class="t-sub">${esc(where)}${t.live.lateMinutes ? ` · ${t.live.lateMinutes} דק׳ איחור` : ''}</span></span>
+    <span><b>${esc(t.school)}</b><span class="t-sub">${esc([where, t.live.lateMinutes ? `${t.live.lateMinutes} דק׳ איחור` : ''].filter(Boolean).join(' · '))}</span></span>
     <span class="t-figure">${figure}<br>${pill(t.status)}</span>
   </button>`;
 }
