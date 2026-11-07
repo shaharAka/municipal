@@ -158,7 +158,11 @@ function phoneDock() {
       <select class="t-select" data-act="driver" aria-label="נהג">${drivers.map(d => `<option value="${d.id}" ${d.id === S.driver ? 'selected' : ''}>${esc(d.name)} · קו ${esc(d.routeCode)}</option>`).join('')}</select>
       <label><input type="checkbox" data-act="offline" ${S.offline ? 'checked' : ''}> ללא קליטה</label>
     </div>
-    <div class="t-phone"><iframe id="phone" title="אפליקציית הנהג" src="./driver.html?d=${encodeURIComponent(S.driver)}&date=${TODAY}"></iframe></div>
+    <div class="t-phone ${S.offline ? 'is-offline' : ''}"><div class="t-phone-screen">
+      <div class="t-status" aria-hidden="true"><span class="t-status-time num">${esc(S.data.clock)}</span><span class="t-island"></span><span class="t-status-icons"><span class="t-no-service">אין שירות</span><span class="t-signal"><svg viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg></span><svg viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><rect x="24.5" y="4.5" width="2" height="4" rx="1" opacity=".4"/></svg></span></div>
+      <iframe id="phone" title="אפליקציית הנהג" src="./driver.html?d=${encodeURIComponent(S.driver)}&date=${TODAY}&frame=1"></iframe>
+      <span class="t-home" aria-hidden="true"></span>
+    </div></div>
   </div></div>`;
 }
 
@@ -255,7 +259,7 @@ async function render() {
 }
 async function refresh() {
   try { S.data = await stateFor(TODAY); } catch (e) { toast(e.message, true); return; }
-  if (view() === 'live' && $('#map')) { top(); $('#side').innerHTML = sidePanel(); S.map?.update?.(S.data, S.selected); }
+  if (view() === 'live' && $('#map')) { top(); $('#side').innerHTML = sidePanel(); S.map?.update?.(S.data, S.selected); const st = $('.t-status-time'); if (st) st.textContent = S.data.clock; }
   else await render();
 }
 
@@ -296,7 +300,7 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.act === 'viewer') { S.viewer = el.value; localStorage.setItem('t-viewer', S.viewer); refresh(); }
   if (el.dataset.act === 'driver') { S.driver = el.value; S.phoneChanged = true; render(); }
-  if (el.dataset.act === 'offline') { S.offline = el.checked; $('#phone')?.contentWindow?.postMessage({ offline: S.offline }, location.origin); toast(S.offline ? 'הטלפון ללא קליטה' : 'הקליטה חזרה'); }
+  if (el.dataset.act === 'offline') { S.offline = el.checked; $('.t-phone')?.classList.toggle('is-offline', S.offline); $('#phone')?.contentWindow?.postMessage({ offline: S.offline }, location.origin); toast(S.offline ? 'הטלפון ללא קליטה' : 'הקליטה חזרה'); }
   if (el.dataset.fleet) run(() => command('fleet', { kind: el.dataset.fleet, entityId: el.dataset.id, [el.dataset.field]: el.value }), 'התוקף עודכן');
 });
 window.addEventListener('hashchange', () => { if (view() !== 'fleet') S.flash = null; render(); });

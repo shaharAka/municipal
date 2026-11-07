@@ -168,7 +168,8 @@ export function execute(state:any,viewer:string,command:any) {
       if(trip.phase!=='active')fail('יש להתחיל את הנסיעה לפני דיווח תחנה.');
       const stop=nextStop(trip);if(!stop||stop.id!==data.stopId)fail('אפשר לדווח רק על התחנה הבאה בסדר המסלול.');
       if(command.type==='report') {
-        if(trip.reports[stop.id])fail('לתחנה כבר התקבל דיווח.');
+        const previous=trip.reports[stop.id];
+        if(previous){if(previous.kind==='pickup'){trip.boarded-=previous.count;trip.onBoard-=previous.count;}else{trip.alighted-=previous.count;trip.onBoard+=previous.count;}delete trip.reports[stop.id];}
         if(!numericCount(data.count))fail('יש להזין מספר שלם שאינו שלילי.');
         if(stop.kind==='pickup'&&state.vehicles[trip.vehicleId].capacity!=null&&trip.onBoard+data.count>state.vehicles[trip.vehicleId].capacity)fail('הדיווח יחרוג מקיבולת הרכב.');
         if(stop.kind==='dropoff'&&data.count>trip.onBoard)fail('מספר היורדים גבוה ממספר הנוסעים ברכב.');
@@ -180,8 +181,8 @@ export function execute(state:any,viewer:string,command:any) {
         if(!trip.reports[stop.id])fail('יש לדווח כמות לפני אישור יציאה.');
         const remaining=trip.stops.filter((s:any)=>!trip.departures.includes(s.id)&&s.id!==stop.id).length;
         const last=trip.direction==='morning'?stop.id==='school':remaining===0;
-        if(last&&trip.onBoard!==0)fail('לא ניתן להשלים נסיעה כל עוד נותרו נוסעים שלא דווחה ירידתם.');
-        trip.departures.push(stop.id);if(last){trip.phase='completed';trip.delayMinutes=0;}
+        trip.departures.push(stop.id);
+        if(last){if(trip.onBoard>0){trip.unaccounted=trip.onBoard;trip.onBoard=0;event(state,day,trip,actor,'unaccounted',`${trip.unaccounted} תלמידים לא דווחו כיורדים`);}trip.phase='completed';trip.delayMinutes=0;}
         event(state,day,trip,actor,last?'complete':'depart',last?'הנהג השלים את הנסיעה':'הנהג אישר יציאה מהתחנה',{stopId:stop.id});
       }
     }

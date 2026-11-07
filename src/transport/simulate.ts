@@ -68,7 +68,7 @@ export type Live = {
   position: { lat: number; lng: number } | null;
   positionSource: 'simulation' | null;
   boarded: number | null;
-  stopCounts: Record<string, { count: number; expected: number | null; source: 'driver' | 'simulation' }>;
+  stopCounts: Record<string, { count: number; expected: number | null; source: 'driver' | 'simulation'; kind?: 'pickup' | 'dropoff' }>;
 };
 
 const at = (points: Point[], i: number, f: number) => {
@@ -92,7 +92,7 @@ export function liveFor(trip: any, clock: string): Live {
     const lateRunning = trip.phase === 'active' && next ? Math.max(0, now - to - 4) : 0;
     const lateMinutes = Math.max(trip.delayMinutes || 0, lateStart > 3 ? lateStart : 0, lateRunning);
     const stopCounts: Live['stopCounts'] = {};
-    for (const [id, r] of Object.entries(trip.reports ?? {}) as [string, any][]) stopCounts[id] = { count: r.count, expected: r.expected ?? null, source: 'driver' };
+    for (const [id, r] of Object.entries(trip.reports ?? {}) as [string, any][]) stopCounts[id] = { count: r.count, expected: r.expected ?? null, source: 'driver', kind: r.kind };
     return {
       mode: 'manual', phase: trip.phase, lateMinutes,
       status: trip.phase === 'completed' ? 'completed' : lateMinutes ? (trip.phase === 'active' ? 'delayed' : 'late') : trip.phase === 'active' ? 'active' : 'upcoming',
@@ -145,12 +145,13 @@ export function alertsFor(trips: any[], drivers: any[], vehicles: any[], date: s
     const label = `${t.number} · ${t.school}`;
     if (t.live.status === 'late') alerts.push({ id: `late-${t.id}`, level: 'high', kind: 'late', tripId: t.id, title: `${t.number} לא יצא · ${t.live.lateMinutes} דק׳`, detail: label });
     else if (t.live.status === 'delayed') alerts.push({ id: `delay-${t.id}`, level: 'high', kind: 'delay', tripId: t.id, title: `${t.number} מאחר ${t.live.lateMinutes} דק׳`, detail: label });
-    const off = Object.entries(t.live.stopCounts).filter(([, c]: any) => c.expected != null && c.count !== c.expected) as [string, any][];
+    if (t.unaccounted) alerts.push({ id: `unaccounted-${t.id}`, level: 'high', kind: 'count', tripId: t.id, title: `${t.number}: ${t.unaccounted} תלמידים לא דווחו כיורדים`, detail: `${t.school} · דיווח נהג` });
+    const off = Object.entries(t.live.stopCounts).filter(([id, c]: any) => c.expected != null && c.count !== c.expected && !(t.unaccounted && (id === 'school' || c.kind === 'dropoff'))) as [string, any][];
     if (off.length) {
       const [id, c] = off[0];
       const name = t.stops.find((s: any) => s.id === id)?.name ?? '';
       const fewer = c.count < c.expected;
-      alerts.push({ id: `count-${t.id}`, level: fewer && c.source === 'driver' ? 'high' : 'medium', kind: 'count', tripId: t.id, title: `${t.number}: ${t.direction === 'morning' ? 'עלו' : 'ירדו'} ${c.count} במקום ${c.expected}${fewer ? ` · ${c.expected - c.count} חסרים` : ''}`, detail: `${name} · ${c.source === 'driver' ? 'דיווח נהג' : 'סימולציה'}` });
+      alerts.push({ id: `count-${t.id}`, level: fewer && c.source === 'driver' ? 'high' : 'medium', kind: 'count', tripId: t.id, title: `${t.number}: ${(c.kind ?? (t.direction === 'morning' ? 'pickup' : 'dropoff')) === 'pickup' ? 'עלו' : 'ירדו'} ${c.count} במקום ${c.expected}${fewer ? ` · ${c.expected - c.count} חסרים` : ''}`, detail: `${name} · ${c.source === 'driver' ? 'דיווח נהג' : 'סימולציה'}` });
     }
   }
   // Readiness: one alert per cause, with the trips it blocks; fleet causes are reported on the driver or bus.

@@ -103,3 +103,32 @@ test('the demo clock moves simulated buses; the scenario delay shows as a delay'
   assert.equal(delayed.live.lateMinutes, 8);
   assert.equal(d.trips.find((t: any) => t.number === '10-1').status, 'late', 'the presenter trip has not left, so it is late');
 });
+
+test('a driver can always finish: fewer drop-offs than on board completes the trip and alerts the dispatcher', () => {
+  const s = createTransportState();
+  const step = (type: string, data: any) => run(s, 'driver-10', type, tripOf(s, 'driver-10', '10-1'), { stationary: true, ...data });
+  step('start', {});
+  step('report', { stopId: 'stop-1', count: 15 }); step('depart', { stopId: 'stop-1' });
+  step('report', { stopId: 'stop-2', count: 32 }); step('depart', { stopId: 'stop-2' });
+  step('report', { stopId: 'school', count: 45 });
+  assert.doesNotThrow(() => step('depart', { stopId: 'school' }));
+  const d = snapshot(s, DEMO_DATE, 'shuki');
+  const t = d.trips.find((x: any) => x.number === '10-1');
+  assert.equal(t.phase, 'completed');
+  assert.equal(t.unaccounted, 2);
+  assert.equal(d.alerts[0].title, '10-1: 2 תלמידים לא דווחו כיורדים');
+  assert.equal(d.alerts.filter((a: any) => a.tripId === t.id).length, 1, 'one alert for one cause');
+});
+
+test('a count can be corrected before leaving the stop, and nothing reports without the stationary confirmation', () => {
+  const s = createTransportState();
+  const step = (type: string, data: any) => run(s, 'driver-10', type, tripOf(s, 'driver-10', '10-1'), data);
+  step('start', { stationary: true });
+  step('report', { stationary: true, stopId: 'stop-1', count: 12 });
+  step('report', { stationary: true, stopId: 'stop-1', count: 15 });
+  const t = tripOf(s, 'driver-10', '10-1');
+  assert.equal(t.boarded, 15);
+  assert.equal(t.onBoard, 15);
+  assert.throws(() => step('depart', { stopId: 'stop-1' }), /עצירה בטוחה/);
+  assert.throws(() => step('delay', { minutes: 5 }), /עצירה בטוחה/);
+});

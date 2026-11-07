@@ -49,18 +49,26 @@ npm run dev
    - Point out the rule: nothing reaches a driver until it's ready and
      published.
 4. **The driver's morning.** The phone on the right is David Mizrahi, route 10.
-   - Open 07:10, Avital – Merom Golan.
-   - "התחלת נסיעה" is disabled until "the bus is stopped safely" is ticked.
-     That's the brief's safety rule, and the server enforces it too.
-   - At Ramat Trump, 15 are expected. Report 15 and depart.
-   - At Kela Alon, 32 are expected. Press − twice and report **30**.
+   - "הנסיעה הבאה 07:10" leads his screen. Tap "לנסיעה".
+   - One stop per screen, with the count already set to the expected number.
+   - There's no button to tap: the driver slides "עלו 15 · יציאה מהתחנה",
+     with "מחליקים רק כשהרכב עומד" under it. That deliberate slide is the
+     confirmation that the bus is stopped, and the server refuses any report
+     without it.
+   - At Kela Alon, press − twice: the number turns red and reads "2 פחות".
+     Slide.
    - On the left, the top alert immediately reads "10-1: עלו 30 במקום 32 · 2
-     חסרים", and the "תלמידים עלו" count shows 2 missing.
+     חסרים".
+   - Send him a note from the trip ("הודעה לנהג"). A badge appears on the
+     phone's "הודעות" tab.
 5. **No reception.**
-   - Tick "ללא קליטה" above the phone and report the school drop-off. The
-     phone keeps going and says the report is saved on the device. The
-     dashboard doesn't change.
-   - Untick it, and the report arrives within seconds.
+   - Tick "ללא קליטה" above the phone. The status bar shows "אין שירות".
+   - Slide the drop-off at the school. The trip completes on the phone and says
+     the report is saved on the device; the dashboard doesn't change.
+   - Untick it. The report arrives within seconds, and 10-1 shows as completed
+     on the dispatcher's side.
+   - Had David counted fewer children leaving than were on board, the trip
+     would still complete, with "N תלמידים לא דווחו כיורדים" as the top alert.
 6. **Time moves** (▶ or +5 דק׳).
    - Buses arrive and turn grey, and 12-1 shows as 8 minutes late.
    - Click a bus to see its stops: planned against reported, marked "דיווח
