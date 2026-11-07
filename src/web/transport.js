@@ -146,7 +146,8 @@ function rail() {
     <nav class="t-rail-nav" aria-label="ניווט">
       ${item('rides', I.rides, 'נסיעות', '<span class="t-badge" id="b-road" hidden></span>')}
       ${item('plan', I.calendar, 'בניית סידור')}
-      ${item('fleet', I.fleet, 'נהגים ורכבים', '<span class="t-badge" id="b-fleet" hidden></span>')}
+      ${item('drivers', I.user, 'נהגים', '<span class="t-badge" id="b-drivers" hidden></span>')}
+      ${item('vehicles', I.bus, 'רכבים', '<span class="t-badge" id="b-vehicles" hidden></span>')}
     </nav>
     <button class="t-rail-item t-rail-assist" data-act="assist" aria-expanded="${Boolean(S.assist)}">${I.assist}<span>עוזר התכנון</span></button>
     <div class="t-spacer"></div>
@@ -164,9 +165,10 @@ function railTick() {
   const d = S.data;
   if (!d) return;
   const road = d.alerts.filter(a => a.queue === 'road' && !a.handled).length;
-  const fleet = d.alerts.filter(a => a.kind === 'fleet' && a.level === 'high' && !a.handled).length;
+  const lic = d.drivers.filter(x => x.licenseUntil < TODAY).length;
+  const test = d.vehicles.filter(x => x.testUntil < TODAY).length;
   const set = (id, n, label) => { const el = $(id); if (el) { el.hidden = !n; el.textContent = n; el.setAttribute('aria-label', `${n} ${label}`); } };
-  set('#b-road', road, 'דורשים טיפול'); set('#b-fleet', fleet, 'חוסמים נסיעות');
+  set('#b-road', road, 'דורשים טיפול'); set('#b-drivers', lic, 'עם רישיון שפג'); set('#b-vehicles', test, 'עם טסט שפג');
   if ($('#clock-time')) $('#clock-time').textContent = d.clock;
   if ($('#pop-clock')) $('#pop-clock').textContent = d.clock;
   $('#clock')?.classList.toggle('is-playing', S.playing);
@@ -514,6 +516,7 @@ const PX_MIN = 1.7; // pixels per minute
 // A trip occupies its driver from departure to its last stop, as the council's workbook lists them
 // (no estimated school arrival), so only overlaps the workbook itself contains count as conflicts.
 const span = t => { const ms = t.stops.map(x => (/^\d\d:\d\d$/.test(x.time || '') ? minutes(x.time) : -1)).filter(m => m >= 0); const s = Math.min(minutes(t.departure), ...ms); return [s, Math.max(s + 5, ...ms)]; };
+const blockMin = (t, r) => (t.routeCode === r.home ? 50 : 72);
 const editableTrip = (t, date) => t.phase === 'pending' && (date !== TODAY || t.live.phase === 'pending');
 function planModel(date) {
   const d = dataFor(date);
@@ -535,7 +538,7 @@ function planModel(date) {
       else { const b = t.blockers.find(x => (by === 'driver' ? !/טסט|רכב/.test(x) : !/רישיון|נהג/.test(x))) ?? t.blockers[0]; if (b) conflicts.set(t.id, b); }
     });
     r.lanes = [];
-    for (const t of ts) { const [s] = span(t); const lane = r.lanes.findIndex(l => l <= s); if (lane < 0) r.lanes.push(span(t)[1]); else r.lanes[lane] = span(t)[1]; t._lane = lane < 0 ? r.lanes.length - 1 : lane; }
+    for (const t of ts) { const [s, e] = span(t); const end = s + Math.max(e - s, blockMin(t, r) / PX_MIN) + 2; const lane = r.lanes.findIndex(l => l <= s); if (lane < 0) r.lanes.push(end); else r.lanes[lane] = end; t._lane = lane < 0 ? r.lanes.length - 1 : lane; }
   }
   const q = S.plan.q.trim();
   let shown = rows.filter(r => r.trips.length || !r.valid || /חלופי/.test(r.sub) || r.id === 'bus-spare');
@@ -580,7 +583,7 @@ function paintPlanner() {
     ${rows.map(r => `<div class="t-tl-row ${r.valid ? '' : 'is-invalid'}" data-prow="${r.id}" style="--lanes:${Math.max(1, r.lanes.length)}">
       <div class="t-tl-label"><b>${esc(r.label)}</b><small>${r.valid ? esc(r.sub) : `<span class="t-warn-text">${r.why}</span>`}</small></div>
       <div class="t-tl-track">${hours.map(m => `<i class="t-tl-grid" style="inset-inline-start:${px(m)}px"></i>`).join('')}
-        ${r.trips.map(t => { const [s, e] = span(t); const c = conflicts.get(t.id); const can = editableTrip(t, S.plan.day); return `<button class="t-blk ${c ? 'is-conflict' : ''} ${!t.published ? 'is-draft' : ''} ${can ? '' : 'is-done'} ${S.insp?.id === t.id ? 'is-open' : ''}" data-plan-trip="${t.id}" data-date="${S.plan.day}" ${can ? 'draggable="true"' : ''} style="inset-inline-start:${px(s)}px;width:${Math.max(48, (e - s) * PX_MIN)}px;--lane:${t._lane}" title="${esc(`קו ${t.routeCode} · ${t.departure} · ${t.school}${c ? `\n${c}` : ''}`)}" aria-label="${esc(`קו ${t.routeCode}, ${t.departure}, ${t.school}${c ? `, ${c}` : ''}`)}">${t.routeCode === r.home ? esc(t.departure) : `<b>${esc(t.routeCode)}</b> ${esc(t.departure)}`}</button>`; }).join('')}
+        ${r.trips.map(t => { const [s, e] = span(t); const c = conflicts.get(t.id); const can = editableTrip(t, S.plan.day); return `<button class="t-blk ${c ? 'is-conflict' : ''} ${!t.published ? 'is-draft' : ''} ${can ? '' : 'is-done'} ${S.insp?.id === t.id ? 'is-open' : ''}" data-plan-trip="${t.id}" data-date="${S.plan.day}" ${can ? 'draggable="true"' : ''} style="inset-inline-start:${px(s)}px;width:${Math.max(blockMin(t, r), (e - s) * PX_MIN)}px;--lane:${t._lane}" title="${esc(`קו ${t.routeCode} · ${t.departure} · ${t.school}${c ? `\n${c}` : ''}`)}" aria-label="${esc(`קו ${t.routeCode}, ${t.departure}, ${t.school}${c ? `, ${c}` : ''}`)}">${t.routeCode === r.home ? esc(t.departure) : `<b>${esc(t.routeCode)}</b> ${esc(t.departure)}`}</button>`; }).join('')}
       </div></div>`).join('') || '<p class="t-empty">אין שורות שמתאימות.</p>'}
   </div>`;
   el.scrollLeft = scroll.x; el.scrollTop = scroll.y;
@@ -710,7 +713,7 @@ async function applyProposal(id) {
 function openProposal(id) {
   const p = S.assist.result.proposals.find(x => x.id === id);
   if (!p?.open) return;
-  if (p.open.view === 'fleet') location.hash = '#/fleet';
+  if (p.open.view === 'fleet') location.hash = '#/drivers';
   else if (p.open.view === 'checks') { S.table.facet = 'checks'; S.rides = 'table'; location.hash = '#/rides'; render(); }
   else openRide(p.open.id ?? p.tripIds[0], S.assist.date, 'overview');
 }
@@ -722,62 +725,54 @@ const dateCell = (kind, field, label, soon = 14) => ({
   cellRenderer: p => `<span class="t-datecell"><input type="date" class="t-date num" data-fleet="${kind}" data-id="${p.data.id}" data-field="${field}" value="${esc(p.data[field])}" aria-label="${esc(label(p.data))}">${due(p.data[field], soon)}</span>`,
   suppressKeyboardEvent: () => true, sortable: true, flex: 1, minWidth: 230,
 });
-function fleetPage() {
+const isPeople = v => v === 'drivers';
+function fleetPage(v) {
   const d = S.data;
-  const problems = d.alerts.filter(a => a.kind === 'fleet' && a.level === 'high');
+  const people = isPeople(v);
+  const items = people ? d.drivers : d.vehicles;
+  const expired = people ? items.filter(x => daysLeft(x.licenseUntil) < 0).length : items.filter(x => daysLeft(x.testUntil) < 0).length;
+  const soon = people ? items.filter(x => daysLeft(x.licenseUntil) >= 0 && daysLeft(x.licenseUntil) <= 30).length : items.filter(x => (daysLeft(x.testUntil) >= 0 && daysLeft(x.testUntil) <= 30) || daysLeft(x.serviceDue) <= 7).length;
   return `<div class="t-page t-page-full">
-    <header class="t-page-head"><div><h1>נהגים ורכבים</h1><p>${[`${num(d.drivers.length)} נהגים`, `${num(d.vehicles.length)} רכבים`, problems.length ? `${num(problems.length)} תוקפים שפגו וחוסמים נסיעות` : 'כל התוקפים בסדר'].join(' · ')}</p></div>
+    <header class="t-page-head"><div><h1>${people ? 'נהגים' : 'רכבים'}</h1><p>${[`${num(items.length)} ${people ? 'נהגים' : 'רכבים'}`, expired ? `${num(expired)} ${people ? 'עם רישיון שפג' : 'עם טסט שפג'}` : null, soon ? `${num(soon)} פגים בקרוב` : null].filter(Boolean).join(' · ') || 'הכל בתוקף'}</p></div>
       <div class="t-spacer"></div><button class="t-chip" data-act="fleet-issues" aria-pressed="${Boolean(S.fleetIssues)}">רק מה שפג או עומד לפוג</button></header>
-    <div class="t-fleet">
-      <section><div class="t-sec-title"><h2>נהגים</h2><span>לחיצה על תאריך כדי לעדכן</span></div><div class="t-grid t-grid-fleet" id="g-drivers"></div></section>
-      <section><div class="t-sec-title"><h2>רכבים</h2><span>טסט וטיפול</span></div><div class="t-grid t-grid-fleet" id="g-buses"></div></section>
-    </div>
+    <div class="t-grid t-grid-main" id="g-fleet"></div>
+    <p class="t-grid-foot">לחיצה על תאריך כדי לעדכן אותו.</p>
   </div>`;
 }
-function fleetRows() {
+function fleetRows(v) {
   const d = S.data;
   const trips = (field, id) => d.trips.filter(t => t[field] === id).length;
   const soon = (iso, n) => !iso || daysLeft(iso) <= n;
-  return {
-    drivers: [...d.drivers].filter(x => !S.fleetIssues || soon(x.licenseUntil, 30)).sort((a, b) => (a.licenseUntil < b.licenseUntil ? -1 : 1)).map(x => ({ ...x, today: trips('driverId', x.id) })),
-    buses: [...d.vehicles].filter(x => !S.fleetIssues || soon(x.testUntil, 30) || soon(x.serviceDue, 7)).sort((a, b) => ((a.testUntil || '9') < (b.testUntil || '9') ? -1 : 1)).map(x => ({ ...x, today: trips('vehicleId', x.id) })),
-  };
+  return isPeople(v)
+    ? [...d.drivers].filter(x => !S.fleetIssues || soon(x.licenseUntil, 30)).sort((a, b) => (a.licenseUntil < b.licenseUntil ? -1 : 1)).map(x => ({ ...x, today: trips('driverId', x.id) }))
+    : [...d.vehicles].filter(x => !S.fleetIssues || soon(x.testUntil, 30) || soon(x.serviceDue, 7)).sort((a, b) => ((a.testUntil || '9') < (b.testUntil || '9') ? -1 : 1)).map(x => ({ ...x, today: trips('vehicleId', x.id) }));
 }
-function mountFleet() {
-  const rows = fleetRows();
+function mountFleet(v) {
   const flash = { 't-flash': p => p.data?.id === S.flash };
-  const g1 = grid($('#g-drivers'), 'drivers', {
-    rowData: rows.drivers, rowClassRules: flash,
-    columnDefs: [
-      { headerName: 'נהג', field: 'name', flex: 1.4, minWidth: 170, cellRenderer: p => two(esc(p.value), `${p.data.routeCode ? `קו ${esc(p.data.routeCode)}` : 'נהג חלופי'} · <span dir="ltr">${esc(p.data.contact)}</span>`) },
-      { headerName: 'רישיון', field: 'licenseType', width: 84 },
-      { headerName: 'רישיון בתוקף עד', field: 'licenseUntil', ...dateCell('driver', 'licenseUntil', x => `תוקף רישיון של ${x.name}`, 30) },
-      { headerName: 'נסיעות היום', field: 'today', width: 110, cellClass: endCell },
-    ],
-  });
-  const g2 = grid($('#g-buses'), 'buses', {
-    rowData: rows.buses, rowClassRules: flash,
-    columnDefs: [
-      { headerName: 'רכב', field: 'label', flex: 1.2, minWidth: 140, cellRenderer: p => two(esc(p.value), `<span dir="ltr">${esc(p.data.registration)}</span>`) },
-      { headerName: 'מקומות', field: 'capacity', width: 84, minWidth: 76, cellClass: endCell, valueFormatter: p => (p.value ? num(p.value) : 'לא ידוע') },
-      { headerName: 'טסט בתוקף עד', field: 'testUntil', ...dateCell('vehicle', 'testUntil', x => `תוקף טסט ל${x.label}`, 30) },
-      { headerName: 'טיפול הבא', field: 'serviceDue', ...dateCell('vehicle', 'serviceDue', x => `מועד טיפול ל${x.label}`, 7) },
-    ],
-  });
-  if (S.flash) for (const g of [g1, g2]) { const n = g?.getRowNode(S.flash); if (n) setTimeout(() => g.ensureNodeVisible(n, 'middle'), 50); }
+  const columnDefs = isPeople(v) ? [
+    { headerName: 'נהג', field: 'name', flex: 1.4, minWidth: 180, cellRenderer: p => two(esc(p.value), p.data.routeCode ? `קו ${esc(p.data.routeCode)}` : 'נהג חלופי') },
+    { headerName: 'טלפון', field: 'contact', width: 140, cellRenderer: p => `<span dir="ltr" class="num">${esc(p.value)}</span>` },
+    { headerName: 'רישיון', field: 'licenseType', width: 90 },
+    { headerName: 'רישיון בתוקף עד', field: 'licenseUntil', ...dateCell('driver', 'licenseUntil', x => `תוקף רישיון של ${x.name}`, 30) },
+    { headerName: 'נסיעות היום', field: 'today', width: 120, cellClass: endCell },
+  ] : [
+    { headerName: 'רכב', field: 'label', flex: 1.2, minWidth: 160, cellRenderer: p => two(esc(p.value), `<span dir="ltr">${esc(p.data.registration)}</span>`) },
+    { headerName: 'מקומות', field: 'capacity', width: 100, cellClass: endCell, valueFormatter: p => (p.value ? num(p.value) : 'לא ידוע') },
+    { headerName: 'טסט בתוקף עד', field: 'testUntil', ...dateCell('vehicle', 'testUntil', x => `תוקף טסט ל${x.label}`, 30) },
+    { headerName: 'טיפול הבא', field: 'serviceDue', ...dateCell('vehicle', 'serviceDue', x => `מועד טיפול ל${x.label}`, 7) },
+    { headerName: 'נסיעות היום', field: 'today', width: 120, cellClass: endCell },
+  ];
+  const g = grid($('#g-fleet'), 'fleet', { rowData: fleetRows(v), rowClassRules: flash, columnDefs });
+  if (S.flash) { const n = g?.getRowNode(S.flash); if (n) setTimeout(() => g.ensureNodeVisible(n, 'middle'), 50); }
 }
-function paintFleet() {
-  const rows = fleetRows();
-  S.grids.drivers?.setGridOption('rowData', rows.drivers);
-  S.grids.buses?.setGridOption('rowData', rows.buses);
-}
+function paintFleet() { S.grids.fleet?.setGridOption('rowData', fleetRows(view())); }
 
 // ------------------------------------------------------------ the brief, point by point (presenter tour)
 const BRIEF = [
   { title: 'מטרת המוצר', text: 'מקום אחד לתכנן, לעקוב בזמן אמת ולראות את כל המערך: נסיעות, נהגים, אוטובוסים ותלמידים.', go: () => { S.rides = 'board'; location.hash = '#/rides'; }, spot: '#board', say: 'כל המערך סביב הנסיעות: מה דורש טיפול, מה יוצא, מה בדרך ומה הגיע.' },
   { title: 'ממשק הסדרנים', text: 'סידור יומי, שיוך נהג ורכב, תחנות ותלמידים, מצב כל נסיעה, מתוכנן מול בפועל, והתראות.', go: async () => { location.hash = '#/rides'; await wait(400); const t = S.data.trips.find(x => x.status === 'active'); if (t) await openRide(t.id, TODAY, 'overview'); }, spot: '.t-insp', say: 'כל נסיעה נפתחת בצד: תחנות עם מתוכנן מול בפועל, הנהג, הרכב, והתראות עם פעולה.' },
   { title: 'ממשק הנהג', text: 'סידור העבודה, תחנה אחת בכל מסך, ספירה, אישור יציאה בהחלקה, ופיזור.', go: async () => { if (!S.phone) { S.phone = true; paintPhone(); } }, spot: '.t-phone', say: 'הנהג רואה רק את הנסיעות שלו. מחליקים רק כשהרכב עומד.' },
-  { title: 'נהגים וצי רכב', text: 'פרטי קשר, סוג רישיון ותוקפו, טסט, טיפולים וזמינות, עם התראה לפני שפג.', go: () => { S.fleetIssues = true; location.hash = '#/fleet'; }, spot: '.t-fleet', say: 'מה שפג או עומד לפוג, ולחיצה על תאריך מעדכנת.' },
+  { title: 'נהגים וצי רכב', text: 'פרטי קשר, סוג רישיון ותוקפו, טסט, טיפולים וזמינות, עם התראה לפני שפג.', go: () => { S.fleetIssues = true; location.hash = '#/drivers'; }, spot: '#g-fleet', say: 'מה שפג או עומד לפוג, ולחיצה על תאריך מעדכנת.' },
   { title: 'תהליך העבודה', text: 'שלב 1: בונים את הסידור למחר. משם הנהג רואה, מדווח, והדשבורד מתעדכן.', go: () => { location.hash = '#/plan'; }, spot: '#timeline', say: 'מחר במבט אחד: כל נהג והנסיעות שלו. גוררים נסיעה לנהג אחר, והתנגשויות נצבעות.' },
   { title: 'הדמו (MVP)', text: 'דשבורד עם מפה, סידור יומי, ממשק נהג, עדכון מיידי וניהול צי, כולם על הנתונים שלכם.', go: async () => { location.hash = '#/rides'; await wait(300); await openMap(); }, spot: '.t-mapfull', say: 'המפה החיה, עם כל האוטובוסים. נפתחת בלחיצה, לא מסתירה את העבודה.' },
   { title: 'מה למדנו מהקובץ', text: 'מסלולים ותחנות: קוד סידור הוא האוטובוס, נסיעה היא יום + קוד + מספר. יש קווי בוקר וצהריים שונים בכל יום, ושישי שונה. גם נהגי מועצה וגם קבלנים. בקובץ רק מספרי תלמידים, בלי שמות. אין בו נתוני נהגים ותוקפים, ולא GPS.' },
@@ -833,7 +828,7 @@ function paintHelp() {
       <section><h3>המסכים</h3><ul>
         <li><b>נסיעות</b>: מה דורש טיפול עכשיו, מה יוצא, מה בדרך ומה הגיע. לחיצה על נסיעה פותחת אותה בצד.</li>
         <li><b>בניית סידור</b>: כל נהג והנסיעות שלו לאורך היום. גוררים נסיעה לנהג אחר. אדום: התנגשות. מקווקו: עוד לא פורסם.</li>
-        <li><b>נהגים ורכבים</b>: תוקפי רישיון, טסט וטיפולים. לחיצה על תאריך מעדכנת אותו.</li>
+        <li><b>נהגים</b> ו<b>רכבים</b>: תוקף רישיון, טסט וטיפולים. לחיצה על תאריך מעדכנת אותו.</li>
         <li><b>עוזר התכנון</b>: כותבים מה קרה ("דוד לא מגיע מחר") ומקבלים הצעה לאישור.</li>
       </ul></section>
       <section><h3>צבעים</h3><ul>
@@ -859,7 +854,8 @@ function cmdItems() {
   const items = [
     { kind: 'מסך', label: 'נסיעות', sub: 'מה דורש טיפול, מה בדרך ומה הגיע', go: () => { location.hash = '#/rides'; } },
     { kind: 'מסך', label: 'בניית סידור', sub: 'נהגים מול שעות, גוררים כדי לשבץ', go: () => { location.hash = '#/plan'; } },
-    { kind: 'מסך', label: 'נהגים ורכבים', sub: 'רישיונות, טסטים וטיפולים', go: () => { location.hash = '#/fleet'; } },
+    { kind: 'מסך', label: 'נהגים', sub: 'טלפונים ותוקף רישיון', go: () => { location.hash = '#/drivers'; } },
+    { kind: 'מסך', label: 'רכבים', sub: 'מקומות, טסט וטיפולים', go: () => { location.hash = '#/vehicles'; } },
     { kind: 'פעולה', label: 'מפה חיה', sub: 'כל האוטובוסים על המפה', go: () => openMap() },
     { kind: 'פעולה', label: 'בדיקת מחר עם העוזר', sub: 'מה חסר בסידור של מחר', go: () => openAssist(TOMORROW) },
   ];
@@ -868,8 +864,8 @@ function cmdItems() {
     kind: 'נסיעה', label: `קו ${t.routeCode} · ${t.school}`, sub: `${t.departure} · ${STATUS[t.status]?.[0] ?? ''} · ${t.driverName} · ${t.points.filter(p => p.kind === 'stop').map(p => p.name).join(', ')}`,
     hay: `${t.number} ${t.routeCode} קו ${t.routeCode} ${t.school} ${t.driverName} ${t.vehicleName} ${t.stops.map(s => s.name).join(' ')}`, go: () => openRide(t.id, TODAY, 'overview'),
   }));
-  d.drivers.forEach(x => items.push({ kind: 'נהג', label: x.name, sub: x.routeCode ? `קו ${x.routeCode}` : 'נהג חלופי', go: () => { S.flash = x.id; location.hash = '#/fleet'; } }));
-  d.vehicles.forEach(x => items.push({ kind: 'רכב', label: x.label, sub: x.capacity ? `${x.capacity} מקומות` : 'מספר מקומות לא ידוע', go: () => { S.flash = x.id; location.hash = '#/fleet'; } }));
+  d.drivers.forEach(x => items.push({ kind: 'נהג', label: x.name, sub: x.routeCode ? `קו ${x.routeCode}` : 'נהג חלופי', go: () => { S.flash = x.id; location.hash = '#/drivers'; } }));
+  d.vehicles.forEach(x => items.push({ kind: 'רכב', label: x.label, sub: x.capacity ? `${x.capacity} מקומות` : 'מספר מקומות לא ידוע', go: () => { S.flash = x.id; location.hash = '#/vehicles'; } }));
   return items;
 }
 function cmdResults() {
@@ -921,8 +917,8 @@ async function render() {
   if (v === 'plan') {
     main.innerHTML = plannerPage();
     await loadPlanDay(); paintPlanner(); loadWeek().then(paintPlanner);
-  } else if (v === 'fleet') {
-    main.innerHTML = fleetPage(); mountFleet();
+  } else if (v === 'drivers' || v === 'vehicles') {
+    main.innerHTML = fleetPage(v); mountFleet(v);
   } else {
     main.innerHTML = ridesPage(); ridesMeta();
     if (S.rides === 'table') mountTable();
@@ -934,7 +930,7 @@ function repaint() {
   const v = view();
   if (v === 'rides') paintRides();
   if (v === 'plan') paintPlanner();
-  if (v === 'fleet' && !document.activeElement?.matches?.('.t-date')) paintFleet();
+  if ((v === 'drivers' || v === 'vehicles') && !document.activeElement?.matches?.('.t-date')) paintFleet();
   if (S.insp && !S.dirty && !(S.insp.tab === 'overview' && S.composing)) paintInspector();
   else if (S.insp && S.composing) { const body = $('#insp-body'); if (body && S.insp.tab === 'overview') { /* keep the draft; counts refresh on next open */ } }
   S.map?.update?.(S.data, S.insp?.id ?? null);
@@ -1071,7 +1067,7 @@ document.addEventListener('keydown', e => {
     if (S.tour) { S.tour = null; paintTour(); }
   }
 });
-window.addEventListener('hashchange', async () => { if (view() !== 'fleet') S.flash = null; if (S.mapOpen && !S.tour) closeMap(); if (S.insp) { S.dirty = false; S.insp = null; } await render(); });
+window.addEventListener('hashchange', async () => { if (!['drivers', 'vehicles'].includes(view())) S.flash = null; if (S.mapOpen && !S.tour) closeMap(); if (S.insp) { S.dirty = false; S.insp = null; } await render(); });
 
 function tick() {
   clearInterval(tick.t);
@@ -1090,6 +1086,7 @@ function listen() {
 
 applyTheme(store.get('t-theme', 'royal'));
 if (!location.hash || location.hash === '#/live' || location.hash === '#/schedule') history.replaceState(null, '', location.hash === '#/schedule' ? '#/plan' : '#/rides');
+if (location.hash === '#/fleet') history.replaceState(null, '', '#/drivers');
 await loadDay(TODAY);
 await render();
 listen();

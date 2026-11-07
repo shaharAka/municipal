@@ -589,3 +589,4 @@ svg.i { width: 16px; height: 16px; flex: none; stroke-width: 1.75; }
 .t-blk b { font-weight: 700; color: var(--ink); margin-inline-end: 2px; }
 .t-blk.is-conflict b { color: var(--bad); }
 .t-blk { padding: 0 5px; text-align: center; }
+body:has(.t-plan-bar) .t-toasts { bottom: 96px; }
