@@ -20,6 +20,7 @@ export function weekday(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date+'T12:00:00Z')) || new Date(date+'T12:00:00Z').toISOString().slice(0,10) !== date) fail('יש לבחור תאריך תקין.');
   return new Date(date+'T12:00:00Z').getUTCDay();
 }
+function plusDays(iso:string,n:number){return new Date(Date.parse(iso)+n*86_400_000).toISOString().slice(0,10);}
 export function createTransportState(): any {
   const codes = [...new Set(schedule.trips.map(t => t.routeCode))].sort((a,b) => Number(a)-Number(b));
   const drivers: any = {}, vehicles: any = {};
@@ -32,7 +33,7 @@ export function createTransportState(): any {
   });
   drivers['driver-spare'] = {id:'driver-spare', name:'רון אלמוג', routeCode:'', licenseType:'D', licenseUntil:'2027-08-31', available:true, contact:'050-0000999', origin:'demo'};
   vehicles['bus-spare'] = {id:'bus-spare',label:'אוטובוס חלופי',registration:'71-990-12',capacity:60,capacitySource:'נתון הדגמה',testUntil:'2027-04-30',serviceDue:'2026-12-15',available:true,origin:'demo'};
-  return {schema:1, revision:1, drivers, vehicles, template:{}, days:{}, receipts:{}, createdAt:new Date().toISOString()};
+  return {schema:1, revision:1, drivers, vehicles, template:{}, days:{}, receipts:{}, inbox:[], createdAt:new Date().toISOString()};
 }
 export function actorFor(state: any, id: string) {
   if (id==='shuki' || id==='inbal') return {id, name:id==='shuki'?'שוקי':'ענבל', role:'dispatcher'};
@@ -104,7 +105,7 @@ export function snapshot(state:any,date:string,viewer:string) {
   const drivers=dispatcher?Object.values(state.drivers):[state.drivers[actor.id]];
   const vehicles=dispatcher?Object.values(state.vehicles):[...new Set(trips.map((t:any)=>t.vehicleId))].map(id=>state.vehicles[id as string]);
   const template=dispatcher?Object.fromEntries([...new Set(schedule.trips.map((t:any)=>t.routeCode))].map((c:any)=>[c,crewOf(state,c)])):{};
-  return {revision:state.revision,date,weekday:DAYS[weekday(date)],actor,clock:day.clock,template,source:schedule.source,trips:views,drivers,vehicles,alerts:dispatcher?alertsFor(views,drivers,vehicles,date,day.clock,day.acks??{}):[],events:day.events.filter((e:any)=>dispatcher||trips.some((t:any)=>t.id===e.tripId)),identityMode:'demo',gps:{connected:false,source:'simulation',label:'מיקומי הרכבים בהדגמה הם סימולציה לפי שעון ההדגמה; אין חיבור GPS'},serverTime:new Date().toISOString()};
+  return {revision:state.revision,date,weekday:DAYS[weekday(date)],actor,clock:day.clock,template,inbox:dispatcher?(state.inbox??[]).filter((x:any)=>!x.done):[],source:schedule.source,trips:views,drivers,vehicles,alerts:dispatcher?alertsFor(views,drivers,vehicles,date,day.clock,day.acks??{}):[],events:day.events.filter((e:any)=>dispatcher||trips.some((t:any)=>t.id===e.tripId)),identityMode:'demo',gps:{connected:false,source:'simulation',label:'מיקומי הרכבים בהדגמה הם סימולציה לפי שעון ההדגמה; אין חיבור GPS'},serverTime:new Date().toISOString()};
 }
 function event(state:any, day:any, trip:any,actor:any,kind:string,text:string,extra:any={}) {
   const e={id:'transport-event-'+day.nextId++,tripId:trip?.id||null,actor:actor.name,actorId:actor.id,kind,text,at:new Date().toISOString(),source:actor.role==='driver'?'driver':'dispatcher',...extra};
@@ -125,12 +126,14 @@ export function execute(state:any,viewer:string,command:any) {
   if(command.type==='reset') {
     if(actor.role!=='dispatcher')fail('איפוס זמין לסדרנים בלבד.',403);
     // A full demo reset: every day, and the fleet records edited during the run.
-    const fresh=createTransportState();state.drivers=fresh.drivers;state.vehicles=fresh.vehicles;state.days={};dayFor(state,date);state.revision++;return {revision:state.revision};
+    const fresh=createTransportState();state.drivers=fresh.drivers;state.vehicles=fresh.vehicles;state.days={};state.inbox=[];dayFor(state,date);state.revision++;return {revision:state.revision};
   }
   const trip=day.trips.find((t:any)=>t.id===command.tripId);
-  const dispatcher=['assign','edit','publish','create','note','fleet','clock','ack','unack','plan','template','driver-save','vehicle-save','archive'].includes(command.type);
+  const dispatcher=['assign','edit','publish','create','note','fleet','clock','ack','unack','plan','template','driver-save','vehicle-save','archive','split','merge'].includes(command.type);
   if(dispatcher&&actor.role!=='dispatcher')fail('הפעולה זמינה לסדרנים בלבד.',403);
-  if(!['fleet','clock','create','ack','unack','plan','template','driver-save','vehicle-save','archive'].includes(command.type)&&!trip)fail('הנסיעה אינה קיימת ביום שנבחר.',404);
+  if(['inbox-done'].includes(command.type)&&actor.role!=='dispatcher')fail('הפעולה זמינה לסדרנים בלבד.',403);
+  if(['confirm','concern','my-away'].includes(command.type)&&actor.role!=='driver')fail('הפעולה זמינה לנהגים בלבד.',403);
+  if(!['fleet','clock','create','ack','unack','plan','template','driver-save','vehicle-save','archive','my-away','inbox-done'].includes(command.type)&&!trip)fail('הנסיעה אינה קיימת ביום שנבחר.',404);
   if(trip && actor.role==='driver' && (trip.driverId!==actor.id||!trip.published))fail('לנהג אין גישה לנסיעה הזו.',403);
   if(trip && command.version!==trip.version)fail('הנסיעה השתנתה. רעננו את הנתונים לפני ניסיון נוסף.',409);
   const data=command.data||{};
@@ -206,8 +209,57 @@ export function execute(state:any,viewer:string,command:any) {
     for(const {t,driverId,vehicleId,changed} of targets){
       t.driverId=driverId;t.vehicleId=vehicleId;
       if(data.publish===true&&!blockers(state,t,date).length)t.published=true;else if(changed)t.published=false;
+      if(changed)delete t.confirmed;
       t.version++;event(state,day,t,actor,changed?'assign':'publish',t.published?`${reason}. פורסם לנהג`:reason);
     }
+  } else if(command.type==='confirm') {
+    // The driver saw a new or changed ride and confirms it.
+    trip.confirmed={at:new Date().toISOString()};
+    state.inbox=(state.inbox??[]).map((x:any)=>x.tripId===trip.id&&x.kind==='new'?{...x,done:true}:x);
+    event(state,day,trip,actor,'confirm','הנהג אישר את הנסיעה');
+  } else if(command.type==='concern') {
+    // A problem with an upcoming ride: a short note, or just "call me".
+    const text=String(data.text||'').trim().slice(0,300);const reason=String(data.reason||'').slice(0,60);
+    const me=state.drivers[actor.id];
+    state.inbox=state.inbox??[];
+    state.inbox.push({id:'inbox-'+day.nextId++,kind:'concern',date,tripId:trip.id,routeCode:trip.routeCode,departure:trip.departure,driverId:actor.id,driverName:me.name,phone:me.contact,reason,text,call:data.call===true,at:new Date().toISOString(),done:false});
+    event(state,day,trip,actor,'concern',[reason,text].filter(Boolean).join(': ')||'הנהג ביקש שיתקשרו אליו');
+  } else if(command.type==='my-away') {
+    // A driver updates their own availability for a day; the dispatcher sees it at once.
+    weekday(String(data.date||''));const d=String(data.date);const me=state.drivers[actor.id];
+    me.away=(me.away??[]).flatMap((a:any)=>{if(!(a.from<=d&&d<=a.to))return [a];const out=[];if(a.from<d)out.push({...a,to:plusDays(d,-1)});if(d<a.to)out.push({...a,from:plusDays(d,1)});return out;});
+    const reason=String(data.reason||'').slice(0,60);
+    if(data.away===true)me.away.push({from:d,to:d,reason,by:'driver'});
+    state.inbox=state.inbox??[];
+    // Changed their mind before the dispatcher handled it: the two messages cancel out.
+    const open=state.inbox.find((x:any)=>!x.done&&x.driverId===actor.id&&x.date===d&&x.kind===(data.away===true?'back':'away'));
+    if(open){open.done=true;open.by=actor.name;}
+    else state.inbox.push({id:'inbox-'+day.nextId++,kind:data.away===true?'away':'back',date:d,driverId:actor.id,driverName:me.name,phone:me.contact,reason,text:'',call:false,at:new Date().toISOString(),done:false});
+  } else if(command.type==='inbox-done') {
+    const item=(state.inbox??[]).find((x:any)=>x.id===data.id);if(!item)fail('ההודעה לא נמצאה.',404);
+    item.done=data.undo!==true;item.by=actor.name;
+  } else if(command.type==='split') {
+    // Too many students for one bus: some stops move to a second bus with its own driver.
+    if(trip.phase!=='pending')fail('אי אפשר לפצל נסיעה שכבר יצאה.');
+    const ids=Array.isArray(data.stopIds)?data.stopIds.map(String):[];
+    const moving=trip.stops.filter((x:any)=>ids.includes(x.id));
+    if(!moving.length||moving.length===trip.stops.length)fail('בחרו אילו תחנות עוברות לרכב השני.');
+    if(!state.drivers[data.driverId]||!state.vehicles[data.vehicleId])fail('יש לבחור נהג ורכב קיימים.');
+    const n=moving.reduce((a:number,x:any)=>a+(x.planned||0),0);
+    const twin={...structuredClone(trip),id:trip.id+'-b'+day.nextId++,number:trip.number+' ב',stops:moving,planned:n,driverId:data.driverId,vehicleId:data.vehicleId,version:1,events:[],notes:[],reports:{},departures:[],splitFrom:trip.id,published:false};
+    trip.stops=trip.stops.filter((x:any)=>!ids.includes(x.id));trip.planned-=n;trip.version++;
+    day.trips.push(twin);
+    if(!blockers(state,twin,date).length)twin.published=true;
+    if(!blockers(state,trip,date).length)trip.published=true;
+    event(state,day,trip,actor,'split',`פוצלה לשני רכבים: ${moving.map((x:any)=>x.name).join(', ')} עברו ל${state.vehicles[data.vehicleId].label}`);
+    event(state,day,twin,actor,'assign',`נסיעה נוספת אחרי פיצול קו ${trip.routeCode}. פורסם לנהג`);
+  } else if(command.type==='merge') {
+    const twin=day.trips.find((t:any)=>t.id===data.fromId&&t.splitFrom===trip.id);
+    if(!twin)fail('הנסיעה הנוספת לא נמצאה.',404);
+    if(trip.phase!=='pending'||twin.phase!=='pending')fail('אי אפשר לאחד נסיעות שכבר יצאו.');
+    trip.stops=[...trip.stops,...twin.stops].sort((a:any,b:any)=>minutes(a.time)-minutes(b.time));trip.planned+=twin.planned;trip.version++;
+    day.trips=day.trips.filter((t:any)=>t!==twin);
+    event(state,day,trip,actor,'merge','הפיצול בוטל, כל התחנות חזרו לרכב אחד');
   } else if(command.type==='assign') {
     if(trip.phase!=='pending')fail('אין לשנות שיבוץ בנסיעה שהחלה.');
     if(!state.drivers[data.driverId]||!state.vehicles[data.vehicleId])fail('יש לבחור נהג ורכב קיימים.');

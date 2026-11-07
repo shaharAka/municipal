@@ -50,7 +50,28 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(body.error || 'הדיווח לא נשמר');
   return body;
 }
-const load = async () => { S.data = await api(`/api/transport/state?date=${DATE}`); };
+const NEXT = new Date(Date.parse(DATE) + 86_400_000).toISOString().slice(0, 10);
+const load = async () => { S.data = await api(`/api/transport/state?date=${DATE}`); try { S.next = await api(`/api/transport/state?date=${NEXT}`); } catch { S.next = null; } };
+const DAYN = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const dayName = iso => DAYN[new Date(iso + 'T00:00:00Z').getUTCDay()];
+const heDate = iso => iso.split('-').reverse().slice(0, 2).map(Number).join('.');
+const WEEK = Array.from({ length: 6 }, (_, i) => new Date(Date.parse(DATE) + i * 86_400_000).toISOString().slice(0, 10)).filter(d => new Date(d + 'T00:00:00Z').getUTCDay() < 6);
+const whenWord = d => (d === DATE ? 'היום' : d === NEXT ? 'מחר' : `יום ${dayName(d)}`);
+const changed = t => (t.events ?? []).some(e => e.kind === 'assign');
+const toConfirm = () => [...(S.data?.trips ?? []).map(t => ({ t, date: DATE })), ...(S.next?.trips ?? []).map(t => ({ t, date: NEXT }))].filter(x => changed(x.t) && !x.t.confirmed && x.t.phase === 'pending');
+// Commands about a ride on another day (tomorrow) or about the driver themself; reload after.
+async function sendOn(date, type, data, t = null) {
+  await api('/api/transport/commands', { method: 'POST', body: JSON.stringify({ id: crypto.randomUUID(), type, date, tripId: t?.id, version: t?.version, data }) });
+  await load(); S.week = null;
+}
+async function loadWeek() { const out = {}; for (const d of WEEK) { try { out[d] = (await api(`/api/transport/state?date=${d}`)).trips.length; } catch { out[d] = null; } } S.week = out; render(); }
+const pill = (text, tone = '') => `<span class="m-pill ${tone}">${esc(text)}</span>`;
+function tripPill(t, clock) {
+  if (t.phase === 'completed') return pill('הושלמה', 'is-ok');
+  if (t.phase === 'active') return pill(t.lateMinutes ? `בדרך · ${t.lateMinutes} דק׳ איחור` : 'בדרך', t.lateMinutes ? 'is-warn' : 'is-info');
+  if (clock > minutes(t.departure)) return pill(`באיחור ${clock - minutes(t.departure)} דק׳`, 'is-warn');
+  return '';
+}
 const tripById = id => S.data?.trips.find(t => t.id === id);
 function nextPoint(t) {
   const pts = t.direction === 'morning' ? t.points : t.points.filter(p => p.kind === 'stop');
@@ -115,6 +136,7 @@ function tabs() {
   const n = unread();
   return `<nav class="m-tabs" aria-label="ניווט">
     <button class="m-tab" data-tab="today" ${S.tab === 'today' ? 'aria-current="page"' : ''}>${I.today}היום</button>
+    <button class="m-tab" data-tab="week" ${S.tab === 'week' ? 'aria-current="page"' : ''}>${I.check}זמינות</button>
     <button class="m-tab" data-tab="messages" ${S.tab === 'messages' ? 'aria-current="page"' : ''}>${I.chat}הודעות${n ? `<span class="m-badge">${n}</span>` : ''}</button>
   </nav>`;
 }
@@ -128,23 +150,49 @@ function todayScreen() {
   const done = trips.filter(t => t.phase === 'completed');
   const cell = t => `<button class="m-cell ${t.phase === 'completed' ? 'is-done' : ''}" data-open="${t.id}">
       <span class="m-time num">${esc(t.departure)}</span>
-      <span><b>${esc(t.school)}</b><small>${t.direction === 'morning' ? 'איסוף' : 'פיזור'} · ${t.stops.length} תחנות · ${t.planned} תלמידים</small></span>
-      ${t.phase === 'completed' ? `<span class="m-check">${I.check}</span>` : I.chev}
+      <span><b>${esc(t.school)}</b><small>קו ${esc(t.routeCode)} · ${t.direction === 'morning' ? 'איסוף' : 'פיזור'} · ${t.planned} תלמידים</small></span>
+      ${tripPill(t, clock) || I.chev}
     </button>`;
+  // Tomorrow, so a change from the dispatcher is never a surprise at 6 in the morning.
+  const nx = (S.next?.trips ?? []).slice().sort((a, b) => a.departure.localeCompare(b.departure));
+  const fresh = nx.filter(changed);
+  const tomorrow = nx.length ? `<section class="m-section"><h2>מחר</h2>
+      ${fresh.length && !toConfirm().some(x => x.date === NEXT) ? `<div class="m-notice">${pill('שיבוץ חדש', 'is-warn')}<span>${fresh.length === 1 ? 'נסיעה אחת' : `${fresh.length} נסיעות`} בקו ${esc([...new Set(fresh.map(t => t.routeCode))].join(', '))}. הסדרן שיבץ אותך במקום נהג אחר, והפרטים כבר כאן.</span></div>` : ''}
+      <div class="m-group">${nx.map(t => `<div class="m-cell is-static"><span class="m-time num">${esc(t.departure)}</span><span><b>${esc(t.school)}</b><small>קו ${esc(t.routeCode)} · ${esc(t.vehicleName ?? '')}</small></span>${t.confirmed ? pill('אישרת', 'is-ok') : changed(t) ? pill('חדש', 'is-warn') : ''}<button class="m-link" data-issue="${NEXT}|${t.id}" aria-label="בעיה בנסיעה של ${esc(t.departure)}">בעיה?</button></div>`).join('')}</div></section>` : '';
   return `<header class="m-nav"><div class="m-nav-row"><span></span><a class="m-nav-btn" href="tel:${DISPATCH_PHONE}" aria-label="התקשרות למוקד ההסעות">${I.phone}</a></div>
-      <h1 class="m-large">בוקר טוב, ${esc(me?.name.split(' ')[0] ?? '')}</h1><p class="m-sub">יום ${esc(d.weekday)} · ${esc(d.clock)}</p></header>
+      <h1 class="m-large">${me ? `בוקר טוב, ${esc(me.name.split(' ')[0])}` : 'בוקר טוב'}</h1><p class="m-sub">${d.weekday ? `יום ${esc(d.weekday)} · ${esc(d.clock)} · ${trips.length ? `${trips.length} נסיעות היום` : 'אין נסיעות היום'}` : 'אין חיבור לשרת'}</p></header>
     ${netBanner()}
     <main class="m-scroll">
+      ${[...new Set(toConfirm().map(x => x.date))].map(date => { const list = toConfirm().filter(x => x.date === date).map(x => x.t); return `<section class="m-confirm" aria-label="שיבוץ חדש לאישור">
+        <div class="m-confirm-top">${pill('שיבוץ חדש', 'is-warn')}<small>${whenWord(date)} · ${list.length === 1 ? 'נסיעה אחת' : `${list.length} נסיעות`}</small></div>
+        <b>קו ${esc([...new Set(list.map(t => t.routeCode))].join(', '))} · ${esc(list[0].vehicleName ?? '')}</b>
+        <ul class="m-confirm-list">${list.map(t => `<li><span class="num">${esc(t.departure)}</span>${esc(t.school)}</li>`).join('')}</ul>
+        ${slider(list.length === 1 ? 'החלקה לאישור הנסיעה' : `החלקה לאישור ${list.length} הנסיעות`, false, `${date}|${list.map(t => t.id).join(',')}`)}
+        <button class="m-issue-btn" data-issue="${date}|${list[0].id}">יש לי בעיה עם השיבוץ</button>
+      </section>`; }).join('')}
       ${now ? `<button class="m-now" data-open="${now.id}">
-          <small>${now.phase === 'active' ? 'בדרך עכשיו' : clock > minutes(now.departure) ? `<span class="m-late">באיחור ${clock - minutes(now.departure)} דק׳</span>` : 'הנסיעה הבאה'}</small>
+          <span class="m-now-top">${tripPill(now, clock) || '<small>הנסיעה הבאה</small>'}</span>
           <span class="m-now-time num">${esc(now.departure)}</span>
           <b>${esc(now.school)}</b>
-          <small>${now.direction === 'morning' ? 'איסוף' : 'פיזור'} · ${now.stops.length} תחנות · ${now.planned} תלמידים</small>
+          <small>קו ${esc(now.routeCode)} · ${esc(now.vehicleName ?? '')} · ${now.direction === 'morning' ? 'איסוף' : 'פיזור'} · ${now.stops.length} תחנות · ${now.planned} תלמידים</small>
           <span class="m-now-go">${now.phase === 'active' ? 'המשך הנסיעה' : 'לנסיעה'} ${I.go}</span>
         </button>` : `<div class="m-empty">${I.check}<div>אין נסיעות נוספות היום</div></div>`}
       ${later.length ? `<section class="m-section"><h2>בהמשך היום</h2><div class="m-group">${later.map(cell).join('')}</div></section>` : ''}
       ${done.length ? `<section class="m-section"><h2>הושלמו</h2><div class="m-group">${done.map(cell).join('')}</div></section>` : ''}
+      ${tomorrow}
     </main>${tabs()}`;
+}
+function weekScreen() {
+  const me = S.data.drivers?.[0];
+  if (!S.week) loadWeek();
+  const off = d => (me?.away ?? []).find(a => a.from <= d && d <= a.to);
+  return `<header class="m-nav"><div class="m-nav-row"></div><h1 class="m-large">הזמינות שלי</h1><p class="m-sub">השבוע · הסדרן רואה כל שינוי מיד</p></header>
+    <main class="m-scroll"><section class="m-section"><div class="m-group">
+      ${WEEK.map(d => { const a = off(d); const n = S.week?.[d]; return `<div class="m-day">
+        <span><b>${whenWord(d) === `יום ${dayName(d)}` ? dayName(d) : `${whenWord(d)} · ${dayName(d)}`} <small class="num">${heDate(d)}</small></b><small>${a ? `${pill(a.reason || 'לא זמין', 'is-warn')} ${a.by === 'driver' ? 'הסדרן קיבל הודעה' : 'נקבע על ידי הסדרן'}` : n == null ? '' : n ? `${n} נסיעות` : 'אין נסיעות'}</small></span>
+        <button class="m-switch" role="switch" aria-checked="${!a}" aria-label="זמין ב${dayName(d)}" data-avail="${d}"></button>
+      </div>`; }).join('')}
+    </div><p class="m-hint">מכבים יום שבו לא תוכלו לנהוג. הסדרן יקבל הודעה וימצא מחליף.</p></section></main>${tabs()}`;
 }
 function messagesScreen() {
   const list = notes();
@@ -152,8 +200,8 @@ function messagesScreen() {
   return `<header class="m-nav"><div class="m-nav-row"></div><h1 class="m-large">הודעות</h1><p class="m-sub">מהסדרנים</p></header>
     <main class="m-scroll"><section class="m-section">${list.length ? list.map(n => `<div class="m-msg"><small>${esc(n.actor)} · ${esc(n.trip.number)} · ${new Date(n.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</small>${esc(n.text)}</div>`).join('') : `<div class="m-empty">${I.chat}<div>אין הודעות</div></div>`}</section></main>${tabs()}`;
 }
-function slider(label, locked = false) {
-  return `<div class="m-slide ${S.busy ? 'is-busy' : ''} ${locked ? 'is-locked' : ''}" data-slide ${locked ? 'aria-disabled="true"' : ''}>
+function slider(label, locked = false, confirm = '') {
+  return `<div class="m-slide ${S.busy ? 'is-busy' : ''} ${locked ? 'is-locked' : ''}" data-slide ${confirm ? `data-confirm="${esc(confirm)}"` : ''} ${locked ? 'aria-disabled="true"' : ''}>
       <span class="m-slide-fill"></span><span class="m-slide-label">${esc(label)}</span>
       <span class="m-slide-knob" role="button" tabindex="0" aria-label="${esc(label)}">${I.go}</span>
     </div>`;
@@ -202,14 +250,34 @@ function tripScreen(t) {
     </main>
     <div class="m-dock">${slider(label, !counted)}<p class="m-dock-note">${counted ? 'מחליקים רק כשהרכב עומד' : 'מאשרים כמתוכנן או משנים עם + ו־−'}</p></div>`;
 }
+const REASONS = ['לא אוכל להגיע', 'בעיה ברכב', 'לא מכיר את המסלול', 'אחר'];
+const AWAY = ['מחלה', 'חופשה', 'מילואים', 'אחר'];
 function sheet(t) {
   if (!S.sheet) return '';
+  if (S.sheet === 'issue') {
+    const [date, id] = S.issue.key.split('|'); const r = (date === DATE ? S.data : S.next)?.trips.find(x => x.id === id);
+    return `<div class="m-scrim" data-close></div><div class="m-sheet" role="dialog" aria-label="בעיה בנסיעה"><div class="m-grabber"></div>
+      <h3>מה הבעיה?</h3><p class="m-sheet-sub">${r ? `${whenWord(date)} · ${esc(r.departure)} · קו ${esc(r.routeCode)}` : ''}</p>
+      <div class="m-chips m-chips-wrap">${REASONS.map(x => `<button data-ireason="${x}" aria-pressed="${S.issue.reason === x}">${x}</button>`).join('')}</div>
+      <textarea id="issue-text" class="m-text" rows="2" placeholder="פירוט, לא חובה">${esc(S.issue.text ?? '')}</textarea>
+      <button class="m-primary" data-issue-send ${S.issue.reason ? '' : 'disabled'}>שליחה לסדרן</button>
+      <button class="m-secondary" data-issue-call>${I.phone}רק שיתקשרו אליי</button>
+      <button class="m-cancel" data-close>ביטול</button></div>`;
+  }
+  if (S.sheet === 'away') {
+    return `<div class="m-scrim" data-close></div><div class="m-sheet" role="dialog" aria-label="לא זמין"><div class="m-grabber"></div>
+      <h3>לא זמין ${whenWord(S.away.date)}</h3><p class="m-sheet-sub">${dayName(S.away.date)} ${heDate(S.away.date)} · הסדרן יקבל הודעה וימצא מחליף</p>
+      <div class="m-chips m-chips-wrap">${AWAY.map(x => `<button data-areason="${x}" aria-pressed="${S.away.reason === x}">${x}</button>`).join('')}</div>
+      <button class="m-primary" data-away-send ${S.away.reason ? '' : 'disabled'}>סימון כלא זמין</button>
+      <button class="m-cancel" data-close>ביטול</button></div>`;
+  }
   const next = t && nextPoint(t);
   if (S.sheet === 'more') {
     const ll = next?.lat != null ? `${next.lat},${next.lng}` : null;
     return `<div class="m-scrim" data-close></div><div class="m-sheet" role="dialog" aria-label="פעולות"><div class="m-grabber"></div>
       <div class="m-group">
         <button class="m-action" data-sheet="delay">${I.clock}דיווח על איחור</button>
+        <button class="m-action" data-issue="${DATE}|${t.id}">${I.chat}יש בעיה בנסיעה</button>
         ${ll ? `<a class="m-action" href="https://waze.com/ul?ll=${ll}&navigate=yes" target="_blank" rel="noopener">${I.nav}ניווט לתחנה ב־Waze</a>
         <a class="m-action" href="https://www.google.com/maps/dir/?api=1&destination=${ll}&travelmode=driving" target="_blank" rel="noopener">${I.nav}ניווט לתחנה ב־Google Maps</a>` : ''}
         <a class="m-action" href="tel:${DISPATCH_PHONE}">${I.phone}התקשרות למוקד ההסעות</a>
@@ -226,14 +294,24 @@ function sheet(t) {
 }
 function render() {
   const t = S.trip && tripById(S.trip);
-  const screen = t ? tripScreen(t) : S.tab === 'messages' ? messagesScreen() : todayScreen();
+  const screen = t ? tripScreen(t) : S.tab === 'messages' ? messagesScreen() : S.tab === 'week' ? weekScreen() : todayScreen();
   const toastHtml = S.toast ? `<div class="m-toast ${S.toast.kind === 'saved' ? 'is-saved' : S.toast.kind === 'bad' ? 'is-bad' : ''}" role="status">${S.toast.kind === 'saved' ? I.saved : S.toast.kind === 'bad' ? I.noSignal : I.check}<span>${esc(S.toast.text)}</span></div>` : '';
   document.getElementById('app').innerHTML = `<div class="m-app">${screen}${sheet(t)}${toastHtml}</div>`;
   bindSlides();
 }
 
 // ------------------------------------------------------------ actions
-async function confirmSlide() {
+async function confirmSlide(track) {
+  if (track?.dataset.confirm) {
+    const [date, ids] = track.dataset.confirm.split('|');
+    if (S.busy) return;
+    S.busy = true;
+    try {
+      for (const id of ids.split(',')) { const t = (date === DATE ? S.data : S.next)?.trips.find(x => x.id === id); if (t) await sendOn(date, 'confirm', {}, t); }
+      navigator.vibrate?.(30); toast(ids.includes(',') ? 'אישרת את כל הנסיעות · הסדרן רואה שהן סגורות' : 'אישרת · הסדרן רואה שהנסיעה סגורה');
+    } catch (e) { toast(e.network ? 'אין קליטה. נסו שוב כשתחזור' : e.message, 'bad'); }
+    S.busy = false; render(); return;
+  }
   const t = tripById(S.trip);
   if (!t || S.busy) return;
   S.busy = true;
@@ -281,13 +359,13 @@ function bindSlides() {
       if (start == null) return;
       const p = Math.min(1, Math.max(0, (rtl ? start - e.clientX : e.clientX - start) / max));
       start = null;
-      if (p > 0.85) { set(1); track.classList.add('is-done'); confirmSlide(); }
+      if (p > 0.85) { set(1); track.classList.add('is-done'); confirmSlide(track); }
       else { knob.style.transition = 'transform .25s cubic-bezier(.16,1,.3,1)'; set(0); setTimeout(() => (knob.style.transition = ''), 260); }
     };
     knob.addEventListener('pointerup', end);
     knob.addEventListener('pointercancel', end);
     // Keyboard and switch access: a deliberate key press on the focused control.
-    knob.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set(1); confirmSlide(); } });
+    knob.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set(1); confirmSlide(track); } });
   });
 }
 document.addEventListener('click', e => {
@@ -296,10 +374,31 @@ document.addEventListener('click', e => {
   if (el.dataset.open) { S.trip = el.dataset.open; S.count = null; S.sheet = null; render(); window.scrollTo(0, 0); return; }
   if ('back' in el.dataset) { S.trip = null; S.sheet = null; render(); return; }
   if (el.dataset.tab) { S.tab = el.dataset.tab; render(); return; }
+  if (el.dataset.issue) { S.sheet = 'issue'; S.issue = { key: el.dataset.issue, reason: null, text: '' }; render(); return; }
+  if (el.dataset.ireason) { S.issue.reason = el.dataset.ireason; S.issue.text = document.querySelector('#issue-text')?.value ?? ''; render(); return; }
+  if ('issueSend' in el.dataset || 'issueCall' in el.dataset) {
+    const call = 'issueCall' in el.dataset; const [date, id] = S.issue.key.split('|');
+    const t = (date === DATE ? S.data : S.next)?.trips.find(x => x.id === id);
+    const text = call ? '' : (document.querySelector('#issue-text')?.value ?? '');
+    sendOn(date, 'concern', { reason: call ? '' : S.issue.reason, text, call }, t).then(() => { S.sheet = null; navigator.vibrate?.(30); toast(call ? 'נשלח · הסדרן יתקשר אליך' : 'נשלח לסדרן'); }).catch(e => toast(e.network ? 'אין קליטה. נסו שוב כשתחזור' : e.message, 'bad'));
+    return;
+  }
+  if (el.dataset.avail) {
+    const d = el.dataset.avail;
+    if (el.getAttribute('aria-checked') === 'true') { S.sheet = 'away'; S.away = { date: d, reason: null }; render(); return; }
+    sendOn(DATE, 'my-away', { date: d, away: false }).then(() => { toast(`זמין ${whenWord(d)} · הסדרן קיבל הודעה`); render(); }).catch(e => toast(e.message, 'bad'));
+    return;
+  }
+  if (el.dataset.areason) { S.away.reason = el.dataset.areason; render(); return; }
+  if ('awaySend' in el.dataset) {
+    const d = S.away.date;
+    sendOn(DATE, 'my-away', { date: d, away: true, reason: S.away.reason }).then(() => { S.sheet = null; toast(`סומן: לא זמין ${whenWord(d)} · הסדרן קיבל הודעה`); render(); }).catch(e => toast(e.message, 'bad'));
+    return;
+  }
   if (el.dataset.asplanned) { S.count = Number(el.dataset.asplanned); navigator.vibrate?.(8); render(); return; }
   if (el.dataset.step) { const base = S.count ?? Number(document.querySelector('[data-asplanned]')?.dataset.asplanned ?? 0); S.count = Math.max(0, base + Number(el.dataset.step)); navigator.vibrate?.(8); render(); return; }
   if (el.dataset.sheet) { S.sheet = el.dataset.sheet; S.delay = null; render(); return; }
-  if ('close' in el.dataset) { S.sheet = null; S.delay = null; render(); return; }
+  if ('close' in el.dataset) { S.sheet = null; S.delay = null; S.issue = null; S.away = null; render(); return; }
   if (el.dataset.minutes) { S.delay = Number(el.dataset.minutes); render(); }
 });
 window.addEventListener('message', e => {

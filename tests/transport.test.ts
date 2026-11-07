@@ -253,3 +253,50 @@ test('drivers and buses can be added, edited and removed; removal blocks their r
   assert.ok(ts.length && ts.every((t: any) => t.blockers.includes('הנהג אינו זמין')));
   assert.throws(() => execute(s, 'driver-10', { id: `p-${++n}`, type: 'archive', date: DEMO_DATE, data: { kind: 'driver', id: 'driver-12' } }), /לסדרנים/);
 });
+
+test('a ride with too many students splits across two buses, and merges back', () => {
+  const s = createTransportState();
+  const date = '2026-11-09';
+  const view = () => snapshot(s, date, 'shuki');
+  const t = view().trips.find((x: any) => x.routeCode === '15' && x.stops.length > 1 && x.planned > (x.capacity ?? 99));
+  assert.ok(t, 'a route 15 ride over capacity');
+  const before = t.planned;
+  const stop = t.stops[0];
+  execute(s, 'shuki', { id: 'sp-1', type: 'split', date, tripId: t.id, version: t.version, data: { stopIds: [stop.id], vehicleId: 'bus-spare', driverId: 'driver-spare' } });
+  const a = view().trips.find((x: any) => x.id === t.id);
+  const b = view().trips.find((x: any) => x.splitFrom === t.id);
+  assert.equal(a.planned + b.planned, before);
+  assert.equal(b.stops[0].name, stop.name);
+  assert.equal(b.driverId, 'driver-spare');
+  assert.ok(!a.blockers.some((x: string) => /מקומות/.test(x)), 'the first bus now has enough seats');
+  assert.throws(() => execute(s, 'shuki', { id: 'sp-2', type: 'split', date, tripId: a.id, version: a.version, data: { stopIds: a.stops.map((x: any) => x.id), vehicleId: 'bus-spare', driverId: 'driver-spare' } }), /בחרו אילו תחנות/);
+  execute(s, 'shuki', { id: 'sp-3', type: 'merge', date, tripId: a.id, version: a.version, data: { fromId: b.id } });
+  const m = view().trips.find((x: any) => x.id === t.id);
+  assert.equal(m.planned, before);
+  assert.ok(!view().trips.some((x: any) => x.splitFrom === t.id));
+});
+
+test('a driver confirms a new ride, flags a problem, and marks a day off; the dispatcher sees each', () => {
+  const s = createTransportState();
+  const date = '2026-11-09';
+  const t = snapshot(s, date, 'shuki').trips.find((x: any) => x.driverId === 'driver-21');
+  execute(s, 'shuki', { id: 'a-1', type: 'plan', date, data: { assignments: [{ tripId: t.id, driverId: 'driver-spare' }], publish: true, reason: 'מחליף' } });
+  const mine = snapshot(s, date, 'driver-spare').trips.find((x: any) => x.id === t.id);
+  assert.ok(mine, 'the spare driver sees the new ride');
+  execute(s, 'driver-spare', { id: 'a-2', type: 'confirm', date, tripId: t.id, version: mine.version, data: {} });
+  const confirmed = snapshot(s, date, 'driver-spare').trips.find((x: any) => x.id === t.id);
+  assert.ok(confirmed.confirmed);
+  execute(s, 'driver-spare', { id: 'a-3', type: 'concern', date, tripId: t.id, version: confirmed.version, data: { call: true } });
+  const inbox = snapshot(s, DEMO_DATE, 'shuki').inbox;
+  assert.equal(inbox.length, 1);
+  assert.equal(inbox[0].call, true);
+  assert.equal(snapshot(s, DEMO_DATE, 'driver-spare').inbox.length, 0, 'drivers never see the inbox');
+  execute(s, 'driver-spare', { id: 'a-4', type: 'my-away', date: DEMO_DATE, data: { date: '2026-11-10', away: true, reason: 'מחלה' } });
+  assert.deepEqual(s.drivers['driver-spare'].away, [{ from: '2026-11-10', to: '2026-11-10', reason: 'מחלה', by: 'driver' }]);
+  execute(s, 'driver-spare', { id: 'a-5', type: 'my-away', date: DEMO_DATE, data: { date: '2026-11-10', away: false } });
+  assert.deepEqual(s.drivers['driver-spare'].away, []);
+  assert.throws(() => execute(s, 'shuki', { id: 'a-6', type: 'my-away', date: DEMO_DATE, data: { date: '2026-11-10', away: true } }), /לנהגים בלבד/);
+  const first = snapshot(s, DEMO_DATE, 'shuki').inbox[0];
+  execute(s, 'shuki', { id: 'a-7', type: 'inbox-done', date: DEMO_DATE, data: { id: first.id } });
+  assert.ok(!snapshot(s, DEMO_DATE, 'shuki').inbox.some((x: any) => x.id === first.id));
+});

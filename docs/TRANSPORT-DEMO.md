@@ -66,15 +66,26 @@ it, or drive by hand as below.
    - Type "דוד מזרחי לא מגיע מחר": it moves his trips to a free driver, with
      the reason, for approval.
 4. **סידור.** Say: "the rides are already here, from your file; you only handle what changed."
-   - Tomorrow opens as "5 דברים לסדר מחר": one card per cause (Yossi Hazan's licence, bus 14's
-     test, buses too small on routes 15–17), each with the recommended fix and its reason.
-     "אישור ושליחה לנהגים" applies it and notifies only those drivers; the toast offers undo
-     and "להפוך לקבוע בקו 21". "בחירה אחרת" lists who else is free.
-   - "משהו השתנה": David Mizrahi, Tuesday, sick. The planner jumps to Tuesday and his rides are
-     the first card, with a substitute.
-   - Quiet links: "כל החודש", "הסידור הקבוע" (each route's regular crew, from the workbook),
-     and the full list of a day's rides.
-5. **The driver's morning.** Turn on "טלפון הנהג על המסך": David Mizrahi,
+   - Tomorrow opens as "5 דברים לסדר מחר". Each card is a person or a bus first (Yossi Hazan,
+     a red "רישיון פג"), then every free replacement, the recommended one tagged "מומלץ" and
+     already selected, each with a one-line reason. Drivers or buses that don't fit sit under
+     "הצגת כל הנהגים", greyed, with why.
+   - "לכמה זמן?": "כל השבוע" is recommended, so one approval fixes Yossi's 15 rides on every day,
+     not five times. "רק מחר" and "קבוע בקו 21" are the other two.
+   - "אישור: רון אלמוג · 15 נסיעות" sends it; the toast says what changed and offers undo.
+     "אישור כל ההמלצות" does every card at once, with one undo.
+   - Too many students and no bigger bus free: the card offers to split the ride, with the
+     stops that move, the second bus and a free driver.
+   - "משהו השתנה": David Mizrahi, Tuesday, sick. Before saving it says how many rides need a
+     substitute; the planner then jumps to Tuesday.
+   - "כל החודש": a calendar with a clear pill per day, problems that repeat every day said once
+     above it, and who is out. "הסידור הקבוע": the source of truth, one row per route with its
+     regular driver and bus as people, a status pill when one can't drive, and the days as a strip.
+5. **Ron's phone** (open `driver.html?d=driver-spare` after step 4). "שיבוץ חדש · מחר · 4
+   נסיעות", one slide confirms them all. "יש לי בעיה עם השיבוץ" offers four quick reasons, a
+   note, or just "רק שיתקשרו אליי"; it lands on the board at once with a call button.
+   "זמינות": a switch per day this week; turning one off asks why and tells the dispatcher.
+6. **The driver's morning.** Turn on "טלפון הנהג על המסך": David Mizrahi,
    route 10.
    - "הנסיעה הבאה 07:10" (or "באיחור N דק׳"), "לנסיעה", one stop per screen. The count
      starts empty: he taps "עלו 15, כמתוכנן" or adjusts with + and −; the slide stays
@@ -84,11 +95,12 @@ it, or drive by hand as below.
    - At Kela Alon, press − twice and slide: on the board, "קו 10: עלו 30 במקום
      32 · 2 חסרים" goes to the top.
    - Send him a note from the ride ("הודעה לנהג"): a badge on his "הודעות".
-6. **No reception.** "הטלפון בלי קליטה": the phone shows "אין שירות", reports
+7. **No reception.** "הטלפון בלי קליטה": the phone shows "אין שירות", reports
    are saved on the phone and arrive when reception returns.
-7. **נהגים** and **רכבים.** Licence, test and service dates, fit for duty / available
-   for assignment, "רק מה שפג או עומד לפוג"; click a date to update it (with undo).
-8. **Close on what we need from them** (below).
+8. **נהגים** and **רכבים.** A directory: avatar, name and one status pill (זמין, רישיון פג,
+   מחלה עד 10.11), filters for "דורשים טיפול" and "לא זמינים השבוע", and each record shows the
+   week's rides and its absences.
+9. **Close on what we need from them** (below).
 
 ## The brief's questions, answered from the workbook
 

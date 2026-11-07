@@ -797,7 +797,7 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-subhead { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
 .t-subhead[hidden] { display: none; }
 .t-subhead .t-link { display: inline-flex; align-items: center; gap: 4px; }
-.t-dstatus { display: grid; gap: 2px; padding: 16px 18px; border-radius: 14px; margin-bottom: 14px; }
+.t-dstatus { display: flex; align-items: center; gap: 16px; padding: 16px 18px; border-radius: 14px; margin-bottom: 14px; }
 .t-dstatus b { font-size: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
 .t-dstatus span { color: var(--muted); }
 .t-dstatus.is-ok { background: var(--ok-soft); }
@@ -806,7 +806,7 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-dstatus.is-open { background: var(--surface); border: 1px solid var(--line); }
 .t-causes { display: grid; gap: 10px; }
 .t-cause { padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: grid; gap: 10px; box-shadow: var(--shadow-1); }
-.t-cause header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.t-cause header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .t-cause header b { font-size: 16px; font-weight: 600; }
 .t-cause header span { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .t-cause.is-quiet { box-shadow: none; background: var(--surface-2); }
@@ -869,3 +869,109 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-out .t-link { font-size: 13px; color: var(--ink); }
 .t-impact { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px; color: var(--ink-2); line-height: 1.55; }
 .t-impact b { color: var(--ink); }
+
+/* ---- people first (HiBob): avatar, name, one clear status */
+.t-av { flex: none; width: 34px; height: 34px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.t-av.is-bus { border-radius: 10px; }
+.t-av svg.i { width: 17px; height: 17px; }
+.t-cause-head { justify-content: flex-start !important; }
+.t-cause-head > span:not(.t-pill):not(.t-av) { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.t-cause-head small { color: var(--muted); font-size: 13px; }
+.t-cause-head .t-pill { flex: none; }
+.t-link-plain { border: 0; background: none; padding: 0; font: inherit; color: var(--ink); cursor: pointer; text-align: start; }
+.t-link-plain:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* ---- how long a fix holds */
+.t-scope { display: grid; gap: 6px; padding-top: 4px; }
+.t-scope-q { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.t-scope .t-seg { justify-self: start; flex-wrap: wrap; }
+.t-scope .t-seg button { gap: 6px; }
+.t-scope small { color: var(--muted); font-size: 13px; }
+/* ---- status card: progress and accept-all */
+.t-dstatus-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.t-dstatus-text small { color: var(--muted); font-size: 13px; }
+.t-progress { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-top: 8px; max-width: 360px; }
+.t-progress i { display: block; height: 100%; background: var(--pill-ok); border-radius: inherit; transition: width .3s; }
+.t-howto { display: flex; align-items: center; gap: 16px; padding: 12px 16px; margin-bottom: 12px; border-radius: 12px; background: var(--surface-2); }
+.t-howto ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 20px; flex: 1; flex-wrap: wrap; }
+.t-howto li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.t-howto li b { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--surface); font-size: 12px; flex: none; }
+/* ---- pills inside day tabs and the calendar */
+.t-daytab i.t-pill, .t-cal-cell i.t-pill { font-style: normal; justify-self: start; height: 20px; padding: 0 8px; font-size: 12px; }
+.t-cal-cell i.t-pill { margin-top: 4px; }
+/* ---- fleet: a directory with filters */
+.t-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.t-filter { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.t-filter .num { color: var(--muted); font-weight: 400; }
+.t-filter:hover { border-color: var(--line-2); }
+.t-filter[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.t-filter[aria-pressed="true"] .num { color: inherit; opacity: .75; }
+.t-person-cell { display: flex; align-items: center; gap: 10px; height: 100%; }
+.t-person-cell .t-av { width: 30px; height: 30px; font-size: 12px; }
+.t-recweek { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.t-recweek span { display: grid; gap: 2px; justify-items: center; padding: 6px 0; border-radius: 8px; background: var(--surface-2); }
+.t-recweek small { font-size: 12px; color: var(--muted); }
+.t-recweek b { font-size: 15px; font-weight: 600; }
+.t-recweek .is-off { background: var(--warn-soft); }
+.t-insp-title .t-av { width: 36px; height: 36px; }
+.t-insp-title .t-pill { margin-inline-start: 4px; }
+.t-away-add { padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.t-away-add .t-span { grid-column: 1 / -1; }
+.t-away-title { grid-column: 1 / -1; font-size: 14px; font-weight: 600; }
+.t-cause header .t-pill { color: #fff; font-size: 12px; }
+/* ---- month: a calm calendar, what repeats said once */
+.t-mhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.t-mstats { display: flex; gap: 6px; flex: 1; }
+.t-mstats .t-pill { height: 26px; font-size: 13px; padding: 0 12px; }
+.t-lasting { display: grid; gap: 8px; padding: 14px 16px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.t-lasting > b { font-size: 14px; font-weight: 600; }
+.t-lasting > div { display: flex; gap: 8px; flex-wrap: wrap; }
+.t-lasting > small { color: var(--muted); font-size: 13px; }
+.t-lasting-item { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 500; cursor: pointer; }
+.t-lasting-item:hover { border-color: var(--line-2); }
+.t-lasting-item .t-av { width: 28px; height: 28px; font-size: 11px; }
+.t-out-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.t-out-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--pill-warn); flex: none; }
+.t-cal-cell.is-today { box-shadow: inset 0 0 0 2px var(--ink); }
+/* ---- the regular schedule: one row per route, crew as people, days as a strip */
+.t-truth { padding: 14px 16px; margin-bottom: 12px; border-radius: 12px; background: var(--surface-2); }
+.t-truth b { display: block; font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+.t-truth span { color: var(--ink-2); font-size: 14px; }
+.t-toolbar .t-filters { margin: 0; }
+.t-reg { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.t-reg-row { display: grid; grid-template-columns: minmax(200px, 1.3fr) minmax(190px, 1.1fr) minmax(210px, 1.2fr) minmax(220px, 1fr); align-items: center; border-bottom: 1px solid var(--line); }
+.t-reg-row:last-child { border-bottom: 0; }
+.t-reg-row > span { padding: 10px 12px; min-width: 0; }
+.t-reg-head > span { font-size: 12px; color: var(--muted); background: var(--surface-2); padding: 8px 12px; }
+.t-reg-route { display: flex; align-items: center; gap: 10px; }
+.t-reg-route > span:last-child { display: grid; min-width: 0; }
+.t-reg-route b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-reg-route small { color: var(--muted); font-size: 12px; }
+.t-crew { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--ink); text-align: start; cursor: pointer; }
+.t-crew:hover { border-color: var(--line); background: var(--surface-2); }
+.t-crew > span:not(.t-pill):not(.t-av) { display: grid; min-width: 0; flex: 1; }
+.t-crew b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-crew small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-crew .t-av { width: 30px; height: 30px; font-size: 12px; }
+.t-crew .t-pill { flex: none; }
+.t-crew .t-caret, .t-days-strip .t-caret { font-style: normal; color: var(--faint); font-size: 11px; }
+.t-days-strip { display: flex; align-items: center; gap: 4px; width: 100%; padding: 4px; border: 1px solid transparent; border-radius: 10px; background: none; cursor: pointer; color: var(--ink); }
+.t-days-strip:hover { border-color: var(--line); }
+.t-days-strip > span { flex: 1; display: grid; justify-items: center; gap: 1px; padding: 4px 0; border-radius: 8px; background: var(--surface-2); }
+.t-days-strip > span.is-none { background: none; color: var(--faint); }
+.t-days-strip small { font-size: 11px; color: var(--muted); }
+.t-days-strip b { font-size: 14px; font-weight: 600; }
+.t-reg-times { grid-column: 1 / -1; display: grid; gap: 6px; padding: 4px 12px 14px; }
+.t-reg-times > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.t-reg-times small { width: 56px; color: var(--muted); font-size: 12px; }
+.t-reg-row.is-bad .t-reg-route .t-code { background: var(--pill-bad); color: #fff; border-color: var(--pill-bad); }
+.t-inbox .t-alert-open { cursor: default; }
+.t-inbox-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.t-inbox-top .t-av { width: 28px; height: 28px; font-size: 11px; }
+.t-inbox-top b { flex: 1; min-width: 0; }
+/* tips: one short explanation per screen, closable */
+.t-tip { display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 12px 16px; margin-bottom: 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.t-tip-mark { flex: none; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--pill-info); color: #fff; font-size: 12px; font-weight: 600; display: inline-grid; place-items: center; margin-top: 1px; }
+.t-tip > div { flex: 1; min-width: 0; }
+.t-tip b { display: block; font-weight: 600; font-size: 14px; }
+.t-tip p { margin: 2px 0 0; color: var(--ink-2); font-size: 14px; line-height: 1.55; }
+.t-tip .t-icon-btn { flex: none; margin: -4px 0 -4px -4px; }
