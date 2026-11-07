@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { createTransportState, actorFor, snapshot, execute, weekday, TransportError, sourceData } from './engine.ts';
-import { proposalsFor } from './assistant.ts';
+import { proposalsFor, understand } from './assistant.ts';
 const changes = new EventEmitter(); changes.setMaxListeners(100);
 const file = process.env.TRANSPORT_STATE_PATH || new URL('../../.local/transport-state.json',import.meta.url).pathname;
 let state: any, loading: Promise<any>, queue: Promise<any> = Promise.resolve();
@@ -47,7 +47,8 @@ export async function handleTransport(req:IncomingMessage,res:ServerResponse,url
     }
     if(url.pathname==='/api/transport/assistant'&&req.method==='GET'){
       if(actorFor(s,viewer).role!=='dispatcher')throw new TransportError('העוזר זמין לסדרנים בלבד.',403);
-      return json(res,200,proposalsFor(s,date,url.searchParams.get('ask')||''));
+      const ask=url.searchParams.get('ask')||'';
+      return json(res,200,proposalsFor(s,date,ask,await understand(s,date,ask)));
     }
     if(url.pathname==='/api/transport/commands'&&req.method==='POST'){
       const origin=req.headers.origin;

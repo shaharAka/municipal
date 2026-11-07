@@ -1,8 +1,8 @@
 // The planning assistant: reads a day's schedule, finds what would stop a trip, and proposes
 // concrete changes with the reason for each. It only proposes; a dispatcher approves, and the
 // approval runs the engine's `plan` command. Requests in plain Hebrew ("דוד לא מגיע מחר",
-// "אוטובוס 15 במוסך ביום שלישי") are read by simple rules today; a language model can replace
-// `parseAsk` later without changing what the dispatcher sees or approves.
+// "אוטובוס 15 במוסך ביום שלישי") are read by Claude when ANTHROPIC_API_KEY is set, and by simple
+// rules otherwise. Either way Claude only reads the request; the planner decides, and a person approves.
 import { dayFor, tripView, weekday, minutes, DAYS, DEMO_DATE } from './engine.ts';
 import { pointsFor } from './simulate.ts';
 
@@ -25,6 +25,64 @@ const dmy = (date: string) => date.split('-').reverse().map(Number).join('.');
 const dayName = (date: string) => `יום ${DAYS[weekday(date)]} ${ddmm(date)}`;
 const unavailableDriver = /לא מגיע|לא יגיע|חולה|בחופש|לא זמין|לא יכול|נעדר|במילואים/;
 const unavailableBus = /מוסך|תקול|תקלה|לא זמין|בטיפול|מושבת|התקלקל/;
+
+type Intent = ReturnType<typeof parseAsk> & { readBy?: 'claude' | 'rules' };
+
+const INTENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    kind: { type: 'string', enum: ['driver-out', 'bus-out', 'check', 'unclear'] },
+    driverName: { type: ['string', 'null'] },
+    busLabel: { type: ['string', 'null'] },
+    date: { type: ['string', 'null'] },
+  },
+  required: ['kind', 'driverName', 'busLabel', 'date'],
+  additionalProperties: false,
+};
+
+/**
+ * Reads a dispatcher's request with Claude: who or what is out, and on which day. Returns null when
+ * there is no key, the SDK is missing, or the call fails, so the rules in `parseAsk` take over.
+ */
+export async function understand(state: any, baseDate: string, ask: string): Promise<Intent | null> {
+  const text = String(ask || '').trim().slice(0, 300);
+  if (!text || !process.env.ANTHROPIC_API_KEY) return null;
+  let Anthropic: any;
+  try { Anthropic = (await import('@anthropic-ai/sdk')).default; } catch { return null; }
+  const drivers = Object.values(state.drivers) as any[];
+  const vehicles = Object.values(state.vehicles) as any[];
+  const sunday = addDays(DEMO_DATE, -weekday(DEMO_DATE));
+  const week = DAYS.slice(0, 6).map((name, i) => `${name}: ${addDays(sunday, i)}`).join(', ');
+  try {
+    const client = new Anthropic();
+    const response = await client.beta.messages.create({
+      model: 'claude-opus-5-5',
+      max_tokens: 1024,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: INTENT_SCHEMA } },
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: [
+        'You read requests from a school-transport dispatcher at the Golan Regional Council, written in Hebrew.',
+        'Return what the request says: a driver who cannot work (kind "driver-out"), a bus that cannot run (kind "bus-out"), a request to check the schedule (kind "check"), or "unclear".',
+        'Use exactly one name from the lists below, or null. Dates are YYYY-MM-DD; "היום" is today, "מחר" is tomorrow, and a weekday name means that day this week. Use null when no day is given.',
+        `Today: ${DEMO_DATE} (יום ${DAYS[weekday(DEMO_DATE)]}). This week: ${week}.`,
+        `Drivers: ${drivers.map(d => d.name).join(', ')}.`,
+        `Buses: ${vehicles.map(v => v.label).join(', ')}.`,
+      ].join('\n'),
+      messages: [{ role: 'user', content: text }],
+    }, { timeout: 15_000, maxRetries: 1 });
+    if (response.stop_reason === 'refusal') return null;
+    const block = response.content.find((b: any) => b.type === 'text');
+    const read = JSON.parse(block?.text ?? '{}');
+    const driver = drivers.find(d => d.name === read.driverName) ?? null;
+    const bus = vehicles.find(v => v.label === read.busLabel) ?? null;
+    const date = typeof read.date === 'string' && DAYS.some((_, i) => addDays(sunday, i) === read.date) ? read.date : baseDate;
+    const kind = read.kind === 'driver-out' && driver ? 'driver-out' : read.kind === 'bus-out' && bus ? 'bus-out' : 'check';
+    return { date, driver, bus, kind, understood: read.kind !== 'unclear', text, readBy: 'claude' };
+  } catch {
+    return null;
+  }
+}
 
 /** Reads a request in plain Hebrew. Returns what it understood, so the answer can say it back. */
 export function parseAsk(state: any, baseDate: string, ask: string) {
@@ -55,8 +113,8 @@ export function parseAsk(state: any, baseDate: string, ask: string) {
 }
 
 /** What to change on a day so every trip can run, each with its reason. */
-export function proposalsFor(state: any, baseDate: string, ask = '') {
-  const intent = parseAsk(state, baseDate, ask);
+export function proposalsFor(state: any, baseDate: string, ask = '', read: Intent | null = null) {
+  const intent: Intent = read ?? { ...parseAsk(state, baseDate, ask), readBy: 'rules' };
   const date = intent.date;
   const day = dayFor(state, date);
   const views = day.trips.map((t: any) => tripView(state, t, date === DEMO_DATE ? day.clock : '00:00'));
@@ -151,7 +209,7 @@ export function proposalsFor(state: any, baseDate: string, ask = '') {
     ? (intent.kind === 'driver-out' ? `הבנתי: ${intent.driver.name} לא מגיע ב${dayName(date)}. ` : intent.kind === 'bus-out' ? `הבנתי: ${intent.bus.label} לא זמין ב${dayName(date)}. ` : '')
     : 'לא הבנתי את הבקשה, אז בדקתי את כל הסידור. אפשר לכתוב למשל "דוד מזרחי לא מגיע מחר" או "אוטובוס 15 במוסך ביום שלישי". ';
   return {
-    date, weekday: DAYS[weekday(date)], ask: intent.text, understood: intent.understood,
+    date, weekday: DAYS[weekday(date)], ask: intent.text, understood: intent.understood, readBy: intent.text ? intent.readBy : null,
     summary: `${heard}בדקתי ${views.length} נסיעות ל${dayName(date)}. ${fixes ? (fixes === 1 ? 'יש דבר אחד שאפשר לסדר עכשיו.' : `יש ${fixes} דברים שאפשר לסדר עכשיו.`) : 'כל הנסיעות יכולות לצאת.'}`,
     proposals,
   };
