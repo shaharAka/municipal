@@ -321,6 +321,17 @@ markers.
   signed in, and reset. These controls are for presenting and never appear in the
   product's own screens.
 
+## Phones and tablets
+
+The desktop is the dispatchers' main screen; the phone has its own screens, not a squeezed desktop.
+- **Phone (up to 760px):** a bottom tab bar: עכשיו (how the day is going, what needs me, then the
+  rides by stage), סידור (day chips, one problem card at a time that you swipe through, the decision
+  pinned at the bottom; the month as a list of days), מפה (full screen, rides in a bottom sheet),
+  צי (one list of drivers or buses with a status pill and a call button), עוד (assistant, the brief
+  tour, help, demo controls). A ride, a record and the day editor open as full-screen sheets.
+- **Tablet (up to 1024px):** a slim icon menu; the board's columns scroll sideways.
+- The same parts everywhere: the problem card, the options, "מה יקרה", the status pills.
+
 ## Do's and don'ts
 
 - Do put one primary action on a card. Everything else is secondary or ghost.

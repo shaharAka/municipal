@@ -138,7 +138,31 @@ function applyTheme(id) {
 }
 
 // ------------------------------------------------------------ rail (the CRM sidebar)
+// ------------------------------------------------------------ the phone: its own screens on the same engine
+const PHONE = matchMedia('(max-width: 760px)');
+const isPhone = () => PHONE.matches;
+PHONE.addEventListener('change', () => { S.mmore = false; render(); });
+function phoneTabs() {
+  const v = view();
+  const tab = (href, icon, label, badge, on) => `<a class="p-tab" href="#/${href}" ${on ? 'aria-current="page"' : ''}>${icon}<span>${label}</span>${badge ? `<i class="t-badge" id="${badge}" hidden></i>` : ''}</a>`;
+  $('#rail').innerHTML = `<nav class="p-tabbar" aria-label="ניווט">
+      ${tab('rides', I.rides, 'עכשיו', 'b-road', v === 'rides')}
+      ${tab('plan', I.calendar, 'סידור', '', v === 'plan')}
+      <button class="p-tab" data-act="map" aria-pressed="${Boolean(S.mapOpen)}">${I.map}<span>מפה</span></button>
+      ${tab('drivers', I.user, 'צי', 'b-drivers', v === 'drivers' || v === 'vehicles')}
+      <button class="p-tab" data-act="m-more" aria-expanded="${Boolean(S.mmore)}">${I.sliders}<span>עוד</span></button>
+    </nav>
+    ${S.mmore ? `<div class="p-sheet-scrim" data-act="m-more"></div><div class="p-sheet" role="dialog" aria-label="עוד">
+      <div class="p-grab"></div>
+      <button class="p-sheet-row" data-act="assist">${I.assist}<span><b>עוזר התכנון</b><small>כותבים מה קרה ומקבלים הצעה</small></span></button>
+      <button class="p-sheet-row" data-act="tour">${I.flag}<span><b>הבריף: 9 הנקודות</b><small>סיור מודרך בדמו</small></span></button>
+      <button class="p-sheet-row" data-act="help">${I.help}<span><b>איך עובדים כאן</b><small>המסכים ומצבי נסיעה</small></span></button>
+      <div class="t-pop-wrap p-sheet-demo"><button class="p-sheet-row" data-act="pop" aria-expanded="${S.pop}">${I.sliders}<span><b>תצוגה והדגמה</b><small>ערכת צבעים, שעון, טלפון הנהג, איפוס</small></span></button>${S.pop ? demoTray() : ''}</div>
+    </div>` : ''}`;
+  railTick();
+}
 function rail() {
+  if (isPhone()) return phoneTabs();
   const v = view();
   const d = S.data;
   const me = DISPATCHERS.find(p => p.id === S.viewer) ?? DISPATCHERS[0];
@@ -152,7 +176,7 @@ function rail() {
       ${item('drivers', I.user, 'נהגים', '<span class="t-badge" id="b-drivers" hidden></span>')}
       ${item('vehicles', I.bus, 'רכבים', '<span class="t-badge" id="b-vehicles" hidden></span>')}
     </nav>
-    <button class="t-rail-item t-rail-assist" data-act="assist" aria-expanded="${Boolean(S.assist)}">${I.assist}<span>עוזר התכנון</span></button>
+    <button class="t-rail-item t-rail-assist" data-act="assist" aria-expanded="${Boolean(S.assist)}">${I.assist}<span class="t-long">עוזר התכנון</span><span class="t-short">עוזר</span></button>
     <div class="t-spacer"></div>
     <div class="t-rail-foot">
       <div class="t-clock" id="clock"><span class="t-live-dot"></span><b class="num" id="clock-time">${esc(d?.clock ?? '')}</b><small>יום ${esc(d?.weekday ?? 'ראשון')} ${heDate(TODAY)}</small></div>
@@ -690,6 +714,101 @@ async function loadSuggestions(date) {
   } catch { S.plan.suggest = new Map(); S.plan.proposals = []; S.plan.all = []; }
 }
 // ---- the planner's main screen: what needs solving on a day, one card per cause, one obvious fix each
+function greet() { const h = Math.floor(minutes(S.data.clock) / 60); return h < 12 ? 'בוקר טוב' : h < 17 ? 'צהריים טובים' : 'ערב טוב'; }
+// Now: one line on how the day is going, what needs me, then the rides by stage.
+function paintPhoneNow() {
+  const el = $('#p-now'); if (!el || !S.data) return;
+  const d = S.data; const c = boardColumns(); const n = attentionCount();
+  const me = DISPATCHERS.find(p => p.id === S.viewer) ?? DISPATCHERS[0];
+  const seg = S.mseg ?? 'soon';
+  const rows = { soon: [...c.soon, ...(S.mlater ? c.later : [])], moving: c.moving, done: c.done }[seg];
+  const ride = t => `<button class="p-ride" data-ride="${t.id}"><span class="t-code ${codeTone(t)}">${esc(t.routeCode)}</span><span class="p-ride-main"><b>${esc(t.school)}</b><small><span class="num">${esc(t.departure)}</span> · ${esc(t.driverName)}${t.live.lateMinutes ? ` · <em>${num(t.live.lateMinutes)} דק׳ איחור</em>` : ''}</small>${['active', 'delayed'].includes(t.status) ? progress(t) : ''}</span>${['upcoming'].includes(t.status) ? '' : pill(t.status)}</button>`;
+  el.innerHTML = `<header class="p-head"><div><h1>${greet()}, ${esc(me.name)}</h1><p><span class="t-live-dot"></span> <b class="num" id="clock-time">${esc(d.clock)}</b> · יום ${esc(d.weekday)} ${heDate(d.date)}</p></div></header>
+    <section class="p-hero ${n ? 'is-attn' : 'is-ok'}"><b class="num">${n ? num(n) : I.check}</b><span><strong>${n ? (n === 1 ? 'דבר אחד דורש טיפול' : 'דברים דורשים טיפול') : 'הכל בסדר'}</strong><small>${num(c.moving.length)} בדרך · ${num(c.done.length)} הגיעו · ${num(d.trips.length)} נסיעות היום</small></span></section>
+    ${n ? `<section class="p-attn" aria-label="דורש טיפול">${(d.inbox ?? []).map(inboxCard).join('')}${c.open.map((a, i) => alertCard(a, false)).join('')}${c.fix.map((x, i) => problemCard(x, i, i === 0 && !(d.inbox ?? []).length && !c.open.length)).join('')}</section>` : ''}
+    <div class="p-seg" role="tablist" aria-label="נסיעות">${[['soon', 'בקרוב', c.soon.length + c.later.length], ['moving', 'בדרך', c.moving.length], ['done', 'הגיעו', c.done.length]].map(([k, l, k2]) => `<button role="tab" aria-selected="${seg === k}" data-mseg="${k}">${l} <span class="num">${num(k2)}</span></button>`).join('')}</div>
+    <div class="p-list">${rows.map(ride).join('') || `<p class="t-empty">${seg === 'moving' ? 'אף אוטובוס לא בדרך כרגע.' : seg === 'done' ? 'עוד לא הגיעו נסיעות.' : 'אין יציאות בשעה הקרובה.'}</p>`}
+      ${seg === 'soon' && c.later.length && !S.mlater ? `<button class="p-more" data-act="m-later">עוד ${num(c.later.length)} נסיעות בהמשך היום</button>` : ''}</div>`;
+}
+function phonePlanPage() {
+  return `<div class="p-page p-plan">
+    <header class="p-head"><div><h1>סידור</h1><p>מה צריך לסדר בימים הקרובים</p></div><button class="p-headbtn" data-act="change">${I.plus}<span>משהו השתנה</span></button></header>
+    <nav class="p-days" id="plan-days" aria-label="ימים"></nav>
+    <div class="t-subhead p-subhead" id="plan-sub" hidden><button class="t-link" data-pview="fix">${I.back} לבעיות</button><span id="plan-meta"></span></div>
+    <div class="p-plan-body" id="plan-body"><p class="t-empty">טוען…</p></div>
+  </div>`;
+}
+// One problem at a time, the whole width; swipe or the dots to move, the decision pinned at the bottom.
+function paintPhoneInbox(el) {
+  const date = S.plan.day; const d = dataFor(date);
+  if (!d) { el.innerHTML = '<p class="t-empty">טוען…</p>'; return; }
+  const list = causes(date); const done = (S.plan.done ?? []).filter(x => x.date === date);
+  const total = list.length + done.length;
+  const recs = list.filter(c => c.res && causeOptions(c, date, d)[0]?.rec).length;
+  const i = Math.min(S.plan.ci ?? 0, Math.max(0, list.length - 1)); S.plan.ci = i;
+  const c = list[i];
+  const tags = rides => rides.slice(0, 4).map(t => `<span class="t-tag num">${esc(t.departure)}</span>`).join('') + (rides.length > 4 ? `<span class="t-tag">+${num(rides.length - 4)}</span>` : '');
+  el.innerHTML = `<section class="p-pstatus ${list.length ? '' : 'is-ok'}">
+      <div><b>${list.length ? `${num(list.length)} ${list.length === 1 ? 'בעיה' : 'בעיות'} לסדר ${dayWord(date)}` : `${I.check} ${dayWord(date)} מוכן`}</b>
+      <small>${list.length ? `${num(new Set(list.flatMap(x => x.rides.map(t => t.id))).size)} נסיעות צריכות נהג או רכב אחר` : `כל ${num(d.trips.length)} הנסיעות יכולות לצאת`}</small></div>
+      ${recs > 1 ? `<button class="t-link" data-act="approve-all">אישור כל ההמלצות</button>` : ''}
+      ${total ? `<div class="t-progress"><i style="width:${Math.round(100 * done.length / total)}%"></i></div>` : ''}
+    </section>
+    ${S.plan.solved ? `<p class="t-solved" role="status">${I.check} ${esc(S.plan.solved)}</p>` : ''}
+    ${c ? `<div class="p-dots" role="tablist" aria-label="הבעיות">${list.map((x, k) => `<button role="tab" aria-selected="${k === i}" data-cidx="${k}" aria-label="בעיה ${k + 1}"></button>`).join('')}<span>${num(i + 1)} מתוך ${num(list.length)} · מחליקים לבעיה הבאה</span></div>
+      <article class="t-cause p-cause" id="p-swipe" data-cause="${esc(c.key)}">
+        ${causeHead(c, date, d)}
+        <div class="t-tags">${tags(c.rides)}</div>
+        ${c.res ? optionsBlock(c, date, d, 'plan') : `<p class="t-norec">${esc(c.recWhy)}</p>`}
+      </article>` : ''}
+    ${done.length ? `<section class="t-done"><h3>טופל ${dayWord(date)}</h3>${done.map((x, k) => `<div class="t-done-row"><span>${I.check} ${esc(x.text)}</span><button class="t-link" data-undo-done="${k}">ביטול</button></div>`).join('')}</section>` : ''}`;
+  const card = $('#p-swipe'); if (!card) return;
+  let x0 = null, y0 = 0;
+  card.addEventListener('pointerdown', e => { if (e.target.closest('button,input,label,a')) return; x0 = e.clientX; y0 = e.clientY; });
+  card.addEventListener('pointerup', e => {
+    if (x0 == null) return; const dx = e.clientX - x0, dy = e.clientY - y0; x0 = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > 50) return;
+    const next = (S.plan.ci ?? 0) + (dx < 0 ? 1 : -1); // RTL: swiping left brings the next one
+    if (next >= 0 && next < list.length) { S.plan.ci = next; paintPlanner(); $('#plan-body').scrollTop = 0; }
+  });
+}
+// The month as a list of days: easier to read and tap on a phone than a tiny calendar.
+function paintPhoneMonth(el) {
+  const m = S.plan.month;
+  if (!m) { el.innerHTML = '<p class="t-empty">טוען…</p>'; return; }
+  const first = new Date(`${m[0].date.slice(0, 8)}01T00:00:00Z`);
+  $('#plan-meta').textContent = `${MONTHS[first.getUTCMonth()]} ${first.getUTCFullYear()}`;
+  const days = m.filter(x => !x.past);
+  el.innerHTML = `<div class="p-mnav"><button class="t-icon-btn" data-mshift="-1" aria-label="החודש הקודם" ${S.plan.monthAt <= monthStart(TODAY) ? 'disabled' : ''}>${I.back}</button><b>${MONTHS[first.getUTCMonth()]} ${first.getUTCFullYear()}</b><button class="t-icon-btn is-next" data-mshift="1" aria-label="החודש הבא">${I.back}</button></div>
+    <div class="p-mlist">${days.map(x => `<div class="p-mrow ${x.today ? 'is-today' : ''}">
+      <button class="p-mrow-main" data-pgo="${x.date}"><span class="p-mdate"><b class="num">${new Date(x.date + 'T00:00:00Z').getUTCDate()}</b><small>${esc(x.weekday)}</small></span>
+        <span class="p-mtext"><b>${x.today ? 'היום' : x.date === TOMORROW ? 'מחר' : `יום ${esc(x.weekday)}`}</b><small>${x.noSchool ? esc(x.note || 'אין הסעות') : `${num(x.rides)} נסיעות${x.cancelled ? ` · ${num(x.cancelled)} בוטלו` : ''}`}</small></span>
+        ${x.noSchool ? '<i class="t-pill">אין הסעות</i>' : x.issues ? `<i class="t-pill is-bad">${num(x.issues)} ${x.issues === 1 ? 'בעיה' : 'בעיות'}</i>` : '<i class="t-pill is-ok">מוכן</i>'}</button>
+      <button class="t-icon-btn" data-mday="${x.date}" aria-label="עריכת היום">${I.sliders}</button></div>`).join('')}</div>`;
+}
+// Fleet: drivers and buses in one place, a status for each, a call button for drivers.
+function phoneFleetPage(v) {
+  const people = isPeople(v);
+  return `<div class="p-page">
+    <header class="p-head"><div><h1>צי</h1><p id="p-fleet-meta"></p></div><button class="p-headbtn" data-act="rec-new">${I.plus}<span>${people ? 'נהג' : 'רכב'} חדש</span></button></header>
+    <div class="p-seg" role="tablist"><a role="tab" href="#/drivers" aria-selected="${people}">נהגים</a><a role="tab" href="#/vehicles" aria-selected="${!people}">רכבים</a></div>
+    <label class="t-search-field p-search">${I.search}<span class="sr-only">חיפוש</span><input id="p-fq" type="search" placeholder="${people ? 'שם, קו או טלפון' : 'רכב או מספר רישוי'}" value="${esc(S.fq ?? '')}"></label>
+    <div class="t-filters p-filters" id="p-ffilters"></div>
+    <div class="p-list" id="p-flist"></div>
+  </div>`;
+}
+function paintPhoneFleet(v) {
+  const list = $('#p-flist'); if (!list) return;
+  const people = isPeople(v); const q = (S.fq ?? '').trim();
+  $('#p-ffilters').innerHTML = fleetFilters(v).map(f => `<button class="t-filter" data-ffilter="${f.id}" aria-pressed="${S.fleetFilter === f.id}">${esc(f.label)} <span class="num">${num(f.n)}</span></button>`).join('');
+  const rows = fleetRows(v).filter(x => !q || `${x.name ?? x.label} ${x.routeCode ?? ''} ${x.contact ?? ''} ${x.registration ?? ''}`.includes(q));
+  const bad = rows.filter(x => recStatus(x, people)[1] === 'is-bad').length;
+  $('#p-fleet-meta').textContent = `${num(rows.length)} ${people ? 'נהגים' : 'רכבים'}${bad ? ` · ${num(bad)} לא יכולים לצאת` : ''}`;
+  list.innerHTML = rows.map(x => `<div class="p-person">
+      <button class="p-person-main" data-rec-open="${v}:${esc(x.id)}">${avatar(people ? x.name : x.label, !people)}<span><b>${esc(people ? x.name : x.label)}</b><small>${people ? (x.routeCode ? `קו ${esc(x.routeCode)}` : 'נהג חלופי') : `${x.capacity ? `${num(x.capacity)} מקומות` : 'מקומות לא רשום'} · <span dir="ltr">${esc(x.registration ?? '')}</span>`} · ${num(x.today)} נסיעות היום</small></span>${statusPill(recStatus(x, people))}</button>
+      ${people && x.contact ? `<a class="p-call" href="tel:${esc(x.contact)}" data-call="${esc(x.name)}|${esc(x.contact)}" aria-label="להתקשר ל${esc(x.name)}">${I.call}</a>` : ''}
+    </div>`).join('') || '<p class="t-empty">אין תוצאות לחיפוש.</p>';
+}
 function plannerPage() {
   return `<div class="t-page t-page-full t-inbox-page">
     <header class="t-page-head">
@@ -705,6 +824,13 @@ function plannerPage() {
 function paintDays() {
   const el = $('#plan-days');
   if (!el) return;
+  if (isPhone()) {
+    const m = new Map((S.plan.cur ?? S.plan.month ?? []).map(x => [x.date, x]));
+    el.innerHTML = DAYS.map(x => { const s = m.get(x.date); const n = s?.issues; return `<button class="p-day ${S.plan.day === x.date && S.plan.view === 'fix' ? 'is-on' : ''}" data-pgo="${x.date}"><b>${x.date === TODAY ? 'היום' : x.date === TOMORROW ? 'מחר' : x.label}</b>${n == null ? '<small>&nbsp;</small>' : s.noSchool ? '<i class="t-pill">אין</i>' : n ? `<i class="t-pill is-bad">${num(n)}</i>` : '<i class="t-pill is-ok">מוכן</i>'}</button>`; }).join('')
+      + `<button class="p-day is-link ${S.plan.view === 'month' ? 'is-on' : ''}" data-pview="month">${I.calendar}<b>חודש</b></button><button class="p-day is-link ${S.plan.view === 'week' ? 'is-on' : ''}" data-pview="week">${I.table}<b>קבוע</b></button>`;
+    el.querySelector('.is-on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    return;
+  }
   const m = new Map((S.plan.cur ?? S.plan.month ?? []).map(x => [x.date, x]));
   el.innerHTML = DAYS.map(x => { const s = m.get(x.date); const n = s?.issues ?? null; return `<button class="t-daytab ${S.plan.day === x.date && S.plan.view === 'fix' ? 'is-on' : ''}" data-pgo="${x.date}"><b>${x.date === TODAY ? 'היום' : x.date === TOMORROW ? 'מחר' : x.label}</b><small>${heDate(x.date)}</small><span>${n == null ? '' : s.noSchool ? '<i class="t-pill">אין הסעות</i>' : n ? `<i class="t-pill is-bad">${num(n)} ${n === 1 ? 'בעיה' : 'בעיות'}</i>` : '<i class="t-pill is-ok">מוכן</i>'}</span></button>`; }).join('')
     + `<span class="t-spacer"></span><button class="t-link" data-pview="month">כל החודש</button><button class="t-link" data-pview="week">הסידור הקבוע</button>`;
@@ -714,6 +840,8 @@ function paintPlanner() {
   if (!el) return;
   paintDays();
   const sub = $('#plan-sub'); if (sub) sub.hidden = S.plan.view === 'fix';
+  if (isPhone() && S.plan.view === 'month') return paintPhoneMonth(el);
+  if (isPhone() && S.plan.view === 'fix') return paintPhoneInbox(el);
   if (S.plan.view === 'month') return paintMonth(el);
   if (S.plan.view === 'week') return paintWeek(el);
   if (S.plan.view === 'all') return paintDayPlan(el);
@@ -1688,6 +1816,7 @@ function mountFleet(v) {
   if (S.flash) { const n = g?.getRowNode(S.flash); if (n) setTimeout(() => g.ensureNodeVisible(n, 'middle'), 50); }
 }
 function paintFleet() {
+  if (isPhone()) return paintPhoneFleet(view());
   S.grids.fleet?.setGridOption('rowData', fleetRows(view())); S.grids.fleet?.redrawRows();
   if (S.flash) { const n = S.grids.fleet?.getRowNode(S.flash); if (n) S.grids.fleet.ensureNodeVisible(n, 'middle'); }
   document.querySelectorAll('[data-ffilter]').forEach(b => b.setAttribute('aria-pressed', b.dataset.ffilter === S.fleetFilter));
@@ -2002,10 +2131,13 @@ async function render() {
   const main = $('#main');
   dropGrids();
   if (v === 'plan') {
-    main.innerHTML = plannerPage();
+    main.innerHTML = isPhone() ? phonePlanPage() : plannerPage();
     await planView(S.plan.view);
   } else if (v === 'drivers' || v === 'vehicles') {
-    main.innerHTML = fleetPage(v); mountFleet(v);
+    if (isPhone()) { main.innerHTML = phoneFleetPage(v); paintPhoneFleet(v); }
+    else { main.innerHTML = fleetPage(v); mountFleet(v); }
+  } else if (isPhone()) {
+    main.innerHTML = '<div class="p-page" id="p-now"></div>'; paintPhoneNow();
   } else {
     main.innerHTML = ridesPage(); ridesMeta();
     if (S.rides === 'table') mountTable();
@@ -2015,7 +2147,8 @@ async function render() {
 function repaint() {
   railTick();
   const v = view();
-  if (v === 'rides') paintRides();
+  if (v === 'rides' && isPhone()) paintPhoneNow();
+  else if (v === 'rides') paintRides();
   if (v === 'plan') paintPlanner();
   if ((v === 'drivers' || v === 'vehicles') && !document.activeElement?.matches?.('.t-date')) paintFleet();
   if (S.insp && !S.dirty && !(S.insp.tab === 'overview' && S.composing)) paintInspector();
@@ -2082,6 +2215,8 @@ document.addEventListener('click', async e => {
   if (mr) { const date = S.mday; const v = mr.dataset.mrestore; run(async () => { await command('restore', v === 'all' ? { all: true } : { tripIds: v.split(',') }, null, date); await afterMonthChange(date); }, 'הנסיעות הוחזרו'); return; }
   const mal = e.target.closest('[data-mall]');
   if (mal) { S.plan.day = mal.dataset.mall; S.mday = null; paintMonthDay(); planView('all'); return; }
+  const ms2 = e.target.closest('[data-mseg]');
+  if (ms2) { S.mseg = ms2.dataset.mseg; paintPhoneNow(); return; }
   const cix = e.target.closest('[data-cidx]');
   if (cix && !cix.disabled) { S.plan.ci = Number(cix.dataset.cidx); paintPlanner(); document.querySelector('.t-carousel .t-cause')?.focus?.(); return; }
   const tc = e.target.closest('[data-tip-close]');
@@ -2166,6 +2301,9 @@ document.addEventListener('click', async e => {
   if (act === 'toggle-file') { S.plan.showFile = !S.plan.showFile; paintPlanner(); }
   if (act === 'guide-hide') { store.set('t-plan-guide', '0'); $('.t-guide')?.remove(); }
   if (act === 'approve-all') { approveAll(); return; }
+  if (act === 'm-more') { S.mmore = !S.mmore; if (!S.mmore) S.pop = false; rail(); return; }
+  if (S.mmore && ['assist', 'tour', 'help', 'map', 'change'].includes(act)) { S.mmore = false; rail(); }
+  if (act === 'm-later') { S.mlater = true; paintPhoneNow(); return; }
   if (act === 'map-fit') { S.map?.fitBuses?.(); return; }
   if (act === 'map-golan') { S.map?.overview?.(); return; }
   if (act === 'map-unsel') { S.mapSel = null; $('#map-card').hidden = true; paintMapSide(); mapUpdate(); return; }
@@ -2213,6 +2351,7 @@ document.addEventListener('input', e => {
   if (el.id === 'tq') { S.table.q = el.value; paintTable(); }
   if (el.id === 'pq') { S.plan.q = el.value; paintPlanner(); }
   if (el.id === 'map-q') { S.mapQ = el.value; paintMapList(); }
+  if (el.id === 'p-fq') { S.fq = el.value; paintPhoneFleet(view()); }
   if (el.id === 'cmd-q') { S.cmd.q = el.value; S.cmd.i = 0; drawCmd(); }
   if (el.closest('.t-insp') && el.matches('select,[data-stop-time],[data-stop-count]')) {
     S.dirty = true;
