@@ -1,0 +1,40 @@
+# Publishes the transport demo to GitHub Pages: the screens plus the engine running in the
+# browser (scripts/build-pages.mjs). Each visitor gets their own copy of the demo.
+name: Demo on GitHub Pages
+on:
+  push:
+    branches: [design/shared-workspace]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/build-pages.mjs
+        env:
+          # Optional: a Google Maps browser key restricted to the Pages domain. Without it the map falls back.
+          GOOGLE_MAPS_BROWSER_KEY: ${{ secrets.GOOGLE_MAPS_BROWSER_KEY }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/pages
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

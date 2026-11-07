@@ -30,6 +30,16 @@ npm run dev
   positions follow the timetable until GPS is connected, and drivers and buses
   are made up.
 
+## Online copy (GitHub Pages)
+
+`https://shaharaka.github.io/municipal/` is a static copy for people to try on their own. The same
+engine runs in the visitor's browser instead of on a server, so each visitor gets their own demo,
+kept in that browser; the demo menu's reset starts it over. The dispatcher screen and the driver's
+phone on the same page stay in step. It is rebuilt on every push to `design/shared-workspace`
+(`.github/workflows/pages.yml`, `npm run build:pages`). Not in the online copy: the Claude-backed
+reading of free text in the assistant (the built-in rules still work), and the live Google map
+unless the repository has a `GOOGLE_MAPS_BROWSER_KEY` secret whose key allows `shaharaka.github.io`.
+
 ## What is real and what is staged
 
 | On screen | Source |
