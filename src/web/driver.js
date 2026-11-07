@@ -156,21 +156,27 @@ function todayScreen() {
   const now = trips.find(t => t.phase === 'active') ?? trips.find(t => t.phase === 'pending' && minutes(t.departure) >= clock - 45);
   const later = trips.filter(t => t !== now && t.phase === 'pending');
   const done = trips.filter(t => t.phase === 'completed');
-  const cell = t => `<button class="m-cell ${t.phase === 'completed' ? 'is-done' : ''}" data-open="${t.id}">
+  const cellBtn = t => `<button class="m-cell ${t.phase === 'completed' ? 'is-done' : ''}" data-open="${t.id}">
       <span class="m-time num">${esc(t.departure)}</span>
       <span><b>${esc(t.school)}</b><small>קו ${esc(t.routeCode)} · ${t.direction === 'morning' ? 'איסוף' : 'פיזור'} · ${t.planned} תלמידים</small></span>
       ${tripPill(t, clock) || I.chev}
     </button>`;
+  // A ride still ahead can be flagged from the list, the same way as tomorrow's.
+  const cell = t => t.phase === 'pending' ? `<div class="m-cell-wrap">${cellBtn(t)}<button class="m-link m-cell-issue" data-issue="${DATE}|${t.id}" aria-label="בעיה בנסיעה של ${esc(t.departure)}">בעיה?</button></div>` : cellBtn(t);
+  // The dispatcher marked this driver off on a day: say so, with a way to answer.
+  const offs = (me?.away ?? []).filter(a => a.by !== 'driver' && a.to >= DATE && a.from <= WEEK.at(-1));
+  const offNote = offs.length ? `<div class="m-notice m-off-note">${pill('לא זמין', 'is-warn')}<span>הסדרן סימן שאתה לא זמין ${offs.map(a => a.from === a.to ? `ב${whenWord(a.from) === 'היום' || whenWord(a.from) === 'מחר' ? whenWord(a.from) : `יום ${dayName(a.from)}`}` : `${heDate(a.from)}–${heDate(a.to)}`).join(', ')}${offs[0].reason ? ` (${esc(offs[0].reason)})` : ''}. מישהו אחר ייקח את הנסיעות. טעות? <a href="tel:${DISPATCH_PHONE}">להתקשר למוקד</a></span></div>` : '';
   // Tomorrow, so a change from the dispatcher is never a surprise at 6 in the morning.
   const nx = (S.next?.trips ?? []).slice().sort((a, b) => a.departure.localeCompare(b.departure));
   const fresh = nx.filter(t => changed(t) && !t.confirmed);
   const tomorrow = nx.length ? `<section class="m-section"><h2>מחר</h2>
       ${fresh.length && !toConfirm().some(x => x.date === NEXT) ? `<div class="m-notice">${pill('שיבוץ חדש', 'is-warn')}<span>${fresh.length === 1 ? 'נסיעה אחת' : `${fresh.length} נסיעות`} בקו ${esc([...new Set(fresh.map(t => t.routeCode))].join(', '))}. הסדרן שיבץ אותך במקום נהג אחר, והפרטים כבר כאן.</span></div>` : ''}
       <div class="m-group">${nx.map(t => `<div class="m-cell is-static"><span class="m-time num">${esc(t.departure)}</span><span><b>${esc(t.school)}</b><small>קו ${esc(t.routeCode)} · ${esc(t.vehicleName ?? '')}</small></span>${t.confirmed ? pill('אישרת', 'is-ok') : changed(t) ? pill('חדש', 'is-warn') : ''}<button class="m-link" data-issue="${NEXT}|${t.id}" aria-label="בעיה בנסיעה של ${esc(t.departure)}">בעיה?</button></div>`).join('')}</div></section>` : '';
-  return `<header class="m-nav"><div class="m-nav-row"><span></span><a class="m-nav-btn" href="tel:${DISPATCH_PHONE}" aria-label="התקשרות למוקד ההסעות">${I.phone}</a></div>
+  return `<header class="m-nav"><div class="m-nav-row"><span></span><a class="m-nav-btn m-call" href="tel:${DISPATCH_PHONE}" aria-label="התקשרות למוקד ההסעות">${I.phone}<span>מוקד</span></a></div>
       <h1 class="m-large">${me ? `בוקר טוב, ${esc(me.name.split(' ')[0])}` : 'בוקר טוב'}</h1><p class="m-sub">${d.weekday ? `יום ${esc(d.weekday)} · ${esc(d.clock)} · ${trips.length ? `${trips.length} נסיעות היום` : 'אין נסיעות היום'}` : 'אין חיבור לשרת'}</p></header>
     ${netBanner()}
     <main class="m-scroll">
+      ${offNote}
       ${(() => { const all = toConfirm(); if (!all.length) return ''; const days = [...new Set(all.map(x => x.date))];
         const key = days.map(d => `${d}:${all.filter(x => x.date === d).map(x => x.t.id).join(',')}`).join(';');
         return `<section class="m-confirm" aria-label="שיבוץ חדש לאישור">

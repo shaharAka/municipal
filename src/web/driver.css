@@ -234,3 +234,10 @@ svg.i { width: 22px; height: 22px; flex: none; }
 .m-confirm-list li { display: flex; gap: 10px; }
 .m-confirm-list .num { color: var(--m-muted); font-weight: 600; min-width: 44px; }
 .m-confirm-day { min-width: 64px; color: var(--m-muted); font-weight: 600; }
+.m-call { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 0 12px; border-radius: 999px; background: var(--m-card); color: var(--m-accent); font-weight: 600; font-size: 15px; height: 40px; }
+.m-cell-wrap { display: flex; align-items: center; position: relative; }
+.m-cell-wrap .m-cell { flex: 1; min-width: 0; }
+.m-cell-wrap + .m-cell-wrap::before, .m-cell-wrap + .m-cell::before, .m-cell + .m-cell-wrap::before { content: ""; position: absolute; top: 0; inset-inline-start: 92px; inset-inline-end: 0; border-top: 1px solid var(--m-line); }
+.m-cell-issue { flex: none; padding: 8px 12px 8px 4px; }
+.m-off-note { margin: 8px 16px 12px; }
+.m-off-note a { color: var(--m-accent); font-weight: 600; }

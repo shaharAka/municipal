@@ -623,7 +623,7 @@ function mapSelect(id) {
   const t = S.data.trips.find(x => x.id === id); const card = $('#map-card'); if (!card || !t) return;
   card.hidden = false;
   card.innerHTML = `<div class="t-mapcard-top"><span class="t-code">${esc(t.routeCode)}</span><b>${esc(t.school)}</b>${pill(t.status)}<button class="t-icon-btn" data-act="map-unsel" aria-label="ביטול הבחירה">${I.x}</button></div>
-    <small>${esc(t.driverName)} · ${esc(t.vehicleName)}${t.live.boarded != null ? ` · ${num(t.live.boarded)}/${num(t.planned)} תלמידים` : ''}</small>
+    <small>${['upcoming', 'blocked'].includes(t.status) ? (() => { const m = minutes(t.departure) - minutes(S.data.clock); return `<b class="t-mapcard-when">${m > 0 ? `יוצא ב־${esc(t.departure)}, בעוד ${m >= 60 ? `${Math.floor(m / 60)} ש׳ ו־${m % 60} דק׳` : `${num(m)} דק׳`}` : `היה אמור לצאת ב־${esc(t.departure)}`}</b> · `; })() : ''}${esc(t.driverName)} · ${esc(t.vehicleName)}${t.live.boarded != null ? ` · ${num(t.live.boarded)}/${num(t.planned)} תלמידים` : ''}</small>
     ${progress(t)}
     <div class="t-actions"><button class="t-btn is-primary is-sm" data-ride="${t.id}">פתיחת הנסיעה</button>${t.driverContact ? `<a class="t-btn is-sm" href="tel:${esc(t.driverContact)}" data-call="${esc(t.driverName)}|${esc(t.driverContact)}">${I.call} להתקשר</a>` : ''}</div>`;
 }
@@ -804,7 +804,7 @@ function paintInbox(el) {
       ${drafts.length ? `<article class="t-cause is-quiet"><header><b>${num(drafts.length)} שינויים שעוד לא נשלחו לנהגים</b></header><div class="t-actions"><button class="t-btn is-primary" data-act="publish-drafts">שליחה לנהגים</button></div></article>` : ''}
     </div>
     ${done.length ? `<section class="t-done"><h3>טופל ${dayWord(date)}</h3>${done.map((x, i) => `<div class="t-done-row"><span>${I.check} ${esc(x.text)}</span><button class="t-link" data-undo-done="${i}">ביטול</button></div>`).join('')}</section>` : ''}
-    ${know.length ? `<section class="t-know">${know.map(p => `<p>${esc(p.title)}. <button class="t-link" data-prop-know="${esc(p.id)}">${p.id === 'expiring' ? 'לנהגים ולרכבים' : 'לרשימה'}</button></p>`).join('')}</section>` : ''}
+    ${know.length ? `<section class="t-know">${know.map(p => `<p>${esc(p.id === 'checks' ? `${p.title.match(/\d+/)?.[0] ?? ''} נסיעות מסומנות בקובץ המועצה לבירור (שם תחנה או מספר תלמידים). הן יוצאות כרגיל` : p.title)}. <button class="t-link" data-prop-know="${esc(p.id)}">${p.id === 'expiring' ? 'לנהגים ולרכבים' : 'לרשימה'}</button></p>`).join('')}</section>` : ''}
     <p class="t-grid-foot"><button class="t-link" data-pview="all">כל ${num(d.trips.length)} הנסיעות ${dayWord(date)}</button></p>`;
 }
 function causeByKey(key) { return causes(S.plan.day).find(c => c.key === key); }
@@ -947,7 +947,7 @@ function optionsBlock(c, date, d, scope, cancel = '') {
       ${more && opts.off.length ? `<p class="t-opts-sep">לא מתאימים כרגע</p>${offList()}` : ''}
       ${more || hidden ? `<span class="t-opts-more"><button type="button" class="t-link" data-opt-more="${esc(key)}">${more ? 'פחות' : `הצגת כל ${plural} (עוד ${num(hidden)})`}</button></span>` : ''}
     </fieldset>
-    ${scopes.length > 1 ? `<div class="t-scope"><span class="t-scope-q">לכמה זמן?</span><div class="t-seg" role="group" aria-label="לכמה זמן">${scopes.map(x => `<button type="button" data-oscope="${esc(key)}|${x.id}" aria-pressed="${x.id === cur.id}">${esc(x.label)}${x.id === scopes[0].id ? ' <i class="t-recommend">מומלץ</i>' : ''}</button>`).join('')}</div><small>${esc(cur.note)}</small></div>` : ''}
+    ${scopes.length > 1 ? `<div class="t-scope"><span class="t-scope-q">לכמה זמן?</span><div class="t-seg" role="group" aria-label="לכמה זמן">${scopes.map(x => `<button type="button" data-oscope="${esc(key)}|${x.id}" aria-pressed="${x.id === cur.id}">${esc(x.label)}${x.id === scopes[0].id ? ' <i class="t-recommend">מומלץ</i>' : ''}</button>`).join('')}</div></div>` : ''}
     ${scope === 'plan' ? whatHappens(c, sel, offSel, cur?.id ?? 'day', date, d) : ''}
     ${fixLink ? `<p class="t-fixline">${fixLink}</p>` : ''}
     <div class="t-actions t-cta-bar">${okBtn(sel, Boolean(offSel)).replace('</button>', cur?.id === 'until' ? ' · עד שזה יסודר</button>' : count > 1 ? ` · ${num(count)} נסיעות</button>` : '</button>')}${cancel}<span class="t-source">${c.res === 'driver' ? `${esc(firstName(sel.label))} יקבל הודעה` : 'הנהגים יקבלו הודעה'} · אפשר לבטל</span></div>`;
@@ -1088,7 +1088,7 @@ function paintChange() {
   const reasons = c.kind === 'driver' ? ['מחלה', 'חופשה', 'מילואים', 'אחר'] : ['מוסך', 'תקלה', 'תאונה', 'אחר'];
   root.innerHTML = `<div class="t-scrim"><form class="t-dialog t-change" data-form="change" aria-labelledby="chg-t">
     <header><h2 id="chg-t">משהו השתנה</h2><button type="button" class="t-icon-btn" data-act="change-close" aria-label="סגירה">${I.x}</button></header>
-    <div class="t-seg" role="group" aria-label="מה השתנה"><button type="button" data-chg-kind="driver" aria-pressed="${c.kind === 'driver'}">${I.user} נהג לא מגיע</button><button type="button" data-chg-kind="bus" aria-pressed="${c.kind === 'bus'}">${I.bus} רכב לא זמין</button></div>
+    <div class="t-seg" role="group" aria-label="מה השתנה"><button type="button" data-chg-kind="driver" aria-pressed="${c.kind === 'driver'}">${I.user} נהג לא זמין</button><button type="button" data-chg-kind="bus" aria-pressed="${c.kind === 'bus'}">${I.bus} רכב לא זמין</button></div>
     <div class="t-field"><label for="chg-who">${c.kind === 'driver' ? 'מי' : 'איזה רכב'}</label><select id="chg-who" class="t-select" required><option value="">בחירה</option>${list.filter(x => !x.archived).map(x => `<option value="${x.id}" ${x.id === c.id ? 'selected' : ''}>${esc(x.name ?? x.label)}${x.routeCode ? ` · קו ${x.routeCode}` : ''}</option>`).join('')}</select></div>
     <div class="t-chg-dates"><div class="t-field"><label for="chg-from">מתאריך</label><input id="chg-from" type="date" class="t-input" value="${c.from}" required></div><div class="t-field"><label for="chg-to">עד תאריך</label><input id="chg-to" type="date" class="t-input" value="${c.to}" required></div></div>
     <div class="t-chips" role="group" aria-label="סיבה">${reasons.map(r => `<button type="button" class="t-chip" data-chg-reason="${r}" aria-pressed="${c.reason === r}">${r}</button>`).join('')}</div>
@@ -1204,7 +1204,7 @@ function paintMonthDay() {
     const times = list => list.length ? `${esc(list[0].departure)}${list.length > 1 ? `–${esc(list.at(-1).departure)}` : ''}` : '';
     return `<div class="t-mschool ${open ? 'is-open' : ''}">
       <div class="t-mschool-row"><span><b>${esc(g.name)}</b><small>${g.am.length ? `בוקר ${num(g.am.length)} · ${times(g.am)}` : ''}${g.am.length && g.pm.length ? ' · ' : ''}${g.pm.length ? `צהריים ${num(g.pm.length)} · ${times(g.pm)}` : ''}</small></span>
-        <span class="t-mschool-acts"><button class="t-link" data-mdo="cancel|${esc(g.name)}">ביטול</button><button class="t-link" data-mdo="shift|${esc(g.name)}">שינוי שעה</button></span></div>
+        <span class="t-mschool-acts"><button class="t-link" data-mdo="cancel|${esc(g.name)}">ביטול נסיעות</button><button class="t-link" data-mdo="shift|${esc(g.name)}">שינוי שעה</button></span></div>
       ${open && doing.kind === 'cancel' ? `<div class="t-mform"><span class="t-mform-q">אילו נסיעות?</span><div class="t-chips">${chips('dir', [['', 'כל היום'], ['morning', 'בוקר'], ['afternoon', 'צהריים']], doing.dir ?? '')}</div>
           <span class="t-mform-q">למה?</span><div class="t-chips">${chips('why', [['טיול', 'טיול'], ['יום חופשי בבית הספר', 'יום חופשי'], ['שביתה', 'שביתה'], ['אחר', 'אחר']], doing.why ?? '')}</div>
           <div class="t-actions"><button class="t-btn is-primary" data-mgo="cancel">ביטול ${num((doing.dir === 'morning' ? g.am : doing.dir === 'afternoon' ? g.pm : [...g.am, ...g.pm]).length)} נסיעות</button><button class="t-btn is-ghost" data-mdo="">סגירה</button><span class="t-source">הנהגים יקבלו הודעה · אפשר להחזיר</span></div></div>` : ''}
@@ -1631,7 +1631,7 @@ function tip(id, title, text) {
 const statusPill = ([t, c]) => `<span class="t-pill ${c}">${esc(t)}</span>`;
 const due = (iso, soon = 14) => !iso ? '<span class="t-pill">לא ידוע</span>' : daysLeft(iso) < 0 ? '<span class="t-pill is-bad">פג</span>' : daysLeft(iso) <= soon ? `<span class="t-pill is-warn">בעוד ${daysLeft(iso)} ימים</span>` : '';
 const dateCell = (kind, field, label, soon = 14) => ({
-  cellRenderer: p => `<span class="t-datecell"><input type="date" class="t-date num" data-fleet="${kind}" data-id="${p.data.id}" data-field="${field}" value="${esc(p.data[field])}" aria-label="${esc(label(p.data))}">${due(p.data[field], soon)}</span>`,
+  cellRenderer: p => { const v = p.data[field]; const tone = !v ? 'is-unknown' : daysLeft(v) < 0 ? 'is-bad' : daysLeft(v) <= soon ? 'is-warn' : ''; return `<span class="t-datecell"><input type="date" class="t-date num ${tone}" data-fleet="${kind}" data-id="${p.data.id}" data-field="${field}" value="${esc(v)}" aria-label="${esc(label(p.data))}${tone === 'is-bad' ? ', פג' : tone === 'is-warn' ? `, בעוד ${daysLeft(v)} ימים` : ''}"></span>`; },
   suppressKeyboardEvent: () => true, sortable: true, flex: 1, minWidth: 230,
 });
 const isPeople = v => v === 'drivers';
@@ -1689,6 +1689,7 @@ function mountFleet(v) {
 }
 function paintFleet() {
   S.grids.fleet?.setGridOption('rowData', fleetRows(view())); S.grids.fleet?.redrawRows();
+  if (S.flash) { const n = S.grids.fleet?.getRowNode(S.flash); if (n) S.grids.fleet.ensureNodeVisible(n, 'middle'); }
   document.querySelectorAll('[data-ffilter]').forEach(b => b.setAttribute('aria-pressed', b.dataset.ffilter === S.fleetFilter));
   const counts = new Map(fleetFilters(view()).map(f => [f.id, f.n]));
   document.querySelectorAll('[data-ffilter] .num').forEach(n => { n.textContent = num(counts.get(n.parentElement.dataset.ffilter) ?? 0); });
@@ -2165,6 +2166,7 @@ document.addEventListener('change', e => {
   if (el.dataset.act === 'driver') { S.driver = el.value; $('#phone-slot').innerHTML = ''; paintPhone(); }
   if (el.dataset.fleet) {
     const before = el.defaultValue; const kind = el.dataset.fleet; const id = el.dataset.id; const field = el.dataset.field;
+    S.flash = id;
     command('fleet', { kind, entityId: id, [field]: el.value })
       .then(async () => { await loadDay(TODAY); const back = await giveBackOffer(kind, id); toast(`התאריך עודכן ל־${el.value.split('-').reverse().join('.')}${back ? ` · ${back.label}?` : ''}`, { undo: () => run(() => command('fleet', { kind, entityId: id, [field]: before }), 'התאריך הוחזר'), action: back ? { label: 'להחזיר', fn: back.fn } : null }); })
       .catch(err => toast(err.message, { bad: true }));

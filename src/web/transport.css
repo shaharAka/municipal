@@ -1074,3 +1074,6 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-mapcard[hidden] { display: none; }
 .t-map-note { margin: 0 6px 4px; }
 .t-opt-warn { height: 20px; font-size: 11px; font-style: normal; }
+.t-date.is-bad { color: var(--pill-bad); font-weight: 600; }
+.t-date.is-warn { color: var(--pill-warn); font-weight: 600; }
+.t-mapcard-when { color: var(--ink); font-weight: 600; }
