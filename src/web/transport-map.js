@@ -46,6 +46,8 @@ function markerClass() {
     }
     onRemove() { this.el.remove(); }
     move(position) { if (position) { this.at = position; this.draw(); } }
+    pixel() { const proj = this.getProjection(); return proj && this.at ? proj.fromLatLngToDivPixel(new google.maps.LatLng(this.at.lat, this.at.lng)) : null; }
+    show(on) { this.el.style.display = on ? '' : 'none'; }
     setContent(node) { this.el.replaceChildren(node); }
     setZ(z) { this.el.style.zIndex = String(z); }
     remove() { this.setMap(null); }
@@ -71,7 +73,7 @@ function along(path, f) {
   return path[path.length - 1];
 }
 
-export async function mountTransportMap(element, { config, onSelect }) {
+export async function mountTransportMap(element, { config, onSelect, focus = null }) {
   const noop = { update() {}, ready: false };
   if (!config.googleMapsBrowserKey) {
     element.innerHTML = '<iframe title="מפת רמת הגולן" class="t-map-canvas" style="border:0" src="https://maps.google.com/maps?hl=he&q=33.0,35.74&z=10&output=embed"></iframe>';
@@ -153,9 +155,39 @@ export async function mountTransportMap(element, { config, onSelect }) {
     if (!bounds.isEmpty()) map.fitBounds(bounds, { top: 60, bottom: 60, left: 60, right: 60 });
   };
 
+  // Buses that would sit on top of each other become one round count; clicking it zooms in.
+  let clusters = [];
+  let lastSelected = null;
+  function declutter() {
+    clusters.forEach(c => c.remove()); clusters = [];
+    const items = [...buses.entries()].map(([id, m]) => ({ id, m, p: m.pixel() })).filter(x => x.p);
+    items.forEach(x => x.m.show(true));
+    if (focus) return;
+    const used = new Set();
+    for (const a of items) {
+      if (used.has(a.id) || a.id === lastSelected) continue;
+      const group = items.filter(b => !used.has(b.id) && b.id !== lastSelected && Math.abs(a.p.x - b.p.x) < 64 && Math.abs(a.p.y - b.p.y) < 30);
+      if (group.length < 2) continue;
+      group.forEach(b => { used.add(b.id); b.m.show(false); });
+      const trips = group.map(b => last?.trips.find(t => t.id === b.id)).filter(Boolean);
+      const el = document.createElement('div');
+      el.className = `t-cluster${trips.some(t => ['late', 'delayed'].includes(t.status)) ? ' is-bad' : ''}`;
+      el.innerHTML = `${BUS}<span>${group.length}</span>`;
+      el.title = trips.map(t => `קו ${t.routeCode}`).join(' · ');
+      const at = { lat: group.reduce((s, g) => s + g.m.at.lat, 0) / group.length, lng: group.reduce((s, g) => s + g.m.at.lng, 0) / group.length };
+      clusters.push(new Marker({ map, position: at, content: el, zIndex: 25, title: el.title, onClick: () => {
+        const b = new google.maps.LatLngBounds(); group.forEach(g => b.extend(g.m.at)); map.fitBounds(b, 120); if (map.getZoom() > 14) map.setZoom(14);
+      } }));
+    }
+  }
+  let pending = null;
+  const soon = () => { clearTimeout(pending); pending = setTimeout(declutter, 450); };
+  map.addListener('idle', soon);
+
   function update(state, selectedId) {
     last = state;
-    const visible = state.trips.filter(t => t.live.position);
+    lastSelected = selectedId;
+    const visible = state.trips.filter(t => t.live.position && (!focus || t.id === focus));
     const seen = new Set();
     for (const trip of visible) {
       seen.add(trip.id);
@@ -169,11 +201,12 @@ export async function mountTransportMap(element, { config, onSelect }) {
       placeBus(trip, marker);
     }
     for (const [id, marker] of buses) if (!seen.has(id)) { marker.remove(); buses.delete(id); }
-    const selected = state.trips.find(t => t.id === selectedId) ?? null;
+    const selected = state.trips.find(t => t.id === (focus ?? selectedId)) ?? null;
     const key = selected ? `${selected.id}:${selected.live.departedIndex}` : '';
     if (key !== shownRoute) drawRoute(selected);
+    soon();
   }
 
   function retheme() { map.setOptions({ styles: quiet(), backgroundColor: css('--map-bg') }); const sel = shownRoute.split(':')[0]; shownRoute = ''; if (last) update(last, sel || null); }
-  return { update, retheme, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, get last() { return last; } };
+  return { update, retheme, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, destroy() { clearTimeout(pending); clusters.forEach(c => c.remove()); buses.forEach(m => m.remove()); clearRoute(); }, get last() { return last; } };
 }

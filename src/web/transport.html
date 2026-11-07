@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>הסעת תלמידים · מועצה אזורית גולן</title>
+    <title>הסעות · מועצה אזורית גולן</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&display=swap">
@@ -11,11 +11,17 @@
   </head>
   <body>
     <div class="t-app">
-      <header class="t-top" id="top"></header>
-      <main id="main" style="min-height:0;display:grid"></main>
+      <aside class="t-rail" id="rail" aria-label="ניווט ראשי"></aside>
+      <main id="main"></main>
     </div>
+    <div id="inspector"></div>
+    <div id="assist"></div>
+    <div id="mapfull"></div>
+    <div id="phone-slot"></div>
+    <div id="tour"></div>
     <div id="cmd"></div>
-    <div id="toast" class="t-toasts" role="status" aria-live="polite"></div>
+    <div id="dialog"></div>
+    <div id="toast" class="t-toasts" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@33.2.4/dist/ag-grid-community.min.js"></script>
     <script type="module" src="./transport.js"></script>
   </body>

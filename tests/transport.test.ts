@@ -147,3 +147,56 @@ test('a count can be corrected before leaving the stop, and nothing reports with
   assert.throws(() => step('depart', { stopId: 'stop-1' }), /עצירה בטוחה/);
   assert.throws(() => step('delay', { minutes: 5 }), /עצירה בטוחה/);
 });
+
+test('the assistant finds what stops tomorrow and proposes one approvable fix per cause', async () => {
+  const { proposalsFor } = await import('../src/transport/assistant.ts');
+  const s = createTransportState();
+  const r = proposalsFor(s, '2026-11-09');
+  assert.equal(r.date, '2026-11-09');
+  const bus = r.proposals.find((p: any) => p.id === 'bus-bus-14');
+  const driver = r.proposals.find((p: any) => p.id === 'driver-driver-21');
+  assert.ok(bus?.apply && driver?.apply, 'a swap for the expired bus test and for the expired licence');
+  assert.match(bus.why, /הטסט של אוטובוס 14 פג/);
+  execute(s, 'shuki', { id: `p-${++n}`, type: 'plan', date: '2026-11-09', data: bus.apply });
+  execute(s, 'shuki', { id: `p-${++n}`, type: 'plan', date: '2026-11-09', data: driver.apply });
+  const d = snapshot(s, '2026-11-09', 'shuki');
+  for (const id of [...bus.tripIds, ...driver.tripIds]) {
+    const t = d.trips.find((x: any) => x.id === id);
+    assert.equal(t.published, true, `${t.number} is published after approval`);
+    assert.ok(!t.blockers.some((b: string) => /טסט|רישיון/.test(b)), `${t.number} is no longer blocked`);
+  }
+  const again = proposalsFor(s, '2026-11-09');
+  assert.ok(!again.proposals.some((p: any) => p.id === 'bus-bus-14' || p.id === 'driver-driver-21'), 'fixed causes drop out');
+});
+
+test('the assistant reads plain requests: a driver who is out tomorrow, a bus in the garage on a weekday', async () => {
+  const { proposalsFor } = await import('../src/transport/assistant.ts');
+  const s = createTransportState();
+  const out = proposalsFor(s, DEMO_DATE, 'דוד מזרחי לא מגיע מחר');
+  assert.equal(out.date, '2026-11-09');
+  assert.ok(out.understood);
+  const p = out.proposals[0];
+  assert.match(p.why, /ביקשת: דוד מזרחי לא מגיע/);
+  assert.ok(p.apply.assignments.every((a: any) => a.driverId && a.driverId !== 'driver-10'));
+  const garage = proposalsFor(s, DEMO_DATE, 'אוטובוס 15 במוסך ביום שלישי');
+  assert.equal(garage.date, '2026-11-10');
+  assert.match(garage.proposals[0].title, /אוטובוס 15/);
+  const unclear = proposalsFor(s, DEMO_DATE, 'מה נשמע');
+  assert.equal(unclear.understood, false);
+  assert.match(unclear.summary, /לא הבנתי/);
+});
+
+test('a plan is all or nothing: a trip that already left stops the whole change', () => {
+  const s = createTransportState();
+  run(s, 'shuki', 'clock', null, { time: '07:40' });
+  const d = snapshot(s, DEMO_DATE, 'shuki');
+  const left = d.trips.find((t: any) => t.status === 'completed');
+  const waiting = d.trips.find((t: any) => t.live.phase === 'pending' && t.phase === 'pending' && t.number !== '10-1');
+  const before = waiting.vehicleId;
+  // simulated trips only "leave" in the simulation; a driver-reported start is a real departure
+  const t = tripOf(s, 'driver-10', '10-1');
+  run(s, 'driver-10', 'start', t, { stationary: true });
+  assert.throws(() => execute(s, 'shuki', { id: `p-${++n}`, type: 'plan', date: DEMO_DATE, data: { assignments: [{ tripId: waiting.id, vehicleId: 'bus-spare' }, { tripId: t.id, vehicleId: 'bus-spare' }], publish: true } }), /כבר יצאה/);
+  assert.equal(snapshot(s, DEMO_DATE, 'shuki').trips.find((x: any) => x.id === waiting.id).vehicleId, before, 'nothing changed');
+  assert.ok(left);
+});

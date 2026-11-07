@@ -117,9 +117,9 @@ export function execute(state:any,viewer:string,command:any) {
     const fresh=createTransportState();state.drivers=fresh.drivers;state.vehicles=fresh.vehicles;state.days={};dayFor(state,date);state.revision++;return {revision:state.revision};
   }
   const trip=day.trips.find((t:any)=>t.id===command.tripId);
-  const dispatcher=['assign','edit','publish','create','note','fleet','clock','ack','unack'].includes(command.type);
+  const dispatcher=['assign','edit','publish','create','note','fleet','clock','ack','unack','plan'].includes(command.type);
   if(dispatcher&&actor.role!=='dispatcher')fail('הפעולה זמינה לסדרנים בלבד.',403);
-  if(!['fleet','clock','create','ack','unack'].includes(command.type)&&!trip)fail('הנסיעה אינה קיימת ביום שנבחר.',404);
+  if(!['fleet','clock','create','ack','unack','plan'].includes(command.type)&&!trip)fail('הנסיעה אינה קיימת ביום שנבחר.',404);
   if(trip && actor.role==='driver' && (trip.driverId!==actor.id||!trip.published))fail('לנהג אין גישה לנסיעה הזו.',403);
   if(trip && command.version!==trip.version)fail('הנסיעה השתנתה. רעננו את הנתונים לפני ניסיון נוסף.',409);
   const data=command.data||{};
@@ -142,6 +142,18 @@ export function execute(state:any,viewer:string,command:any) {
     const id='custom-'+date+'-'+day.nextId++;
     const t={id,date,weekday:weekday(date),routeCode:String(data.routeCode||'חדש'),number:'חדש',school:String(data.school).slice(0,100),direction:data.direction,departure:data.departure,planned:0,stops:[],reviewReasons:[],source:{sheet:'תכנון סדרן',range:'טיוטה חדשה'},version:1,driverId:'',vehicleId:'',published:false,phase:'pending',reports:{},departures:[],onBoard:0,boarded:null,alighted:0,delayMinutes:0,notes:[],events:[],demoFocus:false};
     day.trips.push(t);event(state,day,t,actor,'create','נוצרה נסיעה חדשה בטיוטה');
+  } else if(command.type==='plan') {
+    // One approval for several trips: the assistant's proposal, or a bulk swap. Every trip is checked before any is changed.
+    const items=Array.isArray(data.assignments)?data.assignments:[];
+    if(!items.length||items.length>60)fail('אין שינויים להחלה.');
+    const targets=items.map((a:any)=>{const t=day.trips.find((x:any)=>x.id===a?.tripId);if(!t)fail('אחת הנסיעות לא נמצאה ביום שנבחר.',404);if(t.phase!=='pending')fail(`נסיעה ${t.number} כבר יצאה ואי אפשר לשנות אותה.`);
+      const driverId=a.driverId??t.driverId,vehicleId=a.vehicleId??t.vehicleId;if(!state.drivers[driverId]||!state.vehicles[vehicleId])fail('יש לבחור נהג ורכב קיימים.');return {t,driverId,vehicleId,changed:driverId!==t.driverId||vehicleId!==t.vehicleId};});
+    const reason=String(data.reason||'שיבוץ עודכן').slice(0,200);
+    for(const {t,driverId,vehicleId,changed} of targets){
+      t.driverId=driverId;t.vehicleId=vehicleId;
+      if(data.publish===true&&!blockers(state,t,date).length)t.published=true;else if(changed)t.published=false;
+      t.version++;event(state,day,t,actor,changed?'assign':'publish',t.published?`${reason}. פורסם לנהג`:reason);
+    }
   } else if(command.type==='assign') {
     if(trip.phase!=='pending')fail('אין לשנות שיבוץ בנסיעה שהחלה.');
     if(!state.drivers[data.driverId]||!state.vehicles[data.vehicleId])fail('יש לבחור נהג ורכב קיימים.');
