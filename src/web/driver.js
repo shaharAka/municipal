@@ -8,9 +8,9 @@ const QUEUE_KEY = `t-queue-${ME}-${DATE}`;
 const SEEN_KEY = `t-seen-${ME}`;
 const DISPATCH_PHONE = '04-0000000'; // demo number for the transport desk
 if (params.has('frame') || window.top !== window) document.body.dataset.frame = '';
-const THEMES = ['royal', 'paper', 'flame', 'navy'];
+const THEMES = ['clean', 'royal', 'paper', 'flame', 'navy'];
 const setTheme = t => { if (THEMES.includes(t)) document.documentElement.dataset.theme = t; };
-setTheme(params.get('theme') ?? (() => { try { return localStorage.getItem('t-theme'); } catch { return null; } })());
+setTheme(params.get('theme') ?? (() => { try { return localStorage.getItem('t-theme-v2'); } catch { return null; } })());
 
 const S = { data: null, tab: 'today', trip: null, count: null, sheet: null, delay: null, offline: false, busy: false, toast: null };
 

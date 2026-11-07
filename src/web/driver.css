@@ -1,7 +1,15 @@
 /* Driver app: a phone app for the cab. Thumb-zone controls, large type for glare,
    safe areas for real devices and for the demo frame (body[data-frame]). */
 /* Theme tokens follow the dispatcher themes (html[data-theme]). hero = the "next trip" card, go = its button. */
-:root, [data-theme="royal"] {
+:root, [data-theme="clean"] {
+  --m-ink: #1b1c1e; --m-ink-2: #3a3d42; --m-muted: #62666d; --m-faint: #8c9096; --m-line: #e6e6e3; --m-line-2: #d3d3cf; --m-press: #f0f0ed;
+  --m-bg: #f6f6f4; --m-card: #ffffff;
+  --m-accent: #2f5bd0; --m-accent-ink: #ffffff; --m-accent-soft: #f1f1ef;
+  --m-hero: #1b1c1e; --m-hero-ink: #ffffff; --m-go: #2f5bd0; --m-go-ink: #ffffff;
+  --m-ok: #2b7049; --m-ok-soft: #eef6f1; --m-bad: #b93a2f; --m-bad-soft: #fcefee; --m-warn: #7d5300; --m-warn-soft: #fbf6ea;
+  --m-shadow: 27, 28, 30;
+}
+[data-theme="royal"] {
   --m-ink: #1d2024; --m-ink-2: #3a3f47; --m-muted: #5c626b; --m-faint: #8a919b; --m-line: #e3e6ea; --m-line-2: #cfd4da; --m-press: #eef0f2;
   --m-bg: #f4f5f6; --m-card: #ffffff;
   --m-accent: #3557d8; --m-accent-ink: #ffffff; --m-accent-soft: #ebf0fd;

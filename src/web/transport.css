@@ -10,8 +10,26 @@
      ok         valid / published
    IBM Plex Sans Hebrew. Icons: one thin monochrome line set. */
 
-/* Royal (default): charcoal frame, royal blue leads, tangerine only as a small highlight. */
-:root, [data-theme="royal"] {
+/* Clean (default): two main colours, ink and warm off-white; one action colour, a calm blue, only on the
+   main button of an area. Red only for problems, green only for "ready". */
+:root, [data-theme="clean"] {
+  --frame: #fbfbfa; --frame-2: #f1f1ef; --frame-line: #e6e6e3; --frame-text: #1b1c1e; --frame-muted: #62666d; --frame-hover: #efefec;
+  --frame-active: #e9e9e6; --frame-active-text: #1b1c1e;
+  --brand: #1b1c1e; --brand-ink: #ffffff;
+  --primary: #2f5bd0; --primary-hover: #264cb3; --primary-ink: #ffffff;
+  --accent: #3a3d42; --accent-ink: #ffffff; --accent-text: #1b1c1e; --accent-soft: #f1f1ef; --accent-line: #dcdcd8;
+  --hi: #1b1c1e; --hi-soft: #f3f3f1; --hi-line: #d8d8d4;
+  --warn: #7d5300; --warn-soft: #fbf6ea; --warn-line: #eddcb5;
+  --bad: #b93a2f; --bad-soft: #fcefee; --bad-line: #f2c9c5;
+  --ok: #2b7049; --ok-soft: #eef6f1; --ok-line: #cfe6d8;
+  --ink: #1b1c1e; --ink-2: #3a3d42; --muted: #62666d; --faint: #8c9096;
+  --bg: #f6f6f4; --surface: #ffffff; --surface-2: #f8f8f6; --hover: #f0f0ed; --line: #e6e6e3; --line-2: #d3d3cf;
+  --solid: #1b1c1e; --solid-ink: #ffffff;
+  --map-bg: #f0f0ee; --dock: #ececea;
+  --shadow-rgb: 27, 28, 30;
+}
+/* Royal: charcoal frame, royal blue leads, tangerine only as a small highlight. */
+[data-theme="royal"] {
   --frame: #1d2024; --frame-2: #2a2e34; --frame-line: #383d45; --frame-text: #ffffff; --frame-muted: #a7adb6; --frame-hover: #33383f;
   --frame-active: #ffffff; --frame-active-text: #1d2024;
   --brand: #3557d8; --brand-ink: #ffffff;
@@ -771,3 +789,65 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-anyway { font-style: normal; font-size: 12px; color: var(--accent-text); white-space: nowrap; }
 .t-pick.is-off[data-pid] { opacity: .8; cursor: pointer; }
 .t-pick.is-off[data-pid]:hover { background: var(--surface-2); opacity: 1; }
+
+/* ------------------------------------------------------------ the planner as a problem inbox */
+.t-inbox-page .t-plan-body { max-width: 860px; }
+.t-days { display: flex; align-items: stretch; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.t-daytab { min-width: 92px; display: grid; gap: 1px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); text-align: start; color: var(--ink); }
+.t-daytab b { font-weight: 600; }
+.t-daytab small { color: var(--muted); font-size: 12px; }
+.t-daytab span { font-size: 12px; min-height: 16px; display: inline-flex; align-items: center; gap: 4px; }
+.t-daytab span svg.i { width: 14px; height: 14px; color: var(--ok); }
+.t-daytab:hover { border-color: var(--line-2); }
+.t-daytab.is-on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.t-days .t-link { align-self: center; }
+.t-subhead { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+.t-subhead[hidden] { display: none; }
+.t-subhead .t-link { display: inline-flex; align-items: center; gap: 4px; }
+.t-dstatus { display: grid; gap: 2px; padding: 16px 18px; border-radius: 14px; margin-bottom: 14px; }
+.t-dstatus b { font-size: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.t-dstatus span { color: var(--muted); }
+.t-dstatus.is-ok { background: var(--ok-soft); }
+.t-dstatus.is-ok b { color: var(--ok); }
+.t-dstatus.is-ok b svg.i { width: 22px; height: 22px; }
+.t-dstatus.is-open { background: var(--surface); border: 1px solid var(--line); }
+.t-causes { display: grid; gap: 10px; }
+.t-cause { padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: grid; gap: 10px; box-shadow: var(--shadow-1); }
+.t-cause header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.t-cause header b { font-size: 16px; font-weight: 600; }
+.t-cause header span { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.t-cause.is-quiet { box-shadow: none; background: var(--surface-2); }
+.t-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.t-tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); }
+.t-rec > span { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+.t-rec > span > svg.i { color: var(--accent-text); margin-top: 3px; }
+.t-rec b { display: block; font-weight: 600; color: var(--ink); }
+.t-rec small { display: block; color: var(--ink-2); font-size: 13px; line-height: 1.5; }
+.t-norec { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.5; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); }
+.t-done { margin-top: 18px; }
+.t-done h3, .t-know h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
+.t-done-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.t-done-row svg.i { width: 14px; height: 14px; color: var(--ok); vertical-align: -2px; }
+.t-know { margin-top: 18px; display: grid; gap: 4px; }
+.t-know p { margin: 0; font-size: 13px; color: var(--muted); }
+/* "משהו השתנה" */
+.t-change { width: min(460px, 94vw); }
+.t-change header { display: flex; justify-content: space-between; align-items: center; }
+.t-change h2 { margin: 0; font-size: 19px; font-weight: 600; }
+.t-change .t-seg { width: 100%; }
+.t-change .t-seg button { flex: 1; display: inline-flex; gap: 6px; align-items: center; justify-content: center; height: 36px; }
+.t-chg-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.t-change .t-chip { border-style: solid; }
+
+/* one action colour: links are ink and underlined, never a second blue */
+.t-link { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.t-link:hover { text-decoration-color: var(--ink); }
+.t-cause .t-link-btn { border: 0; background: none; color: var(--ink-2); padding: 0 6px; height: 36px; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.t-cause .t-link-btn:hover { color: var(--ink); text-decoration-color: var(--ink); }
+.t-rec > span { background: var(--surface-2); border: 1px solid var(--line); }
+.t-rec > span > svg.i { color: var(--ok); }
+.t-norec { background: var(--surface-2); border: 1px solid var(--line); }
+.t-daytab span { color: var(--ink-2); }
+.t-daytab .t-dot-bad { margin: 0 0 0 4px; }
+.t-prep-link { border-color: var(--line); background: var(--surface); color: var(--ink); }
+.t-prep-link small { color: var(--muted); }
