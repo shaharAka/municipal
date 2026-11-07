@@ -1,25 +1,25 @@
 // The dispatcher's live map: buses by status, and the selected trip's road route.
 // Bus positions come from the demo clock (simulation), never from GPS; road
 // geometry comes from the Google Routes API through the workspace's loader.
-// The base map is styled in-page (no cloud map ID) so it stays quiet: no POI pins,
-// no road shields, cool greys under the charcoal / royal / tangerine markers.
+// The base map is styled in-page (no cloud map ID) from the active theme's tokens,
+// so it stays quiet: no POI pins, no road shields.
 import { loadGoogle } from './workspace-map.js';
 
-const QUIET = [
-  { elementType: 'geometry', stylers: [{ color: '#eef0f2' }] },
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+/** The base map in the active theme's neutrals: no POI pins, no road shields, quiet labels. */
+const quiet = () => [
+  { elementType: 'geometry', stylers: [{ color: css('--map-bg') }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#6b717a' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#f9fafb' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: css('--muted') }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: css('--surface') }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#e8ebee' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#d5d9df' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: css('--surface') }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: css('--line-2') }] },
   { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#cfd8e8' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#5b6b8c' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#b4bac2' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: css('--accent-line') }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: css('--accent-text') }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: css('--line-2') }] },
   { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
 ];
 
@@ -83,7 +83,7 @@ export async function mountTransportMap(element, { config, onSelect }) {
   ]);
   const Marker = markerClass();
   const map = new GoogleMap(element, {
-    center: GOLAN, zoom: 11, styles: QUIET, backgroundColor: '#eef0f2', mapTypeControl: false, streetViewControl: false,
+    center: GOLAN, zoom: 11, styles: quiet(), backgroundColor: css('--map-bg'), mapTypeControl: false, streetViewControl: false,
     fullscreenControl: false, clickableIcons: false, gestureHandling: 'greedy', keyboardShortcuts: false,
   });
   const buses = new Map();
@@ -134,10 +134,10 @@ export async function mountTransportMap(element, { config, onSelect }) {
     const bounds = new google.maps.LatLngBounds();
     if (paths) paths.forEach((path, i) => {
       // Remaining road in electric blue with a white casing; driven legs fade to stone.
-      if (i < done) overlays.push(new Polyline({ map, path, strokeColor: '#b4bac2', strokeOpacity: 0.9, strokeWeight: 5 }));
+      if (i < done) overlays.push(new Polyline({ map, path, strokeColor: css('--line-2'), strokeOpacity: 0.9, strokeWeight: 5 }));
       else {
-        overlays.push(new Polyline({ map, path, strokeColor: '#ffffff', strokeOpacity: 1, strokeWeight: 9, zIndex: 1 }));
-        overlays.push(new Polyline({ map, path, strokeColor: '#3557d8', strokeOpacity: 1, strokeWeight: 5, zIndex: 2 }));
+        overlays.push(new Polyline({ map, path, strokeColor: css('--surface'), strokeOpacity: 1, strokeWeight: 9, zIndex: 1 }));
+        overlays.push(new Polyline({ map, path, strokeColor: css('--accent'), strokeOpacity: 1, strokeWeight: 5, zIndex: 2 }));
       }
       path.forEach(p => bounds.extend(p));
     });
@@ -174,5 +174,6 @@ export async function mountTransportMap(element, { config, onSelect }) {
     if (key !== shownRoute) drawRoute(selected);
   }
 
-  return { update, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, get last() { return last; } };
+  function retheme() { map.setOptions({ styles: quiet(), backgroundColor: css('--map-bg') }); const sel = shownRoute.split(':')[0]; shownRoute = ''; if (last) update(last, sel || null); }
+  return { update, retheme, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, get last() { return last; } };
 }

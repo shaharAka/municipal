@@ -16,7 +16,10 @@ npm run dev
   open `http://<laptop-ip>:4173/driver.html?d=driver-10` on the phone.
 - Reset before each run: "הדגמה" in the top bar, then "איפוס" twice. The day
   returns to 07:05 on Sunday and fleet edits are undone. The same menu holds the
-  clock (▶, +5 דק׳), the phone, which driver it shows, and "ללא קליטה".
+  colour theme, the clock (▶, +5 דק׳), the driver's phone (off until you turn it
+  on), which driver it shows, "הטלפון בלי קליטה", and who is signed in.
+- The screens carry no "demo" or "simulation" labels. Say it once, out loud, at
+  the start: positions are simulated and drivers and buses are made up.
 - ⌘K (or /) searches trips, routes, villages, drivers and buses.
 - The laptop needs internet: Google Maps, and the schedule and fleet tables
   (AG Grid Community 33.2.4 from jsDelivr, the version Omni's kit uses).
@@ -31,30 +34,33 @@ npm run dev
 | Village locations | The council's public GIS (settlement midpoints) and Wikipedia; 3 places marked unknown |
 | Road routes on the map | Google Routes API |
 | Drivers, vehicles, plates, licence, test and service dates | **Demo data.** The workbook has no driver data. The real names and plates in it are not used. |
-| Bus positions on the map | **Simulation** driven by the demo clock, labelled "סימולציה · אין GPS" |
+| Bus positions on the map | **Simulation** driven by the demo clock (not labelled on screen) |
 | Route 10 (trip 10-1) | Driven live from the phone during the demo |
 
 ## Run of show (about 12 minutes)
 
-1. **The morning, at 07:05** (עכשיו).
+1. **The morning, at 07:05** (היום).
    - Seven buses are already moving across the Golan, each on its real road.
-   - Four numbers at the top, then two queues: "עכשיו בכביש" (children and
-     buses on the move, each with a call button and "טופל") and "לפני יציאה"
-     (what to fix before a bus leaves). One line per cause, not one per trip.
+   - "בוקר טוב, שוקי" and four numbers that are also the tabs: לטיפול, בדרך,
+     יוצאים בקרוב, הגיעו. לטיפול opens first: a few cards, each with one
+     button to call the driver and "טופל". Everything for later is one line at
+     the bottom: "N דברים לסדר לפני היציאה".
    - Say: "This is the workbook you use today, read as a live picture."
 2. **What the system caught before the morning started.**
    - Bus 14's test expired on 6.11 and blocks 3 trips. Driver Yossi Hazan's
      licence expired and blocks 4.
    - Six trips are planned for more students than their bus has seats. That
      comes from your own file.
-   - Click the bus-14 alert to open the fleet page, with the row highlighted.
+   - Click "N דברים לסדר לפני היציאה": the schedule opens filtered to what
+     needs fixing.
 3. **Fixing it** (סידור).
    - Open 14-1, pick "אוטובוס חלופי" (buses that fit come first), then
      "שמירה ופרסום לנהג".
    - The alert no longer lists 14-1.
    - Point out the rule: nothing reaches a driver until it's ready and
      published.
-4. **The driver's morning.** The phone on the right is David Mizrahi, route 10.
+4. **The driver's morning.** Turn on "טלפון הנהג ליד המפה" in the הדגמה menu:
+   David Mizrahi, route 10.
    - "הנסיעה הבאה 07:10" leads his screen. Tap "לנסיעה".
    - One stop per screen, with the count already set to the expected number.
    - There's no button to tap: the driver slides "עלו 15 · יציאה מהתחנה",
@@ -70,7 +76,7 @@ npm run dev
    - Mark the short-count alert "טופל": it moves to "טופלו" with your name,
      and "ביטול" in the toast brings it back.
 5. **No reception.**
-   - Turn on "ללא קליטה" in the הדגמה menu. The status bar shows "אין שירות".
+   - Turn on "הטלפון בלי קליטה" in the הדגמה menu. The status bar shows "אין שירות".
    - Slide the drop-off at the school. The trip completes on the phone and says
      the report is saved on the device; the dashboard doesn't change.
    - Turn it off. The report arrives within seconds, and 10-1 shows as completed

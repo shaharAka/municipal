@@ -175,7 +175,7 @@ export function alertsFor(trips: any[], drivers: any[], vehicles: any[], date: s
       const name = t.stops.find((x: any) => x.id === id)?.name ?? '';
       const fewer = c.count < c.expected;
       const verb = (c.kind ?? (t.direction === 'morning' ? 'pickup' : 'dropoff')) === 'pickup' ? 'עלו' : 'ירדו';
-      alerts.push({ id: `count-${t.id}`, queue: 'road', level: fewer && c.source === 'driver' ? 'high' : 'medium', kind: 'count', tripId: t.id, title: `${t.number}: ${verb} ${c.count} במקום ${c.expected}${fewer ? ` · ${c.expected - c.count} חסרים` : ''}`, detail: `${name} · ${c.source === 'driver' ? 'דיווח נהג' : 'סימולציה'}`, call: call(t) });
+      alerts.push({ id: `count-${t.id}`, queue: 'road', level: fewer && c.source === 'driver' ? 'high' : 'medium', kind: 'count', tripId: t.id, title: `${t.number}: ${verb} ${c.count} במקום ${c.expected}${fewer ? ` · ${c.expected - c.count} חסרים` : ''}`, detail: `${name}${c.source === 'driver' ? ' · דיווח נהג' : ''}`, call: call(t) });
     }
     if (t.live.phase === 'active' && t.capacity != null && t.planned > t.capacity) alerts.push({ id: `seats-${t.id}`, queue: 'road', level: 'high', kind: 'seats', tripId: t.id, title: `${t.number} בדרך עם ${t.planned} מתוכננים ל־${t.capacity} מקומות`, detail: label, call: call(t) });
   }

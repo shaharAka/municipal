@@ -124,14 +124,14 @@ export function execute(state:any,viewer:string,command:any) {
     for(const key of data.kind==='driver'?['licenseUntil']:['testUntil','serviceDue'])if(data[key])weekday(data[key]);
     const allowed=data.kind==='driver'?['licenseUntil','available']:['testUntil','serviceDue','available'];
     for(const key of allowed)if(data[key]!==undefined)entity[key]=data[key];
-    event(state,day,null,actor,'fleet','פרטי כשירות עודכנו בהדגמה');
+    event(state,day,null,actor,'fleet','פרטי כשירות עודכנו');
   } else if(command.type==='ack'||command.type==='unack') {
     const alertId=String(data.alertId||'');if(!alertId||alertId.length>200)fail('חסר מזהה התראה.');
     day.acks=day.acks||{};
     if(command.type==='ack'){const note=String(data.note||'').trim().slice(0,300);day.acks[alertId]={by:actor.name,at:new Date().toISOString(),note};event(state,day,null,actor,'ack',note?`סומן כטופל: ${note}`:'סומן כטופל',{alertId});}
     else{delete day.acks[alertId];event(state,day,null,actor,'unack','הוחזר לטיפול',{alertId});}
   } else if(command.type==='clock') {
-    if(!validTime(data.time))fail('שעת ההדגמה אינה תקינה.');day.clock=data.time;
+    if(!validTime(data.time))fail('השעה אינה תקינה.');day.clock=data.time;
   } else if(command.type==='create') {
     if(!data.school||!validTime(data.departure)||!['morning','afternoon'].includes(data.direction))fail('יש למלא בית ספר, כיוון ושעת יציאה.');
     const id='custom-'+date+'-'+day.nextId++;
