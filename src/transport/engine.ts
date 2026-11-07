@@ -51,8 +51,32 @@ export function dayFor(state: any, date: string) {
     const trips = schedule.trips.filter(t => t.weekday===day).map(t => ({...clone(t), date, version:1, ...crewOf(state, t.routeCode), published:true, phase:'pending', reports:{}, departures:[], onBoard:0, boarded:null, alighted:0, delayMinutes:0, notes:[], events:[], demoFocus:['10-1','11-1','12-1'].includes(t.number)}));
     // The day starts just before the presenter's trip; other buses move by the demo clock (simulate.ts).
     state.days[date] = {date, trips, events:[], clock:DEMO_CLOCK, nextId:1};
+    if (date===DEMO_DATE) handledYesterday(state, state.days[date]);
   }
   return state.days[date];
+}
+/** The demo morning starts where a real one would: Inbal already split the overloaded rides of
+ *  routes 16-18 yesterday, with buses and drivers that only work on Fridays. The workbook's own
+ *  numbers stay as they are; route 15 is left open to show the split live. */
+function handledYesterday(state:any, day:any) {
+  const near=(field:string,id:string,t:any)=>day.trips.some((o:any)=>o[field]===id&&Math.abs(minutes(o.departure)-minutes(t.departure))<120);
+  const buses=Object.values(state.vehicles).filter((v:any)=>v.id.includes('שישי'));
+  const drivers=Object.values(state.drivers).filter((d:any)=>String(d.routeCode).includes('שישי'));
+  const inbal={id:'inbal',name:'ענבל',role:'dispatcher'};
+  for (const t of day.trips.filter((x:any)=>['16','17','18'].includes(x.routeCode))) {
+    const cap=state.vehicles[t.vehicleId]?.capacity; if (!cap||!(t.planned>cap)) continue;
+    const bus:any=buses.find((v:any)=>!near('vehicleId',v.id,t)); const drv:any=drivers.find((d:any)=>!near('driverId',d.id,t));
+    if (!bus||!drv) continue;
+    const need=t.planned-cap;
+    const whole=[...t.stops].filter((x:any)=>x.planned>=need&&x.planned<t.planned).sort((a:any,b:any)=>a.planned-b.planned)[0];
+    let moving:any[];
+    if (whole) { moving=[whole]; t.stops=t.stops.filter((x:any)=>x!==whole); }
+    else { const big=[...t.stops].sort((a:any,b:any)=>b.planned-a.planned)[0]; moving=[{...big,planned:need}]; t.stops=t.stops.map((x:any)=>x===big?{...x,planned:x.planned-need}:x); }
+    const n=moving.reduce((a:number,x:any)=>a+x.planned,0); t.planned-=n;
+    const twin={...clone(t),id:t.id+'-b'+day.nextId++,number:t.number+' ב',stops:moving,planned:n,driverId:drv.id,vehicleId:bus.id,version:1,events:[],notes:[],reports:{},departures:[],splitFrom:t.id,published:true,demoFocus:false};
+    day.trips.push(twin);
+    event(state,day,t,inbal,'split',`פוצלה אתמול לשני רכבים: ${moving.map((x:any)=>x.name).join(', ')} עברו ל${bus.label} עם ${drv.name}`);
+  }
 }
 /** An absence (a driver) or a period out of service (a bus) that covers the date. */
 export const awayOn = (r: any, date: string) => (r?.away ?? []).some((x: any) => x.from <= date && date <= x.to);

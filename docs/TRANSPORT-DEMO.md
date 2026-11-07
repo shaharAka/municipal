@@ -37,6 +37,7 @@ npm run dev
 | 710 weekly trips, stops, times, planned students, schools | The council's workbook (sheet "סידור נסיעות", every trip traced to its row) |
 | "Needs review" flags (unverified counts, stops to clarify) | The workbook's own "לבדיקה" flags |
 | Planned students above a bus's seats (6 Sunday trips) | Workbook seat counts for 8 routes; others say "לא ידוע" |
+| Routes 16–18 already split on the demo morning | **Staged.** The demo starts as if Inbal split those overloaded rides yesterday (a second bus and driver that only work on Fridays), so the board opens with three problems: Yossi's licence, bus 14's test, and route 15, left open to show a split live. The workbook's numbers are unchanged. |
 | Village locations | The council's public GIS (settlement midpoints) and Wikipedia; 3 places marked unknown |
 | Road routes on the map | Google Routes API |
 | Drivers, vehicles, plates, licence, test and service dates | **Demo data.** The workbook has no driver data. The real names and plates in it are not used. |
