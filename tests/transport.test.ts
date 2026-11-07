@@ -218,3 +218,38 @@ test('an estimated count never raises a missing-children alert; only a driver re
   assert.ok(Object.values(scenario.live.stopCounts).some((c: any) => c.source === 'simulation' && c.count !== c.expected), 'the timetable estimate differs at כנף');
   assert.ok(!d.alerts.some((a: any) => a.kind === 'count'), 'but no count alert is raised from it');
 });
+
+test('a regular crew change applies to every future day still on the old crew, never to today', () => {
+  const s = createTransportState();
+  snapshot(s, '2026-11-09', 'shuki'); snapshot(s, '2026-11-10', 'shuki');
+  execute(s, 'shuki', { id: `p-${++n}`, type: 'template', date: DEMO_DATE, data: { routeCode: '14', vehicleId: 'bus-spare' } });
+  for (const date of ['2026-11-09', '2026-11-10', '2026-11-11']) {
+    const ts = snapshot(s, date, 'shuki').trips.filter((t: any) => t.routeCode === '14');
+    assert.ok(ts.length && ts.every((t: any) => t.vehicleId === 'bus-spare'), `route 14 runs on the spare on ${date}`);
+  }
+  assert.ok(snapshot(s, DEMO_DATE, 'shuki').trips.filter((t: any) => t.routeCode === '14').every((t: any) => t.vehicleId === 'bus-14'), 'today is untouched');
+  assert.equal(snapshot(s, DEMO_DATE, 'shuki').template['14'].vehicleId, 'bus-spare');
+});
+
+test('an absence makes a driver unavailable on those dates only, and the assistant moves his rides', async () => {
+  const { proposalsFor } = await import('../src/transport/assistant.ts');
+  const s = createTransportState();
+  execute(s, 'shuki', { id: `p-${++n}`, type: 'driver-save', date: DEMO_DATE, data: { id: 'driver-10', away: [{ from: '2026-11-10', to: '2026-11-10', reason: 'מחלה' }] } });
+  const tue = snapshot(s, '2026-11-10', 'shuki').trips.filter((t: any) => t.driverId === 'driver-10');
+  assert.ok(tue.every((t: any) => t.blockers.includes('הנהג לא זמין בתאריך הזה')));
+  assert.ok(snapshot(s, '2026-11-09', 'shuki').trips.filter((t: any) => t.driverId === 'driver-10').every((t: any) => !t.blockers.length), 'Monday is fine');
+  const p = proposalsFor(s, '2026-11-10').proposals.find((x: any) => x.id === 'driver-driver-10');
+  assert.ok(p?.apply && /מחלה/.test(p.why));
+});
+
+test('drivers and buses can be added, edited and removed; removal blocks their rides', () => {
+  const s = createTransportState();
+  execute(s, 'shuki', { id: `p-${++n}`, type: 'vehicle-save', date: DEMO_DATE, data: { label: 'אוטובוס 99', registration: '12-345-67', capacity: 60, testUntil: '2027-06-01', serviceDue: '2027-01-01' } });
+  const bus = Object.values(s.vehicles).find((v: any) => v.label === 'אוטובוס 99') as any;
+  assert.ok(bus && bus.available && bus.capacity === 60);
+  assert.throws(() => execute(s, 'shuki', { id: `p-${++n}`, type: 'vehicle-save', date: DEMO_DATE, data: { id: bus.id, capacity: 0 } }), /מקומות/);
+  execute(s, 'shuki', { id: `p-${++n}`, type: 'archive', date: DEMO_DATE, data: { kind: 'driver', id: 'driver-12' } });
+  const ts = snapshot(s, '2026-11-09', 'shuki').trips.filter((t: any) => t.driverId === 'driver-12');
+  assert.ok(ts.length && ts.every((t: any) => t.blockers.includes('הנהג אינו זמין')));
+  assert.throws(() => execute(s, 'driver-10', { id: `p-${++n}`, type: 'archive', date: DEMO_DATE, data: { kind: 'driver', id: 'driver-12' } }), /לסדרנים/);
+});
