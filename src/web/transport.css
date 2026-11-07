@@ -1099,3 +1099,5 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-tour-keys { font-size: 11px; color: var(--faint); }
 .t-tourcard .t-tour-steps { display: flex; gap: 4px; flex-wrap: wrap; }
 .t-tourcard .t-tour-steps button { width: 26px; height: 26px; font-size: 12px; cursor: pointer; }
+/* everything in the planner's scrolling area keeps its own height, so long lists scroll instead of being squeezed and clipped */
+.t-plan-body > * { flex-shrink: 0; }
