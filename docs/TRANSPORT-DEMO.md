@@ -65,12 +65,18 @@ it, or drive by hand as below.
      the toast offers "ביטול".
    - Type "דוד מזרחי לא מגיע מחר": it moves his trips to a free driver, with
      the reason, for approval.
-4. **בניית סידור.** Tomorrow, drivers down the side and the day across. Each trip is a
-   grey block with its time. Red: it can't run (expired licence or test, too few seats,
-   or a clash you made); amber: two trips at once already in their file.
-   - Drag one of Yossi Hazan's trips onto Ron Almog (spare): the row tints green, the
-     block turns dashed, "1 שינוי שהנהג עוד לא רואה · פרסום לנהגים".
-   - "12 לתיקון · לבא" steps through what's left; "הצעה לתיקון" opens the assistant.
+4. **בניית סידור.** Say: "the rides are already here, from your file; we only handle exceptions."
+   - "סידור קבוע": every route from the workbook with its regular driver and bus.
+     Bus 14 is red (expired test): click the bus chip, pick "אוטובוס חלופי", and route 14
+     runs on it every day from now on (undo in the toast).
+   - "חודש": each school day and how many rides lack a crew that can run them.
+   - "יום" (tomorrow): only the rides that need a crew. Each row has a driver chip and a
+     bus chip; clicking shows who is free at that hour, the rest with the reason ("בכל
+     זאת" after a confirmation). "שיבוץ אוטומטי" fills what it can as drafts (one undo).
+     The bar says how many changes, that only those drivers are notified, and "פרסום
+     לנהגים" (or P) sends them.
+   - On נהגים, add an absence for David Mizrahi on Tuesday with Ron Almog as the
+     substitute: his Tuesday rides move to Ron as drafts.
 5. **The driver's morning.** Turn on "טלפון הנהג על המסך": David Mizrahi,
    route 10.
    - "הנסיעה הבאה 07:10" (or "באיחור N דק׳"), "לנסיעה", one stop per screen. The count

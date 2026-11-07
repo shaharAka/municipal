@@ -694,6 +694,8 @@ function paintDayPlan(el) {
   const need = [], file = [], ok = [];
   for (const t of rides) { const p = rideProblem(t, date, d); (p ? (p.who === 'file' ? file : need) : ok).push({ t, p }); }
   const drafts = rides.filter(t => !t.published && editableTrip(t, date));
+  const pub = [...(d.events ?? [])].reverse().find(e => /פורסם/.test(e.text) && e.source === 'dispatcher');
+  const lastPub = pub ? `${new Date(pub.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })} · ${pub.actor}` : '';
   const sugg = S.plan.suggest ?? new Map();
   const autoN = need.filter(x => sugg.has(x.t.id)).length;
   const i = DAYS.findIndex(x => x.date === date);
@@ -707,12 +709,12 @@ function paintDayPlan(el) {
     const dBad = p && p.who === 'driver', bBad = p && p.who === 'bus';
     const chip = (kindKey, label, bad, why) => `<button class="t-chip-pick ${bad ? 'is-bad' : ''}" data-pick="${kindKey}:${t.id}" ${can ? '' : 'disabled'} title="${esc(why || 'החלפה')}" aria-haspopup="listbox">${kindKey === 'driver' ? I.user : I.bus}<span>${esc(label)}</span>${can ? '<i class="t-caret" aria-hidden="true">▾</i>' : ''}</button>`;
     const sgText = sg ? [sg.driverId ? name(d.drivers, sg.driverId)?.name : null, sg.vehicleId ? name(d.vehicles, sg.vehicleId)?.label : null].filter(Boolean).join(' · ') : '';
-    return `<div class="t-row2 ${kind}" data-row-trip="${t.id}">
+    return `<div class="t-row2 ${kind} ${!t.published && can ? 'is-draft' : ''}" data-row-trip="${t.id}">
       <span class="num t-alloc-time">${esc(t.departure)}</span>
       <span class="t-code">${esc(t.routeCode)}</span>
       <button class="t-row2-what" data-ride-open="${t.id}"><b>${esc(t.school)}</b><small>${num(t.planned)} תלמידים${p ? ` · <span class="${kind === 'is-need' ? 't-bad-text' : 't-warn-text'}">${esc(p.text)}</span>` : ''}</small></button>
       <span class="t-row2-crew">${chip('driver', drv?.name ?? 'אין נהג', dBad, dBad ? p.text : '')}${chip('bus', bus?.label ?? 'אין רכב', bBad, bBad ? p.text : '')}</span>
-      <span class="t-row2-act">${kind === 'is-need' && sg ? `<button class="t-sugg" data-paccept="${t.id}" title="${esc(sg.title)}"><span>${I.assist}${esc(sgText)}</span><b>${I.check} אישור</b></button>` : !t.published && can ? '<i class="t-draft">טיוטה</i>' : ''}
+      <span class="t-row2-act">${kind === 'is-need' && sg ? `<button class="t-sugg" data-paccept="${t.id}" title="${esc(sg.title)}"><span>${I.assist}${esc(sgText)}</span><b>${I.check} אישור</b></button>` : ''}
         <button class="t-icon-btn" data-rowmenu="${t.id}" aria-label="פעולות נוספות" aria-haspopup="menu">⋯</button></span>
     </div>`;
   };
@@ -722,18 +724,18 @@ function paintDayPlan(el) {
       <b>${dayWord(date)} · ${d.weekday} ${heDate(date)}</b>
       <button class="t-icon-btn" data-pgo="${DAYS[i + 1]?.date ?? ''}" ${i >= 0 && i < DAYS.length - 1 ? '' : 'disabled'} aria-label="היום הבא">${I.chev}</button>
       <span class="t-spacer"></span>
-      ${autoN ? `<button class="t-btn is-primary" data-act="auto-alloc">${I.assist} שיבוץ אוטומטי ופרסום (${num(autoN)})</button>` : ''}
+      ${autoN ? `<button class="t-btn" data-act="auto-alloc" title="משבץ רק ביום הזה, כטיוטה. אפשר לבטל בלחיצה.">${I.assist} שיבוץ אוטומטי (${num(autoN)})</button>` : ''}
     </div>
     <div class="t-alloc-wrap">
       <div class="t-alloc-list">
         <section><h2 class="t-alloc-h">צריכות צוות <span class="num">${num(need.length)}</span></h2>
           ${need.map(x => row(x, 'is-need')).join('') || `<div class="t-calm">${I.check}<b>לכל הנסיעות ביום הזה יש נהג ורכב שיכולים לצאת</b></div>`}</section>
-        ${file.length ? `<section><h2 class="t-alloc-h">לבדוק מול הקובץ <span class="num">${num(file.length)}</span></h2><p class="t-source">שתי נסיעות של אותו קו באותה שעה כבר בקובץ. אולי אלה שני רכבים, אולי טעות בקובץ.</p>${file.map(x => row(x, 'is-file')).join('')}</section>` : ''}
+        ${file.length ? `<section><button class="t-alloc-h t-alloc-toggle" data-act="toggle-file" aria-expanded="${Boolean(S.plan.showFile)}">${S.plan.showFile ? '▾' : '▸'} לבדוק מול הקובץ <span class="num">${num(file.length)}</span></button>${S.plan.showFile ? `<p class="t-source">שתי נסיעות של אותו קו באותה שעה כבר בקובץ. אולי אלה שני רכבים, אולי טעות בקובץ.</p>${file.map(x => row(x, 'is-file')).join('')}` : ''}</section>` : ''}
         <section><button class="t-alloc-h t-alloc-toggle" data-act="toggle-ready" aria-expanded="${shown}">${shown ? '▾' : '▸'} מוכנות עם הצוות הקבוע <span class="num">${num(ok.length)}</span></button>
           ${shown ? ok.map(x => row(x, '')).join('') : ''}</section>
       </div>
     </div>
-    ${drafts.length ? `<div class="t-plan-bar" role="status"><span><b>${num(drafts.length)}</b> ${drafts.length === 1 ? 'שינוי שהנהג עוד לא רואה' : 'שינויים שהנהגים עוד לא רואים'}</span><button class="t-btn is-primary" data-act="publish-drafts">פרסום לנהגים</button></div>` : ''}`;
+    ${drafts.length ? `<div class="t-plan-bar" role="status"><span><b>${num(drafts.length)}</b> ${drafts.length === 1 ? 'שינוי שעוד לא נשלח' : 'שינויים שעוד לא נשלחו'}<small>תישלח הודעה רק ל־${num(new Set(drafts.map(t => t.driverId)).size)} הנהגים שהנסיעות שלהם השתנו${lastPub ? ` · פורסם לאחרונה ${lastPub}` : ''}</small></span><button class="t-btn is-primary" data-act="publish-drafts" title="P">פרסום לנהגים (${num(drafts.length)})</button></div>` : lastPub ? `<p class="t-grid-foot">פורסם לאחרונה ${lastPub}. אין שינויים שמחכים.</p>` : ''}`;
 }
 // Who and what can run this ride: free at its hours, legal on its date, with enough seats.
 async function assignRes(tripId, kind, id) {
@@ -754,25 +756,34 @@ async function acceptSuggestion(tripId) {
   const t = dataFor(date).trips.find(x => x.id === tripId);
   const before = { tripId, driverId: t.driverId, vehicleId: t.vehicleId };
   await run(async () => {
-    await command('plan', { assignments: [{ tripId, ...(s.driverId ? { driverId: s.driverId } : {}), ...(s.vehicleId ? { vehicleId: s.vehicleId } : {}) }], publish: true, reason: s.title }, null, date);
+    await command('plan', { assignments: [{ tripId, ...(s.driverId ? { driverId: s.driverId } : {}), ...(s.vehicleId ? { vehicleId: s.vehicleId } : {}) }], publish: false, reason: s.title }, null, date);
     await loadDay(date); await loadSuggestions(date); paintPlanner();
-    toast('שובץ ופורסם לנהג', { undo: () => run(async () => { await command('plan', { assignments: [before], publish: true, reason: 'בוטל' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'בוטל') });
+    toast('שובץ. יישלח לנהג בפרסום.', { undo: () => run(async () => { await command('plan', { assignments: [before], publish: true, reason: 'בוטל' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'בוטל') });
   });
 }
 async function autoAllocate() {
   const date = S.plan.day;
   const props = S.plan.proposals ?? [];
   if (!props.length) return;
-  await run(async () => {
-    for (const p of props) await command('plan', p.apply, null, date);
+  const d = dataFor(date);
+  const before = props.flatMap(p => p.apply.assignments).map(a => { const t = d.trips.find(x => x.id === a.tripId); return { tripId: a.tripId, driverId: t?.driverId, vehicleId: t?.vehicleId, published: t?.published }; });
+  try {
+    for (const p of props) await command('plan', { ...p.apply, publish: false }, null, date);
     await loadDay(date); await loadSuggestions(date); paintPlanner();
-  }, `שובץ ופורסם: ${props.length === 1 ? props[0].title : `${props.length} שינויים`}`);
+    toast(`שובצו ${num(before.length)} נסיעות כטיוטה. בדקו ופרסמו.`, { undo: () => run(async () => {
+      await command('plan', { assignments: before.map(({ published, ...a }) => a), publish: false, reason: 'שיבוץ אוטומטי בוטל' }, null, date);
+      const was = before.filter(b => b.published).map(b => ({ tripId: b.tripId }));
+      if (was.length) await command('plan', { assignments: was, publish: true, reason: 'הוחזר' }, null, date);
+      await loadDay(date); await loadSuggestions(date); paintPlanner();
+    }, 'השיבוץ האוטומטי בוטל') });
+  } catch (e) { toast(e.message, { bad: true }); }
 }
 async function publishDrafts() {
   const date = S.plan.day;
   const ids = dataFor(date).trips.filter(t => !t.published && editableTrip(t, date)).map(t => ({ tripId: t.id }));
   if (!ids.length) return;
-  await run(async () => { await command('plan', { assignments: ids, publish: true, reason: 'פורסם לנהג' }, null, date); await loadDay(date); paintPlanner(); }, 'פורסם לנהגים');
+  const blocked = dataFor(date).trips.filter(t => !t.published && editableTrip(t, date) && t.blockers.length).length;
+  await run(async () => { await command('plan', { assignments: ids, publish: true, reason: 'פורסם לנהג' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, blocked ? `פורסם. ${blocked} נסיעות עם בעיה נשארו טיוטה עד שיהיה להן צוות.` : 'פורסם לנהגים');
 }
 async function planGo(date) {
   if (!date) return;
@@ -793,7 +804,7 @@ async function planView(v) {
 function paintPlannerSelection() {}
 // ---- a small picker anchored to a chip: free first, then the unavailable with their reason
 function closePicker() { S.picker?.el.remove(); S.picker = null; }
-function openPicker(anchor, { title, items, onPick, search = true }) {
+function openPicker(anchor, { title, items, onPick, search = true, anyway = false }) {
   closePicker();
   const el = document.createElement('div');
   el.className = 't-picker'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', title);
@@ -804,7 +815,9 @@ function openPicker(anchor, { title, items, onPick, search = true }) {
     const free = items.filter(it => !it.why && match(it));
     const busy = items.filter(it => it.why && match(it));
     list.innerHTML = free.map(it => `<button role="option" class="t-pick ${it.current ? 'is-current' : ''}" data-pid="${esc(it.id)}"><span><b>${esc(it.label)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.current ? I.check : ''}</button>`).join('')
-      + (busy.length ? `<p class="t-picker-h">לא זמינים</p>${busy.map(it => `<div class="t-pick is-off ${it.current ? 'is-current' : ''}" aria-disabled="true"><span><b>${esc(it.label)}</b><small>${esc(it.why)}</small></span></div>`).join('')}` : '')
+      + (busy.length ? `<p class="t-picker-h">לא מומלצים</p>${busy.map(it => anyway && !it.hard
+        ? `<button role="option" class="t-pick is-off" data-pid="${esc(it.id)}" data-why="${esc(it.why)}"><span><b>${esc(it.label)}</b><small>${esc(it.why)}</small></span><i class="t-anyway">בכל זאת</i></button>`
+        : `<div class="t-pick is-off" aria-disabled="true"><span><b>${esc(it.label)}</b><small>${esc(it.why)}</small></span></div>`).join('')}` : '')
       || '<p class="t-empty">לא נמצא.</p>';
   };
   draw();
@@ -812,7 +825,13 @@ function openPicker(anchor, { title, items, onPick, search = true }) {
   const r = anchor.getBoundingClientRect();
   el.style.top = `${Math.min(window.innerHeight - el.offsetHeight - 12, r.bottom + 6)}px`;
   el.style.left = `${Math.max(12, Math.min(window.innerWidth - el.offsetWidth - 12, r.right - el.offsetWidth))}px`;
-  el.addEventListener('click', e => { const b = e.target.closest('[data-pid]'); if (b) { closePicker(); onPick(b.dataset.pid); anchor.focus?.(); } });
+  el.addEventListener('click', async e => {
+    const b = e.target.closest('[data-pid]'); if (!b) return;
+    const why = b.dataset.why; const label = b.querySelector('b')?.textContent;
+    closePicker();
+    if (why && !(await ask(`לשבץ את ${label} בכל זאת? ${why}. הנסיעה תישאר מסומנת עד שזה ייפתר.`, 'לשבץ בכל זאת', 'ביטול'))) return;
+    onPick(b.dataset.pid); anchor.focus?.();
+  });
   el.querySelector('.t-picker-q')?.addEventListener('input', e => draw(e.target.value.trim()));
   (el.querySelector('.t-picker-q') ?? el.querySelector('[data-pid]'))?.focus();
   S.picker = { el, anchor };
@@ -821,13 +840,13 @@ function crewItems(kind, t, date, d) {
   const items = (kind === 'driver' ? d.drivers : d.vehicles).filter(x => !x.archived).map(x => {
     const why = kind === 'driver' ? driverState(x, t, date, d) : busState(x, t, date, d);
     const trips = d.trips.filter(o => (kind === 'driver' ? o.driverId : o.vehicleId) === x.id).length;
-    return { id: x.id, label: kind === 'driver' ? x.name : x.label, sub: kind === 'driver' ? `${x.routeCode ? `קו ${x.routeCode}` : 'חלופי'} · ${trips} נסיעות ביום` : `${x.capacity ? `${x.capacity} מקומות` : 'מקומות לא ידוע'} · ${trips} נסיעות ביום`, why: x.id === (kind === 'driver' ? t.driverId : t.vehicleId) ? '' : why, current: x.id === (kind === 'driver' ? t.driverId : t.vehicleId), spare: !x.routeCode && kind === 'driver' || x.id === 'bus-spare', trips };
+    return { id: x.id, label: kind === 'driver' ? x.name : x.label, sub: kind === 'driver' ? `${x.routeCode ? `קו ${x.routeCode}` : 'חלופי'} · ${trips} נסיעות ביום` : `${x.capacity ? `${x.capacity} מקומות` : 'מקומות לא ידוע'} · ${trips} נסיעות ביום`, why: x.id === (kind === 'driver' ? t.driverId : t.vehicleId) ? '' : why, hard: /פג|הוסר/.test(why), current: x.id === (kind === 'driver' ? t.driverId : t.vehicleId), spare: !x.routeCode && kind === 'driver' || x.id === 'bus-spare', trips };
   });
   return items.sort((a, b) => Boolean(a.why) - Boolean(b.why) || b.current - a.current || b.spare - a.spare || a.trips - b.trips);
 }
 function pickCrew(anchor, kind, tripId) {
   const date = S.plan.day; const d = dataFor(date); const t = d.trips.find(x => x.id === tripId);
-  openPicker(anchor, { title: `${kind === 'driver' ? 'נהג' : 'רכב'} לקו ${t.routeCode} · ${t.departure}`, items: crewItems(kind, t, date, d), onPick: id => assignRes(tripId, kind, id) });
+  openPicker(anchor, { title: `${kind === 'driver' ? 'נהג' : 'רכב'} לקו ${t.routeCode} · ${t.departure}`, items: crewItems(kind, t, date, d), anyway: true, onPick: id => assignRes(tripId, kind, id) });
 }
 function pickRegular(anchor, kind, code) {
   const d = dataFor(TOMORROW); const sample = d.trips.find(t => t.routeCode === code) ?? { id: '', routeCode: code, planned: 0, stops: [], departure: '00:00' };
@@ -1014,8 +1033,10 @@ function paintRecord() {
       : `${field('label', 'שם הרכב')}${field('registration', 'מספר רישוי', 'text', 'dir="ltr"')}${field('capacity', 'מספר מקומות', 'number', 'min="1" max="99"')}${field('testUntil', 'טסט בתוקף עד', 'date')}${field('serviceDue', 'טיפול הבא עד', 'date')}`}
       <div class="t-pop-row t-rec-switch"><span id="l-avail">${people ? 'זמין לשיבוץ' : 'זמין לשיבוץ (לא מושבת)'}</span><button class="t-switch" role="switch" aria-checked="${x.available !== false}" aria-labelledby="l-avail" data-act="rec-avail"></button></div>
       <h3 class="t-insp-h">${people ? 'היעדרויות' : 'השבתות'}</h3>
-      <div class="t-away">${x.away.map((a, i) => `<div class="t-away-row"><span class="num">${a.from.split('-').reverse().join('.')} – ${a.to.split('-').reverse().join('.')}</span><span>${esc(a.reason || '')}</span><button class="t-icon-btn" data-away-del="${i}" aria-label="הסרה">${I.x}</button></div>`).join('') || `<p class="t-source">אין ${people ? 'היעדרויות' : 'השבתות'} מתוכננות.</p>`}
-        <div class="t-away-add"><input type="date" class="t-input" id="away-from" aria-label="מתאריך"><input type="date" class="t-input" id="away-to" aria-label="עד תאריך"><input class="t-input" id="away-reason" placeholder="${people ? 'חופשה, מחלה, מילואים' : 'מוסך, תקלה'}" aria-label="סיבה"><button class="t-btn is-sm" data-act="away-add">הוספה</button></div>
+      <div class="t-away">${x.away.map((a, i) => `<div class="t-away-row"><span class="num">${a.from.split('-').reverse().join('.')} – ${a.to.split('-').reverse().join('.')}</span><span>${esc(a.reason || '')}${a.sub ? ` · מחליף: ${esc(S.data.drivers.find(o => o.id === a.sub)?.name ?? '')}` : ''}</span><button class="t-icon-btn" data-away-del="${i}" aria-label="הסרה">${I.x}</button></div>`).join('') || `<p class="t-source">אין ${people ? 'היעדרויות' : 'השבתות'} מתוכננות.</p>`}
+        <div class="t-away-add"><input type="date" class="t-input" id="away-from" aria-label="מתאריך"><input type="date" class="t-input" id="away-to" aria-label="עד תאריך"><input class="t-input" id="away-reason" placeholder="${people ? 'חופשה, מחלה, מילואים' : 'מוסך, תקלה'}" aria-label="סיבה">
+          ${people && r.id ? `<label class="t-label" for="away-sub">מי מחליף בימים האלה</label><select id="away-sub" class="t-select"><option value="">אחליט בבניית הסידור</option>${S.data.drivers.filter(o => o.id !== r.id && !o.archived && o.available !== false && o.licenseUntil >= TOMORROW).sort((a, b) => Number(Boolean(a.routeCode)) - Number(Boolean(b.routeCode))).map(o => `<option value="${o.id}">${esc(o.name)}${o.routeCode ? ` · קו ${o.routeCode}` : ' · חלופי'}</option>`).join('')}</select>` : ''}
+          <button class="t-btn is-sm" data-act="away-add">הוספה</button></div>
       </div>
       <div id="rec-impact"></div>
     </div>
@@ -1034,8 +1055,16 @@ async function saveRecord() {
   const data = people ? { id: r.id ?? undefined, name: x.name, contact: x.contact, licenseType: x.licenseType, licenseUntil: x.licenseUntil, available: x.available !== false, away: x.away }
     : { id: r.id ?? undefined, label: x.label, registration: x.registration, capacity: x.capacity === '' || x.capacity == null ? null : Number(x.capacity), testUntil: x.testUntil, serviceDue: x.serviceDue, available: x.available !== false, away: x.away };
   try {
-    await command(people ? 'driver-save' : 'vehicle-save', data, null, TODAY);
+    await command(people ? 'driver-save' : 'vehicle-save', { ...data, away: data.away.map(({ sub, ...a }) => a) }, null, TODAY);
     await loadDay(TODAY);
+    // An absence with a substitute moves that driver's rides on those days to the substitute, as drafts.
+    let moved = 0;
+    if (people && r.id) for (const a of x.away.filter(a => a.sub)) for (const day of DAYS.filter(dd => dd.date >= a.from && dd.date <= a.to && dd.date > TODAY)) {
+      const dd = await loadDay(day.date);
+      const ts = dd.trips.filter(t => t.driverId === r.id && t.phase === 'pending');
+      if (ts.length) { await command('plan', { assignments: ts.map(t => ({ tripId: t.id, driverId: a.sub })), publish: false, reason: `מחליף בזמן ההיעדרות של ${x.name}` }, null, day.date); moved += ts.length; await loadDay(day.date); }
+    }
+    if (moved) { S.rec = null; paintRecord(); paintFleet(); toast(`נשמר. ${moved} נסיעות עברו למחליף כטיוטה.`, { action: { label: 'לבניית הסידור', fn: () => { S.plan.view = 'day'; location.hash = '#/plan'; } } }); return; }
     const saved = r.id ?? (people ? S.data.drivers : S.data.vehicles).at(-1)?.id;
     S.rec = null; paintRecord(); paintFleet(); S.flash = saved; paintFleet();
     const impact = saved ? await upcomingImpact(saved) : [];
@@ -1278,7 +1307,7 @@ document.addEventListener('click', async e => {
   if (act === 'rec-new') openRecord(view(), null);
   if (act === 'rec-close') { S.rec = null; paintRecord(); S.grids.fleet?.redrawRows(); }
   if (act === 'rec-avail') { S.rec.draft.available = S.rec.draft.available === false; el.setAttribute('aria-checked', S.rec.draft.available !== false); }
-  if (act === 'away-add') { const from = $('#away-from').value, to = $('#away-to').value || from; if (!from) { toast('יש לבחור תאריך התחלה', { bad: true }); return; } S.rec.draft.away.push({ from, to: to < from ? from : to, reason: $('#away-reason').value.trim() }); paintRecord(); }
+  if (act === 'away-add') { const from = $('#away-from').value, to = $('#away-to').value || from; if (!from) { toast('יש לבחור תאריך התחלה', { bad: true }); return; } S.rec.draft.away.push({ from, to: to < from ? from : to, reason: $('#away-reason').value.trim(), sub: $('#away-sub')?.value || '' }); paintRecord(); }
   if (act === 'rec-save') saveRecord();
   if (act === 'rec-archive') archiveRecord(false);
   if (act === 'rec-restore') archiveRecord(true);
@@ -1297,6 +1326,7 @@ document.addEventListener('click', async e => {
   if (act === 'publish-drafts') publishDrafts();
   if (act === 'auto-alloc') autoAllocate();
   if (act === 'toggle-ready') { S.plan.showReady = !S.plan.showReady; paintPlanner(); }
+  if (act === 'toggle-file') { S.plan.showFile = !S.plan.showFile; paintPlanner(); }
   if (act === 'guide-hide') { store.set('t-plan-guide', '0'); $('.t-guide')?.remove(); }
   if (act === 'fleet-issues') { S.fleetIssues = !S.fleetIssues; el.setAttribute('aria-pressed', S.fleetIssues); paintFleet(); }
   if (act === 'tour') { S.pop = false; tourGo(0); }
@@ -1374,6 +1404,7 @@ document.addEventListener('keydown', e => {
   if (typing || e.metaKey || e.ctrlKey || e.altKey) { if (e.key === 'Escape') e.target.blur(); return; }
   if (e.key === '/') { e.preventDefault(); openCmd(); return; }
   if (e.key === '?') { S.help = !S.help; paintHelp(); return; }
+  if ((e.key === 'p' || e.key === 'P' || e.key === 'פ') && view() === 'plan' && S.plan.view === 'day') { publishDrafts(); return; }
   if (e.key.toLowerCase() === 'm' || e.key === 'צ') { S.mapOpen ? closeMap() : openMap(); return; }
   if (e.key.toLowerCase() === 'a' || e.key === 'ש') { S.assist ? (S.assist = null, paintAssist(), rail()) : openAssist(TOMORROW); return; }
   if (e.key === 'Escape' && S.picker) { const a = S.picker.anchor; closePicker(); a?.focus?.(); return; }

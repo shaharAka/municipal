@@ -548,7 +548,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke-width: 1.75; }
 .t-dot-bad[hidden] { display: none; }
 #plan-conflicts { display: flex; gap: 8px; align-items: center; }
 .t-ok-text { color: var(--muted); font-size: 13px; }
-.t-warn-text { color: var(--bad); }
+.t-warn-text { color: var(--warn); }
 .t-tl { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .t-tl-inner { width: calc(var(--tl-w) + 232px); min-width: 100%; }
 .t-tl-head, .t-tl-row { display: grid; grid-template-columns: 200px minmax(calc(var(--tl-w) + 32px), 1fr); }
@@ -765,3 +765,9 @@ button.t-res:hover { border-color: var(--ink-2); }
 button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2); }
 .t-pick.is-current svg.i { color: var(--accent-text); }
 .t-pick.is-off { opacity: .6; }
+/* drafts: a quiet stripe until published (When I Work) */
+.t-row2.is-draft { background-image: repeating-linear-gradient(135deg, transparent 0 8px, var(--surface-2) 8px 10px); border-style: dashed; border-color: var(--line-2); }
+.t-plan-bar small { display: block; font-size: 12px; opacity: .75; font-weight: 400; }
+.t-anyway { font-style: normal; font-size: 12px; color: var(--accent-text); white-space: nowrap; }
+.t-pick.is-off[data-pid] { opacity: .8; cursor: pointer; }
+.t-pick.is-off[data-pid]:hover { background: var(--surface-2); opacity: 1; }
