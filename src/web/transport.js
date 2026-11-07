@@ -788,9 +788,9 @@ function paintInbox(el) {
     ${list.length ? (() => {
       const i = Math.min(S.plan.ci ?? 0, list.length - 1); S.plan.ci = i;
       const c = list[i];
-      return `<nav class="t-cnav" aria-label="הבעיות ${dayWord(date)}">${list.map((x, k) => `<button class="t-cchip ${k === i ? 'is-on' : ''}" data-ci="${k}" aria-current="${k === i}">${causeChip(x, d)}</button>`).join('')}</nav>
+      return `<nav class="t-cnav" aria-label="הבעיות ${dayWord(date)}">${list.map((x, k) => `<button class="t-cchip ${k === i ? 'is-on' : ''}" data-cidx="${k}" aria-current="${k === i}">${causeChip(x, d)}</button>`).join('')}</nav>
       <div class="t-carousel">
-        <button class="t-cnext" data-ci="${i - 1}" ${i === 0 ? 'disabled' : ''} aria-label="הבעיה הקודמת">${I.chev}</button>
+        <button class="t-cnext" data-cidx="${i - 1}" ${i === 0 ? 'disabled' : ''} aria-label="הבעיה הקודמת">${I.chev}</button>
         <article class="t-cause" data-cause="${esc(c.key)}">
           ${S.plan.solved ? `<p class="t-solved" role="status">${I.check} ${esc(S.plan.solved)}. ${list.length ? 'הבעיה הבאה:' : ''}</p>` : ''}
           <p class="t-cpos">בעיה ${num(i + 1)} מתוך ${num(list.length)}</p>
@@ -798,7 +798,7 @@ function paintInbox(el) {
           <div class="t-tags">${rideList(c.rides)}</div>
           ${c.res ? optionsBlock(c, date, d, 'plan') : `<p class="t-norec">${esc(c.recWhy)}</p><div class="t-actions"><button class="t-btn" data-pview="all">לרשימת הנסיעות</button></div>`}
         </article>
-        <button class="t-cnext is-next" data-ci="${i + 1}" ${i >= list.length - 1 ? 'disabled' : ''} aria-label="הבעיה הבאה">${I.chev}</button>
+        <button class="t-cnext is-next" data-cidx="${i + 1}" ${i >= list.length - 1 ? 'disabled' : ''} aria-label="הבעיה הבאה">${I.chev}</button>
       </div>`; })() : ''}
     <div class="t-causes">
       ${drafts.length ? `<article class="t-cause is-quiet"><header><b>${num(drafts.length)} שינויים שעוד לא נשלחו לנהגים</b></header><div class="t-actions"><button class="t-btn is-primary" data-act="publish-drafts">שליחה לנהגים</button></div></article>` : ''}
@@ -2020,8 +2020,8 @@ document.addEventListener('click', async e => {
   if (mr) { const date = S.mday; const v = mr.dataset.mrestore; run(async () => { await command('restore', v === 'all' ? { all: true } : { tripIds: v.split(',') }, null, date); await afterMonthChange(date); }, 'הנסיעות הוחזרו'); return; }
   const mal = e.target.closest('[data-mall]');
   if (mal) { S.plan.day = mal.dataset.mall; S.mday = null; paintMonthDay(); planView('all'); return; }
-  const cix = e.target.closest('[data-ci]');
-  if (cix && !cix.disabled) { S.plan.ci = Number(cix.dataset.ci); paintPlanner(); document.querySelector('.t-carousel .t-cause')?.focus?.(); return; }
+  const cix = e.target.closest('[data-cidx]');
+  if (cix && !cix.disabled) { S.plan.ci = Number(cix.dataset.cidx); paintPlanner(); document.querySelector('.t-carousel .t-cause')?.focus?.(); return; }
   const tc = e.target.closest('[data-tip-close]');
   if (tc) { try { localStorage.setItem(`t-tip-${tc.dataset.tipClose}`, 'closed'); } catch {} tc.closest('.t-tip')?.remove(); return; }
   const wf = e.target.closest('[data-wf]');
