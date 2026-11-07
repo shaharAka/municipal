@@ -851,3 +851,20 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-daytab .t-dot-bad { margin: 0 0 0 4px; }
 .t-prep-link { border-color: var(--line); background: var(--surface); color: var(--ink); }
 .t-prep-link small { color: var(--muted); }
+/* options: every viable choice, one recommended and pre-selected */
+.t-opts { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+.t-opt { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
+.t-opt:hover { border-color: var(--line-2); }
+.t-opt.is-on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.t-opt input { margin: 3px 0 0; accent-color: var(--ink); width: 16px; height: 16px; }
+.t-opt b { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.t-opt small { display: block; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.t-recommend { font-style: normal; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); border: 1px solid var(--ok-line); }
+.t-opts > .t-link { justify-self: start; margin: 2px 4px; }
+.t-cause .t-actions { align-items: center; }
+.t-fixline { margin: 0; font-size: 13px; }
+.t-focus .t-opt { padding: 8px 10px; }
+.t-focus > .t-link { justify-self: start; font-size: 13px; }
+.t-opts-more { display: flex; gap: 16px; flex-wrap: wrap; margin: 2px 4px; }
+.t-norec b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
+.t-meta-attn { color: var(--bad); font-weight: 600; }

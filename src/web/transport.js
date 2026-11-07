@@ -24,7 +24,7 @@ const S = {
   plan: { view: 'fix', day: TOMORROW, q: '', sel: null, route: null, showReady: false, suggest: new Map(), proposals: [], month: null }, table: { q: '', facet: '' },
   assist: null, // { date, ask, busy, result, applied: Set }
   tour: null, // { step }
-  phone: false, offline: false, driver: 'driver-10', pop: false, confirmReset: false, cmd: null, help: false, flash: null,
+  phone: false, offline: false, driver: 'driver-10', pop: false, confirmReset: false, cmd: null, help: false, flash: null, opt: {}, optMore: {},
 };
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -230,11 +230,11 @@ function alertCard(a, lead = true) {
   const p = lead ? 'is-primary' : '';
   return `<div class="t-alert is-${a.level}">
     <button class="t-alert-open" data-ride="${esc(a.tripId)}"><b>${esc(a.title)}</b><span class="t-detail">${esc(a.detail)}</span></button>
-    <div class="t-actions">
-      ${fix ? `<button class="t-btn ${p} is-sm" data-focus="${esc(a.id)}" aria-expanded="${S.focus?.alertId === a.id}">${I.assist} הצעה להחלפה</button>` : ''}
+    ${S.focus?.alertId === a.id ? '' : `<div class="t-actions">
+      ${fix ? `<button class="t-btn ${p} is-sm" data-focus="${esc(a.id)}" aria-expanded="false">${a.fix.kind === 'bus' ? 'בחירת רכב חלופי' : 'בחירת נהג חלופי'}</button>` : ''}
       ${a.call ? `<a class="t-btn ${p} is-sm" href="tel:${esc(a.call.phone)}" data-call="${esc(a.call.name)}|${esc(a.call.phone)}">${I.call} להתקשר ל${esc(firstName(a.call.name))}</a>` : ''}
       <button class="t-btn is-sm" data-ack="${esc(a.id)}">${I.check} טופל</button>
-    </div>
+    </div>`}
     ${S.focus?.alertId === a.id ? focusBlock() : ''}
   </div>`;
 }
@@ -242,13 +242,7 @@ function alertCard(a, lead = true) {
 function focusBlock() {
   const f = S.focus;
   if (f.busy) return '<div class="t-focus"><p class="t-source">מחפש נהג או רכב פנויים…</p></div>';
-  const p = f.proposal;
-  if (!p) return `<div class="t-focus"><p>אין כרגע ${f.kind === 'bus' ? 'רכב' : 'נהג'} פנוי ותקין בשעות האלה. אפשר לבקש מקבלן, או לבחור ידנית בבניית הסידור.</p><div class="t-actions"><button class="t-btn is-sm" data-pgo-today="1">לבניית הסידור</button><button class="t-btn is-sm is-ghost" data-act="focus-close">סגירה</button></div></div>`;
-  return `<div class="t-focus" role="region" aria-label="הצעה">
-    <b>${esc(p.title)}</b><p>${esc(p.why)}</p>
-    ${p.changes.length ? `<ul>${p.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
-    <div class="t-actions">${p.apply ? `<button class="t-btn is-primary is-sm" data-act="focus-apply">${I.check} אישור ופרסום לנהגים</button>` : ''}<button class="t-btn is-sm is-ghost" data-act="focus-close">לא עכשיו</button></div>
-  </div>`;
+  return `<div class="t-focus" role="region" aria-label="אפשרויות">${optionsBlock(f.cause, TODAY, S.data, 'board', '<button class="t-btn" data-act="focus-close">לא עכשיו</button>')}</div>`;
 }
 async function focusFix(alertId) {
   if (S.focus?.alertId === alertId) { S.focus = null; paintRides(); return; }
@@ -258,19 +252,11 @@ async function focusFix(alertId) {
   try {
     const r = await api(`/api/transport/assistant?date=${TODAY}`);
     const proposal = r.proposals.find(p => p.id === `${a.fix.kind === 'bus' ? 'bus' : 'driver'}-${a.fix.id}`) ?? r.proposals.find(p => (p.tripIds ?? []).some(id => (a.tripIds ?? [a.tripId]).includes(id)));
-    S.focus = { alertId, proposal, kind: a.fix.kind };
+    const rides = (a.tripIds ?? [a.tripId]).map(id => S.data.trips.find(t => t.id === id)).filter(Boolean);
+    const [head, ...rest] = (proposal?.why ?? a.title).split('. ');
+    S.focus = { alertId, kind: a.fix.kind, cause: { key: `${a.fix.kind === 'bus' ? 'bus' : 'driver'}-${a.fix.id}`, res: a.fix.kind === 'bus' ? 'bus' : 'driver', head, rides, applies: proposal?.apply ? [proposal.apply] : [], recWhy: rest.join('. ') } };
   } catch (e) { S.focus = null; toast(e.message, { bad: true }); }
   paintRides();
-}
-async function focusApply() {
-  const p = S.focus?.proposal;
-  if (!p?.apply) return;
-  const undo = p.apply.assignments.map(x => { const t = S.data.trips.find(y => y.id === x.tripId); return { tripId: x.tripId, driverId: t?.driverId, vehicleId: t?.vehicleId }; });
-  try {
-    await command('plan', p.apply, null, TODAY);
-    S.focus = null; await loadDay(TODAY); repaint();
-    toast(`בוצע ופורסם: ${p.title}`, { undo: () => run(async () => { await command('plan', { assignments: undo, publish: true, reason: 'בוטל' }, null, TODAY); await loadDay(TODAY); repaint(); }, 'השינוי בוטל') });
-  } catch (e) { toast(e.message, { bad: true, retry: focusApply }); }
 }
 function boardColumns() {
   const d = S.data;
@@ -320,7 +306,7 @@ function ridesMeta() {
   const d = S.data;
   const c = boardColumns();
   const el = $('#rides-meta');
-  if (el) el.textContent = [`יום ${d.weekday} ${heDate(d.date)}`, `${num(d.trips.length)} נסיעות היום`, `${num(c.moving.length)} בדרך`, c.open.length ? `${num(c.open.length)} דורשים טיפול` : 'אין מה לטפל'].join(' · ');
+  if (el) el.innerHTML = [c.open.length ? `<b class="t-meta-attn">${num(c.open.length)} ${c.open.length === 1 ? 'דבר דורש' : 'דברים דורשים'} טיפול</b>` : 'אין כרגע מה לטפל', `${num(c.moving.length)} בדרך`, `${num(c.done.length)} הגיעו`, `${num(d.trips.length)} נסיעות ביום ${esc(d.weekday)} ${heDate(d.date)}`].join(' · ');
 }
 function paintRides() {
   ridesMeta();
@@ -686,18 +672,14 @@ function paintInbox(el) {
   const know = (S.plan.all ?? []).filter(p => p.tone === 'info' && ['expiring', 'checks'].includes(p.id));
   const rideList = rides => rides.slice(0, 6).map(t => `<span class="t-tag num">קו ${esc(t.routeCode)} · ${esc(t.departure)}</span>`).join('') + (rides.length > 6 ? `<span class="t-tag">ועוד ${num(rides.length - 6)}</span>` : '');
   el.innerHTML = `<section class="t-dstatus ${list.length ? 'is-open' : 'is-ok'}">
-      ${list.length ? `<b>${num(list.length)} ${list.length === 1 ? 'דבר לסדר' : 'דברים לסדר'} ${dayWord(date)}</b><span>${num(affected)} מתוך ${num(d.trips.length)} נסיעות. כל השאר יוצאות עם הנהג והרכב הקבועים.</span>`
+      ${list.length ? `<b>${num(list.length)} ${list.length === 1 ? 'דבר לסדר' : 'דברים לסדר'} ${dayWord(date)}</b><span>${num(affected)} נסיעות צריכות נהג או רכב אחר · ${num(d.trips.length - affected)} האחרות מוכנות עם הצוות הקבוע</span>`
         : `<b>${I.check} ${dayWord(date)} מוכן</b><span>כל ${num(d.trips.length)} הנסיעות יוצאות עם נהג ורכב שיכולים לצאת.</span>`}
     </section>
     <div class="t-causes">
       ${list.map(c => `<article class="t-cause" data-cause="${esc(c.key)}">
         <header><b>${esc(c.head)}</b><span class="num">${num(c.rides.length)} ${c.rides.length === 1 ? 'נסיעה' : 'נסיעות'}</span></header>
         <div class="t-tags">${rideList(c.rides)}</div>
-        ${c.rec ? `<div class="t-rec"><span>${I.check}<span><b>${esc(c.rec)}</b><small>${esc(c.recWhy)}</small></span></span></div>` : `<p class="t-norec">${esc(c.recWhy)}</p>`}
-        <div class="t-actions">
-          ${c.applies.length ? `<button class="t-btn is-primary" data-cause-ok="${esc(c.key)}">${I.check} אישור ושליחה לנהגים</button>` : ''}
-          ${c.res ? `<button class="${c.applies.length ? 't-link-btn' : 't-btn is-primary'}" data-cause-pick="${esc(c.key)}" aria-haspopup="listbox">${c.applies.length ? 'בחירה אחרת' : `בחירת ${c.res === 'bus' ? 'רכב' : 'נהג'}`}</button>` : `<button class="t-btn" data-pview="all">לרשימת הנסיעות</button>`}
-        </div>
+        ${c.res ? optionsBlock(c, date, d, 'plan') : `<p class="t-norec">${esc(c.recWhy)}</p><div class="t-actions"><button class="t-btn" data-pview="all">לרשימת הנסיעות</button></div>`}
       </article>`).join('')}
       ${drafts.length ? `<article class="t-cause is-quiet"><header><b>${num(drafts.length)} שינויים שעוד לא נשלחו לנהגים</b></header><div class="t-actions"><button class="t-btn is-primary" data-act="publish-drafts">שליחה לנהגים</button></div></article>` : ''}
     </div>
@@ -706,28 +688,74 @@ function paintInbox(el) {
     <p class="t-grid-foot"><button class="t-link" data-pview="all">כל ${num(d.trips.length)} הנסיעות ${dayWord(date)}</button></p>`;
 }
 function causeByKey(key) { return causes(S.plan.day).find(c => c.key === key); }
-async function applyCause(c, applies, label) {
-  const date = S.plan.day; const d = dataFor(date);
+// ---- every viable option for a cause, the recommended one first and pre-selected; the button names the action
+function causeOptions(c, date, d) {
+  if (!c.res || !c.rides.length) return [];
+  const per = c.rides.map(t => crewItems(c.res, t, date, d));
+  const recId = c.applies[0]?.assignments?.[0]?.[c.res === 'bus' ? 'vehicleId' : 'driverId'];
+  const most = Math.max(0, ...c.rides.map(t => t.planned || 0));
+  const free = c.rides.length === 1 ? 'פנוי בשעה הזו' : `פנוי בכל ${c.rides.length} הנסיעות`;
+  const opts = per[0].filter(x => !x.current && per.every(list => { const y = list.find(z => z.id === x.id); return y && !y.why && !y.current; }))
+    .map(x => {
+      const r = (c.res === 'bus' ? d.vehicles : d.drivers).find(y => y.id === x.id) ?? {};
+      const load = x.trips ? `עוד ${num(x.trips)} נסיעות ביום` : 'בלי נסיעות אחרות ביום';
+      const bits = c.res === 'bus'
+        ? [r.capacity ? `${num(r.capacity)} מקומות${most ? ` ל־${num(most)} תלמידים` : ''}` : 'מספר מקומות לא רשום', x.spare ? 'רכב חלופי' : load, free]
+        : [x.spare ? 'נהג חלופי' : `נוהג בקו ${r.routeCode}`, load, free];
+      return { id: x.id, label: x.label, sub: bits.join(' · '), rec: x.id === recId };
+    });
+  return opts.sort((a, b) => b.rec - a.rec);
+}
+function optionsBlock(c, date, d, scope, cancel = '') {
+  const opts = causeOptions(c, date, d);
+  const key = `${scope}|${c.key}`;
+  const who = c.res === 'bus' ? 'רכב' : 'נהג';
+  const fixLink = /^(bus|driver)-/.test(c.key) ? (() => { const id = c.key.replace(/^(bus|driver)-/, ''); const kind = c.key.startsWith('bus-') ? 'vehicles' : 'drivers'; const what = /פג/.test(c.head) ? (kind === 'vehicles' ? 'הטסט חודש?' : 'הרישיון חודש?') : 'השתנה משהו?'; return `<button class="t-link t-fixlink" data-rec-open="${kind}:${id}">${what} לעדכון הפרטים של ${esc((kind === 'vehicles' ? d.vehicles : d.drivers).find(x => x.id === id)?.[kind === 'vehicles' ? 'label' : 'name'] ?? '')}</button>`; })() : '';
+  if (!opts.length) return `<p class="t-norec"><b>אף ${who} פנוי לא מתאים ל${c.rides.length === 1 ? 'נסיעה הזו' : `כל ${num(c.rides.length)} הנסיעות`}</b>אפשר לבחור מהרשימה המלאה ולראות מה חסר לכל אחד, או לבקש ${who} מקבלן.</p>
+    <div class="t-actions"><button class="t-btn is-primary" data-cause-pick="${esc(c.key)}" data-scope="${scope}">בחירה מהרשימה המלאה</button>${cancel}</div>${fixLink ? `<p class="t-fixline">${fixLink}</p>` : ''}`;
+  const sel = opts.find(o => o.id === S.opt[key]) ?? opts[0];
+  const more = S.optMore[key];
+  const shown = more ? opts : opts.slice(0, 3);
+  if (!shown.includes(sel)) shown.push(sel);
+  return `<fieldset class="t-opts"><legend class="sr-only">אפשרויות</legend>
+      ${shown.map(o => `<label class="t-opt ${o.id === sel.id ? 'is-on' : ''}"><input type="radio" name="opt-${esc(key)}" value="${esc(o.id)}" data-opt="${esc(key)}" ${o.id === sel.id ? 'checked' : ''}>
+        <span><b>${esc(o.label)}${o.rec ? '<i class="t-recommend">מומלץ</i>' : ''}</b><small>${esc(o.sub)}</small></span></label>`).join('')}
+      <span class="t-opts-more">${opts.length > 3 ? `<button type="button" class="t-link" data-opt-more="${esc(key)}">${more ? 'פחות אפשרויות' : `עוד ${num(opts.length - 3)} אפשרויות פנויות`}</button>` : ''}<button type="button" class="t-link" data-cause-pick="${esc(c.key)}" data-scope="${scope}">בחירה ידנית מכל הרשימה</button></span>
+    </fieldset>
+    <div class="t-actions"><button class="t-btn is-primary" data-opt-ok="${esc(key)}" data-opt-id="${esc(sel.id)}">${I.check} אישור: ${esc(sel.label)}</button>${cancel}<span class="t-source">${c.rides.length === 1 ? 'הנהג יקבל הודעה' : `${num(c.rides.length)} נהגים יקבלו הודעה`} · אפשר לבטל</span></div>
+    ${fixLink ? `<p class="t-fixline">${fixLink}</p>` : ''}`;
+}
+async function confirmOption(scope, causeKey, id) {
+  const c = scope === 'plan' ? causeByKey(causeKey) : S.focus?.cause;
+  if (!c) return;
+  const date = scope === 'plan' ? S.plan.day : TODAY;
+  const d = dataFor(date);
+  const name = c.res === 'bus' ? d.vehicles.find(v => v.id === id)?.label : d.drivers.find(x => x.id === id)?.name;
+  const label = `${name} שובץ ${c.rides.length === 1 ? `בקו ${c.rides[0].routeCode} (${c.rides[0].departure})` : `ב־${num(c.rides.length)} נסיעות`}`;
+  await applyCause(c, [{ assignments: c.rides.map(t => ({ tripId: t.id, [c.res === 'bus' ? 'vehicleId' : 'driverId']: id })), publish: true, reason: `${name} במקום: ${c.head}` }], label, date);
+}
+async function applyCause(c, applies, label, date = S.plan.day) {
+  const d = dataFor(date);
   const before = c.rides.map(t => ({ tripId: t.id, driverId: t.driverId, vehicleId: t.vehicleId }));
   try {
     for (const a of applies) await command('plan', { ...a, publish: true }, null, date);
-    await refreshPlan(date);
+    if (view() === 'plan') await refreshPlan(date); else { S.focus = null; await loadDay(date); repaint(); }
     const routes = [...new Set(c.rides.map(t => t.routeCode))];
     const chosen = applies[0]?.assignments?.[0]?.[c.res === 'bus' ? 'vehicleId' : 'driverId'];
-    const undo = async () => { await command('plan', { assignments: before, publish: true, reason: 'בוטל' }, null, date); S.plan.done = (S.plan.done ?? []).filter(x => x.key !== c.key || x.date !== date); await refreshPlan(date); };
+    const undo = async () => { await command('plan', { assignments: before, publish: true, reason: 'בוטל' }, null, date); S.plan.done = (S.plan.done ?? []).filter(x => x.key !== c.key || x.date !== date); if (view() === 'plan') await refreshPlan(date); else { await loadDay(date); repaint(); } };
     (S.plan.done ??= []).push({ key: c.key, date, text: label, undo });
-    paintPlanner();
-    toast(`נשלח לנהגים: ${label}`, { undo: () => run(undo, 'בוטל'), action: routes.length === 1 && chosen && c.res ? { label: `להפוך לקבוע בקו ${routes[0]}`, fn: () => setRegular(routes[0], c.res, chosen) } : null });
+    if (view() === 'plan') paintPlanner();
+    toast(`${label} · נשלח לנהגים`, { undo: () => run(undo, 'בוטל'), action: routes.length === 1 && chosen && c.res ? { label: `להפוך לקבוע בקו ${routes[0]}`, fn: () => setRegular(routes[0], c.res, chosen) } : null });
   } catch (e) { toast(e.message, { bad: true }); }
 }
-function pickForCause(anchor, c) {
-  const date = S.plan.day; const d = dataFor(date);
+function pickForCause(anchor, c, date = S.plan.day) {
+  const d = dataFor(date);
   const per = c.rides.map(t => crewItems(c.res, t, date, d));
   const items = per[0].filter(x => !x.current).map(x => ({ ...x, why: per.map(list => list.find(y => y.id === x.id)?.why).find(Boolean) ?? '', current: false }));
   items.sort((a, b) => Boolean(a.why) - Boolean(b.why) || b.spare - a.spare || a.trips - b.trips);
   openPicker(anchor, { title: `${c.res === 'bus' ? 'רכב' : 'נהג'} ל־${c.rides.length === 1 ? 'נסיעה' : `${c.rides.length} הנסיעות`}`, items, anyway: true, onPick: id => {
     const label = `${c.res === 'bus' ? (d.vehicles.find(v => v.id === id)?.label) : (d.drivers.find(x => x.id === id)?.name)} ב־${c.rides.length === 1 ? `קו ${c.rides[0].routeCode}` : `${c.rides.length} נסיעות`}`;
-    applyCause(c, [{ assignments: c.rides.map(t => ({ tripId: t.id, [c.res === 'bus' ? 'vehicleId' : 'driverId']: id })), publish: true, reason: label }], label);
+    applyCause(c, [{ assignments: c.rides.map(t => ({ tripId: t.id, [c.res === 'bus' ? 'vehicleId' : 'driverId']: id })), publish: true, reason: label }], label, date);
   } });
 }
 async function refreshPlan(date) { await loadDay(date); if (date !== TODAY) await loadDay(TODAY); await Promise.all([loadSuggestions(date), loadMonth()]); paintPlanner(); }
@@ -751,7 +779,7 @@ function paintChange() {
 async function saveChange() {
   const c = S.change;
   c.id = $('#chg-who').value; c.from = $('#chg-from').value; c.to = $('#chg-to').value || c.from;
-  if (!c.id || !c.from) { toast('יש לבחור מי ומתי', { bad: true }); return; }
+  if (!c.id || !c.from) { toast('בחרו מי לא זמין וממתי', { bad: true }); return; }
   const rec = (c.kind === 'driver' ? S.data.drivers : S.data.vehicles).find(x => x.id === c.id);
   try {
     await command(c.kind === 'driver' ? 'driver-save' : 'vehicle-save', { id: c.id, away: [...(rec.away ?? []), { from: c.from, to: c.to < c.from ? c.from : c.to, reason: c.reason || '' }] }, null, TODAY);
@@ -760,7 +788,7 @@ async function saveChange() {
     S.plan.view = 'fix';
     await Promise.all(DAYS.map(x => loadDay(x.date)));
     await refreshPlan(S.plan.day);
-    toast(`נשמר: ${rec.name ?? rec.label} לא ${c.kind === 'driver' ? 'זמין' : 'זמין'} ${c.from === c.to ? heDate(c.from) : `${heDate(c.from)}–${heDate(c.to)}`}. ההצעה למחליף ברשימה.`);
+    toast(`${rec.name ?? rec.label} לא ${c.kind === 'driver' ? 'זמין' : 'זמין'} ${c.from === c.to ? `ב־${heDate(c.from)}` : `${heDate(c.from)}–${heDate(c.to)}`} · המחליפים מוצעים למטה`);
   } catch (e) { toast(e.message, { bad: true }); }
 }
 function paintMonth(el) {
@@ -869,7 +897,7 @@ async function assignRes(tripId, kind, id) {
   try {
     await command('plan', { assignments: [{ tripId, [key]: id }], publish: false, reason: 'שובץ בבניית הסידור' }, null, date);
     await loadDay(date); await loadSuggestions(date); paintPlanner();
-    toast('שובץ. הנהג יראה אחרי פרסום.', { action: { label: `לקבוע כקבוע לקו ${t.routeCode}`, fn: () => setRegular(t.routeCode, kind, id) }, undo: () => run(async () => { await command('plan', { assignments: [before], publish: t.published, reason: 'בוטל' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'השיבוץ בוטל') });
+    toast('נשמר כטיוטה · יישלח לנהג בלחיצה על "שליחה לנהגים"', { action: { label: `לקבוע כקבוע לקו ${t.routeCode}`, fn: () => setRegular(t.routeCode, kind, id) }, undo: () => run(async () => { await command('plan', { assignments: [before], publish: t.published, reason: 'בוטל' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'השיבוץ בוטל') });
   } catch (e) { toast(e.message, { bad: true }); }
 }
 async function acceptSuggestion(tripId) {
@@ -881,7 +909,7 @@ async function acceptSuggestion(tripId) {
   await run(async () => {
     await command('plan', { assignments: [{ tripId, ...(s.driverId ? { driverId: s.driverId } : {}), ...(s.vehicleId ? { vehicleId: s.vehicleId } : {}) }], publish: false, reason: s.title }, null, date);
     await loadDay(date); await loadSuggestions(date); paintPlanner();
-    toast('שובץ. יישלח לנהג בפרסום.', { undo: () => run(async () => { await command('plan', { assignments: [before], publish: true, reason: 'בוטל' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'בוטל') });
+    toast('נשמר כטיוטה · יישלח לנהג בלחיצה על "שליחה לנהגים"', { undo: () => run(async () => { await command('plan', { assignments: [before], publish: true, reason: 'בוטל' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'בוטל') });
   });
 }
 async function autoAllocate() {
@@ -893,7 +921,7 @@ async function autoAllocate() {
   try {
     for (const p of props) await command('plan', { ...p.apply, publish: false }, null, date);
     await loadDay(date); await loadSuggestions(date); paintPlanner();
-    toast(`שובצו ${num(before.length)} נסיעות כטיוטה. בדקו ופרסמו.`, { undo: () => run(async () => {
+    toast(`${num(before.length)} נסיעות שובצו כטיוטה · בדקו ושלחו לנהגים`, { undo: () => run(async () => {
       await command('plan', { assignments: before.map(({ published, ...a }) => a), publish: false, reason: 'שיבוץ אוטומטי בוטל' }, null, date);
       const was = before.filter(b => b.published).map(b => ({ tripId: b.tripId }));
       if (was.length) await command('plan', { assignments: was, publish: true, reason: 'הוחזר' }, null, date);
@@ -1063,7 +1091,7 @@ async function applyProposal(id) {
     await command('plan', p.apply, null, a.date);
     a.applied.add(id);
     await loadDay(a.date);
-    toast(`בוצע: ${p.title}`, { undo: () => run(async () => { await command('plan', { assignments: undo, publish: true, reason: 'בוטל לבקשת הסדרן' }, null, a.date); a.applied.delete(id); await loadDay(a.date); await runAssist(); repaint(); }, 'השינוי בוטל') });
+    toast(`${p.title} · נשלח לנהגים`, { undo: () => run(async () => { await command('plan', { assignments: undo, publish: true, reason: 'בוטל לבקשת הסדרן' }, null, a.date); a.applied.delete(id); await loadDay(a.date); await runAssist(); repaint(); }, 'השינוי בוטל') });
     await runAssist(); a.applied.add(id);
     repaint();
   } catch (e) { toast(e.message, { bad: true, retry: () => applyProposal(id) }); }
@@ -1187,7 +1215,7 @@ async function saveRecord() {
       const ts = dd.trips.filter(t => t.driverId === r.id && t.phase === 'pending');
       if (ts.length) { await command('plan', { assignments: ts.map(t => ({ tripId: t.id, driverId: a.sub })), publish: false, reason: `מחליף בזמן ההיעדרות של ${x.name}` }, null, day.date); moved += ts.length; await loadDay(day.date); }
     }
-    if (moved) { S.rec = null; paintRecord(); paintFleet(); toast(`נשמר. ${moved} נסיעות עברו למחליף כטיוטה.`, { action: { label: 'לבניית הסידור', fn: () => { S.plan.view = 'day'; location.hash = '#/plan'; } } }); return; }
+    if (moved) { S.rec = null; paintRecord(); paintFleet(); toast(`${num(moved)} נסיעות עברו למחליף כטיוטה`, { action: { label: 'לבניית הסידור', fn: () => { S.plan.view = 'day'; location.hash = '#/plan'; } } }); return; }
     const saved = r.id ?? (people ? S.data.drivers : S.data.vehicles).at(-1)?.id;
     S.rec = null; paintRecord(); paintFleet(); S.flash = saved; paintFleet();
     const impact = saved ? await upcomingImpact(saved) : [];
@@ -1393,10 +1421,16 @@ document.addEventListener('click', async e => {
   if (tp) { const [k, code] = tp.dataset.tpick.split(':'); pickRegular(tp, k, code); return; }
   const rm = e.target.closest('[data-rowmenu]');
   if (rm) { rowMenu(rm, rm.dataset.rowmenu); return; }
+  const ok = e.target.closest('[data-opt-ok]');
+  if (ok) { const [scope, key] = ok.dataset.optOk.split('|'); confirmOption(scope, key, ok.dataset.optId); return; }
+  const om = e.target.closest('[data-opt-more]');
+  if (om) { S.optMore[om.dataset.optMore] = !S.optMore[om.dataset.optMore]; view() === 'plan' ? paintPlanner() : paintRides(); return; }
+  const ro = e.target.closest('[data-rec-open]');
+  if (ro) { const [v, id] = ro.dataset.recOpen.split(':'); openRecord(v, id); return; }
   const cok = e.target.closest('[data-cause-ok]');
   if (cok) { const c = causeByKey(cok.dataset.causeOk); if (c) applyCause(c, c.applies, c.rec); return; }
   const cpk = e.target.closest('[data-cause-pick]');
-  if (cpk) { const c = causeByKey(cpk.dataset.causePick); if (c) pickForCause(cpk, c); return; }
+  if (cpk) { const c = cpk.dataset.scope === 'board' ? S.focus?.cause : causeByKey(cpk.dataset.causePick); if (c) pickForCause(cpk, c, cpk.dataset.scope === 'board' ? TODAY : S.plan.day); return; }
   const ud = e.target.closest('[data-undo-done]');
   if (ud) { const list = (S.plan.done ?? []).filter(x => x.date === S.plan.day); const x = list[Number(ud.dataset.undoDone)]; if (x) run(x.undo, 'בוטל'); return; }
   const kn = e.target.closest('[data-prop-know]');
@@ -1440,11 +1474,10 @@ document.addEventListener('click', async e => {
   if (act === 'change') { S.change = { kind: 'driver', id: '', from: S.plan.day, to: S.plan.day, reason: '' }; paintChange(); }
   if (act === 'change-close') { S.change = null; paintChange(); }
   if (act === 'focus-close') { S.focus = null; paintRides(); }
-  if (act === 'focus-apply') focusApply();
   if (act === 'rec-new') openRecord(view(), null);
   if (act === 'rec-close') { S.rec = null; paintRecord(); S.grids.fleet?.redrawRows(); }
   if (act === 'rec-avail') { S.rec.draft.available = S.rec.draft.available === false; el.setAttribute('aria-checked', S.rec.draft.available !== false); }
-  if (act === 'away-add') { const from = $('#away-from').value, to = $('#away-to').value || from; if (!from) { toast('יש לבחור תאריך התחלה', { bad: true }); return; } S.rec.draft.away.push({ from, to: to < from ? from : to, reason: $('#away-reason').value.trim(), sub: $('#away-sub')?.value || '' }); paintRecord(); }
+  if (act === 'away-add') { const from = $('#away-from').value, to = $('#away-to').value || from; if (!from) { toast('בחרו תאריך התחלה', { bad: true }); return; } S.rec.draft.away.push({ from, to: to < from ? from : to, reason: $('#away-reason').value.trim(), sub: $('#away-sub')?.value || '' }); paintRecord(); }
   if (act === 'rec-save') saveRecord();
   if (act === 'rec-archive') archiveRecord(false);
   if (act === 'rec-restore') archiveRecord(true);
@@ -1514,6 +1547,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.opt) { S.opt[el.dataset.opt] = el.value; view() === 'plan' ? paintPlanner() : paintRides(); document.querySelector(`[data-opt="${CSS.escape(el.dataset.opt)}"][value="${CSS.escape(el.value)}"]`)?.focus(); return; }
   if (el.dataset.act === 'viewer') { S.viewer = el.value; store.set('t-viewer', S.viewer); refresh().then(rail); }
   if (el.dataset.act === 'driver') { S.driver = el.value; $('#phone-slot').innerHTML = ''; paintPhone(); }
   if (el.dataset.fleet) {
