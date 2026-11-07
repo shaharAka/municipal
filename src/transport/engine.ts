@@ -1,7 +1,7 @@
 import schedule from './schedule.json' with { type: 'json' };
 import { composeBaseline, loadPacks, pageProblems } from '../ontology/compose.ts';
 import { refFor } from '../graph/graph.ts';
-import { liveFor, pointsFor, alertsFor } from './simulate.ts';
+import { liveFor, pointsFor, alertsFor, FLEET_CAUSE } from './simulate.ts';
 export const DEMO_DATE = '2026-11-08';
 export const DEMO_CLOCK = '07:05';
 const DEMO_NAMES = ['דוד מזרחי','יעקב אוחיון','סאמר חלבי','אבי ברק','מוחמד ספדי','משה דהן','אלון שגיא','ראובן לוי','ניר עמר','אדהם אבו סאלח','שלמה פרץ','יוסי חזן','רמי נחום','אייל גבאי','ואיל מסעדה','עמית כרמי','חיים אזולאי','טל רוזן','ג׳מאל אבו זייד','אורי שלום','בני אדרי','גיל נאור','סלים חוסיין','אליהו ביטון','עופר זיו','נתן פרידמן','מאיר כהן','יגאל טל','שמעון דוד','איתי בר','רפאל אסולין'];
@@ -75,7 +75,9 @@ export function nextStop(trip:any) {
 export function tripView(state:any, trip:any, clock = DEMO_CLOCK) {
   const issues=readiness(state,trip,trip.date);
   const reports=Object.values(trip.reports) as any[];
-  const live=liveFor(trip, clock);
+  // Blocked = cannot legally run (fleet) or a dispatcher change not yet published; workbook data flags do not block.
+  const blockedReason=issues.find((i:string)=>FLEET_CAUSE.test(i)) ?? (!trip.published && !issues.length ? 'לא פורסמה לנהג' : null);
+  const live=liveFor(trip, clock, blockedReason);
   const mismatch=Object.values(live.stopCounts).some((c:any)=>c.expected!=null && c.count!==c.expected);
   return {...trip, issues, points:pointsFor(trip), live, driverName:state.drivers[trip.driverId]?.name || 'לא משובץ',driverContact:state.drivers[trip.driverId]?.contact || null,vehicleName:state.vehicles[trip.vehicleId]?.label || 'לא משובץ',capacity:state.vehicles[trip.vehicleId]?.capacity || null,status:live.status, mismatch,nextStop:nextStop(trip), actual:live.boarded, reportSource:reports.length ? reports.some(r=>r.source==='driver')?'driver':'demo':null, canPublish:issues.length===0};
 }
@@ -86,7 +88,7 @@ export function snapshot(state:any,date:string,viewer:string) {
   const dispatcher=actor.role==='dispatcher';
   const drivers=dispatcher?Object.values(state.drivers):[state.drivers[actor.id]];
   const vehicles=dispatcher?Object.values(state.vehicles):[...new Set(trips.map((t:any)=>t.vehicleId))].map(id=>state.vehicles[id as string]);
-  return {revision:state.revision,date,weekday:DAYS[weekday(date)],actor,clock:day.clock,source:schedule.source,trips:views,drivers,vehicles,alerts:dispatcher?alertsFor(views,drivers,vehicles,date,day.clock):[],events:day.events.filter((e:any)=>dispatcher||trips.some((t:any)=>t.id===e.tripId)),identityMode:'demo',gps:{connected:false,source:'simulation',label:'מיקומי הרכבים בהדגמה הם סימולציה לפי שעון ההדגמה; אין חיבור GPS'},serverTime:new Date().toISOString()};
+  return {revision:state.revision,date,weekday:DAYS[weekday(date)],actor,clock:day.clock,source:schedule.source,trips:views,drivers,vehicles,alerts:dispatcher?alertsFor(views,drivers,vehicles,date,day.clock,day.acks??{}):[],events:day.events.filter((e:any)=>dispatcher||trips.some((t:any)=>t.id===e.tripId)),identityMode:'demo',gps:{connected:false,source:'simulation',label:'מיקומי הרכבים בהדגמה הם סימולציה לפי שעון ההדגמה; אין חיבור GPS'},serverTime:new Date().toISOString()};
 }
 function event(state:any, day:any, trip:any,actor:any,kind:string,text:string,extra:any={}) {
   const e={id:'transport-event-'+day.nextId++,tripId:trip?.id||null,actor:actor.name,actorId:actor.id,kind,text,at:new Date().toISOString(),source:actor.role==='driver'?'driver':'dispatcher',...extra};
@@ -106,12 +108,13 @@ export function execute(state:any,viewer:string,command:any) {
   const date=command.date, day=dayFor(state,date);
   if(command.type==='reset') {
     if(actor.role!=='dispatcher')fail('איפוס זמין לסדרנים בלבד.',403);
-    delete state.days[date];dayFor(state,date);state.revision++;return {revision:state.revision};
+    // A full demo reset: every day, and the fleet records edited during the run.
+    const fresh=createTransportState();state.drivers=fresh.drivers;state.vehicles=fresh.vehicles;state.days={};dayFor(state,date);state.revision++;return {revision:state.revision};
   }
   const trip=day.trips.find((t:any)=>t.id===command.tripId);
-  const dispatcher=['assign','edit','publish','create','note','fleet','clock'].includes(command.type);
+  const dispatcher=['assign','edit','publish','create','note','fleet','clock','ack','unack'].includes(command.type);
   if(dispatcher&&actor.role!=='dispatcher')fail('הפעולה זמינה לסדרנים בלבד.',403);
-  if(!['fleet','clock','create'].includes(command.type)&&!trip)fail('הנסיעה אינה קיימת ביום שנבחר.',404);
+  if(!['fleet','clock','create','ack','unack'].includes(command.type)&&!trip)fail('הנסיעה אינה קיימת ביום שנבחר.',404);
   if(trip && actor.role==='driver' && (trip.driverId!==actor.id||!trip.published))fail('לנהג אין גישה לנסיעה הזו.',403);
   if(trip && command.version!==trip.version)fail('הנסיעה השתנתה. רעננו את הנתונים לפני ניסיון נוסף.',409);
   const data=command.data||{};
@@ -122,6 +125,11 @@ export function execute(state:any,viewer:string,command:any) {
     const allowed=data.kind==='driver'?['licenseUntil','available']:['testUntil','serviceDue','available'];
     for(const key of allowed)if(data[key]!==undefined)entity[key]=data[key];
     event(state,day,null,actor,'fleet','פרטי כשירות עודכנו בהדגמה');
+  } else if(command.type==='ack'||command.type==='unack') {
+    const alertId=String(data.alertId||'');if(!alertId||alertId.length>200)fail('חסר מזהה התראה.');
+    day.acks=day.acks||{};
+    if(command.type==='ack'){const note=String(data.note||'').trim().slice(0,300);day.acks[alertId]={by:actor.name,at:new Date().toISOString(),note};event(state,day,null,actor,'ack',note?`סומן כטופל: ${note}`:'סומן כטופל',{alertId});}
+    else{delete day.acks[alertId];event(state,day,null,actor,'unack','הוחזר לטיפול',{alertId});}
   } else if(command.type==='clock') {
     if(!validTime(data.time))fail('שעת ההדגמה אינה תקינה.');day.clock=data.time;
   } else if(command.type==='create') {

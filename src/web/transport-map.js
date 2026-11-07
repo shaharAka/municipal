@@ -83,8 +83,13 @@ export async function mountTransportMap(element, { config, onSelect }) {
     const done = trip.live.departedIndex;
     const bounds = new google.maps.LatLngBounds();
     if (paths) paths.forEach((path, i) => {
-      const line = new Polyline({ map, path, strokeColor: i < done ? '#9AA6B5' : '#1977cc', strokeOpacity: 0.9, strokeWeight: 5 });
-      overlays.push(line); path.forEach(p => bounds.extend(p));
+      // Remaining road in electric blue with a white casing; driven legs fade to stone.
+      if (i < done) overlays.push(new Polyline({ map, path, strokeColor: '#a9aca5', strokeOpacity: 0.9, strokeWeight: 5 }));
+      else {
+        overlays.push(new Polyline({ map, path, strokeColor: '#ffffff', strokeOpacity: 1, strokeWeight: 9, zIndex: 1 }));
+        overlays.push(new Polyline({ map, path, strokeColor: '#2b5bff', strokeOpacity: 1, strokeWeight: 5, zIndex: 2 }));
+      }
+      path.forEach(p => bounds.extend(p));
     });
     let n = 0;
     pts.forEach((p, i) => {

@@ -61,8 +61,9 @@ export function pointsFor(trip: any): Point[] {
 export type Live = {
   mode: 'manual' | 'simulation';
   phase: 'pending' | 'active' | 'completed';
-  status: 'upcoming' | 'late' | 'active' | 'delayed' | 'completed';
+  status: 'upcoming' | 'blocked' | 'late' | 'active' | 'delayed' | 'completed';
   lateMinutes: number;
+  blockedReason: string | null;
   departedIndex: number; // last point left behind; -1 before the start
   fraction: number; // progress from departedIndex to the next point
   position: { lat: number; lng: number } | null;
@@ -78,9 +79,17 @@ const at = (points: Point[], i: number, f: number) => {
   return { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
 };
 
-export function liveFor(trip: any, clock: string): Live {
+/** Issues that legally stop a bus from running (as opposed to planning-data questions). */
+export const FLEET_CAUSE = /רישיון|רישוי|טיפול|זמין|חסר שיבוץ/;
+
+export function liveFor(trip: any, clock: string, blockedReason: string | null = null): Live {
   const points = pointsFor(trip);
   const now = minutesOf(clock);
+  // A blocked trip never moves: no driver can take it until a dispatcher fixes and publishes it.
+  if (blockedReason && trip.phase === 'pending') {
+    const lateMinutes = Math.max(0, now - minutesOf(trip.departure));
+    return { mode: 'simulation', phase: 'pending', status: lateMinutes > 0 ? 'late' : 'blocked', lateMinutes, blockedReason, departedIndex: -1, fraction: 0, position: null, positionSource: null, boarded: null, stopCounts: {} };
+  }
   const manual = MANUAL_ROUTES.has(String(trip.routeCode)) || Object.values(trip.reports ?? {}).some((r: any) => r.source === 'driver') || trip.phase !== 'pending';
   if (manual) {
     const departedIndex = points.reduce((last, p, i) => (trip.departures.includes(p.id) ? i : last), -1);
@@ -94,7 +103,7 @@ export function liveFor(trip: any, clock: string): Live {
     const stopCounts: Live['stopCounts'] = {};
     for (const [id, r] of Object.entries(trip.reports ?? {}) as [string, any][]) stopCounts[id] = { count: r.count, expected: r.expected ?? null, source: 'driver', kind: r.kind };
     return {
-      mode: 'manual', phase: trip.phase, lateMinutes,
+      mode: 'manual', phase: trip.phase, lateMinutes, blockedReason: null,
       status: trip.phase === 'completed' ? 'completed' : lateMinutes ? (trip.phase === 'active' ? 'delayed' : 'late') : trip.phase === 'active' ? 'active' : 'upcoming',
       departedIndex, fraction, position: trip.phase === 'pending' && lateStart <= 0 && now < minutesOf(trip.departure) - 30 ? null : trip.phase === 'completed' ? null : at(points, departedIndex < 0 ? 0 : departedIndex, fraction),
       positionSource: 'simulation', boarded: trip.boarded, stopCounts,
@@ -123,7 +132,7 @@ export function liveFor(trip: any, clock: string): Live {
   const soon = phase === 'pending' && now >= times[0] - 10;
   const recent = phase === 'completed' && now <= times[times.length - 1] + 15;
   return {
-    mode: 'simulation', phase, lateMinutes: delay && phase !== 'completed' && now >= minutesOf(points[0].time) ? delay : 0,
+    mode: 'simulation', phase, blockedReason: null, lateMinutes: delay && phase !== 'completed' && now >= minutesOf(points[0].time) ? delay : 0,
     status: phase === 'completed' ? 'completed' : delay && now >= minutesOf(points[0].time) ? (phase === 'active' ? 'delayed' : 'late') : phase === 'active' ? 'active' : 'upcoming',
     departedIndex, fraction,
     position: phase === 'active' || recent || soon ? at(points, Math.max(0, departedIndex), fraction) : null,
@@ -133,55 +142,76 @@ export function liveFor(trip: any, clock: string): Live {
   };
 }
 
-export type Alert = { id: string; level: 'high' | 'medium' | 'low'; kind: string; tripId?: string; entityId?: string; title: string; detail: string };
+export type Alert = {
+  id: string; queue: 'road' | 'prep'; level: 'high' | 'medium' | 'low'; kind: string;
+  tripId?: string; entityId?: string; title: string; detail: string;
+  call?: { name: string; phone: string } | null;
+  handled?: { by: string; at: string; note: string } | null;
+};
 
 const DAY = 86_400_000;
 
-/** What needs a dispatcher, most urgent first. One alert per cause, never one per symptom. */
-export function alertsFor(trips: any[], drivers: any[], vehicles: any[], date: string, clock: string): Alert[] {
+/**
+ * What needs a dispatcher, in two queues: "road" is what is happening to children
+ * now; "prep" is what can still be fixed before a bus leaves. One alert per cause.
+ */
+export function alertsFor(trips: any[], drivers: any[], vehicles: any[], date: string, clock: string, acks: Record<string, any> = {}): Alert[] {
   const alerts: Alert[] = [];
   const now = minutesOf(clock);
+  const driverOf = (t: any) => drivers.find(d => d.id === t.driverId);
+  const call = (t: any) => { const d = driverOf(t); return d?.contact ? { name: d.name, phone: d.contact } : null; };
+  const list = (ts: any[]) => ts.slice(0, 4).map(t => t.number).join(', ') + (ts.length > 4 ? ` ועוד ${ts.length - 4}` : '');
+
+  // ---- road: children and buses on the move
   for (const t of trips) {
-    const label = `${t.number} · ${t.school}`;
-    if (t.live.status === 'late') alerts.push({ id: `late-${t.id}`, level: 'high', kind: 'late', tripId: t.id, title: `${t.number} לא יצא · ${t.live.lateMinutes} דק׳`, detail: label });
-    else if (t.live.status === 'delayed') alerts.push({ id: `delay-${t.id}`, level: 'high', kind: 'delay', tripId: t.id, title: `${t.number} מאחר ${t.live.lateMinutes} דק׳`, detail: label });
-    if (t.unaccounted) alerts.push({ id: `unaccounted-${t.id}`, level: 'high', kind: 'count', tripId: t.id, title: `${t.number}: ${t.unaccounted} תלמידים לא דווחו כיורדים`, detail: `${t.school} · דיווח נהג` });
+    const label = `${t.school}`;
+    if (t.live.status === 'late' && t.live.blockedReason) alerts.push({ id: `blocked-${t.id}`, queue: 'road', level: 'high', kind: 'late', tripId: t.id, title: `${t.number} לא יצאה · חסומה`, detail: `${t.live.blockedReason} · ${label}`, call: null });
+    else if (t.live.status === 'late') alerts.push({ id: `late-${t.id}`, queue: 'road', level: 'high', kind: 'late', tripId: t.id, title: `${t.number} לא יצאה · ${t.live.lateMinutes} דק׳`, detail: label, call: call(t) });
+    else if (t.live.status === 'delayed') alerts.push({ id: `delay-${t.id}`, queue: 'road', level: 'high', kind: 'delay', tripId: t.id, title: `${t.number} מאחרת ${t.live.lateMinutes} דק׳`, detail: label, call: call(t) });
+    if (t.unaccounted) alerts.push({ id: `unaccounted-${t.id}`, queue: 'road', level: 'high', kind: 'count', tripId: t.id, title: `${t.number}: ${t.unaccounted} תלמידים לא דווחו כיורדים`, detail: `${label} · דיווח נהג`, call: call(t) });
     const off = Object.entries(t.live.stopCounts).filter(([id, c]: any) => c.expected != null && c.count !== c.expected && !(t.unaccounted && (id === 'school' || c.kind === 'dropoff'))) as [string, any][];
     if (off.length) {
       const [id, c] = off[0];
-      const name = t.stops.find((s: any) => s.id === id)?.name ?? '';
+      const name = t.stops.find((x: any) => x.id === id)?.name ?? '';
       const fewer = c.count < c.expected;
-      alerts.push({ id: `count-${t.id}`, level: fewer && c.source === 'driver' ? 'high' : 'medium', kind: 'count', tripId: t.id, title: `${t.number}: ${(c.kind ?? (t.direction === 'morning' ? 'pickup' : 'dropoff')) === 'pickup' ? 'עלו' : 'ירדו'} ${c.count} במקום ${c.expected}${fewer ? ` · ${c.expected - c.count} חסרים` : ''}`, detail: `${name} · ${c.source === 'driver' ? 'דיווח נהג' : 'סימולציה'}` });
+      const verb = (c.kind ?? (t.direction === 'morning' ? 'pickup' : 'dropoff')) === 'pickup' ? 'עלו' : 'ירדו';
+      alerts.push({ id: `count-${t.id}`, queue: 'road', level: fewer && c.source === 'driver' ? 'high' : 'medium', kind: 'count', tripId: t.id, title: `${t.number}: ${verb} ${c.count} במקום ${c.expected}${fewer ? ` · ${c.expected - c.count} חסרים` : ''}`, detail: `${name} · ${c.source === 'driver' ? 'דיווח נהג' : 'סימולציה'}`, call: call(t) });
     }
+    if (t.live.phase === 'active' && t.capacity != null && t.planned > t.capacity) alerts.push({ id: `seats-${t.id}`, queue: 'road', level: 'high', kind: 'seats', tripId: t.id, title: `${t.number} בדרך עם ${t.planned} מתוכננים ל־${t.capacity} מקומות`, detail: label, call: call(t) });
   }
-  // Readiness: one alert per cause, with the trips it blocks; fleet causes are reported on the driver or bus.
-  const fleetCause = /רישיון|רישוי|טיפול|זמין|חסר שיבוץ/;
+
+  // ---- prep: what can still be fixed before a bus leaves
   const byIssue = new Map<string, any[]>();
   for (const t of trips) {
-    if (t.live.phase !== 'pending') continue;
-    for (const issue of t.issues) if (!fleetCause.test(issue)) { const key = /מקומות/.test(issue) ? 'מתוכננים יותר תלמידים ממקומות ברכב' : /כמויות|מספר התלמידים/.test(issue) ? 'כמויות תלמידים לא מאומתות בקובץ' : issue; const seen = byIssue.get(key) ?? []; if (!seen.includes(t)) byIssue.set(key, [...seen, t]); }
+    for (const issue of t.issues) {
+      if (FLEET_CAUSE.test(issue)) continue;
+      const seats = /מקומות/.test(issue);
+      if (seats && t.live.phase !== 'pending') continue; // on the road it is a road alert
+      const key = seats ? 'מתוכננים יותר תלמידים ממקומות ברכב' : /כמויות|מספר התלמידים/.test(issue) ? 'כמויות תלמידים לא מאומתות בקובץ' : issue;
+      const seen = byIssue.get(key) ?? [];
+      if (!seen.includes(t)) byIssue.set(key, [...seen, t]);
+    }
   }
-  const list = (ts: any[]) => ts.slice(0, 4).map(t => t.number).join(', ') + (ts.length > 4 ? ` ועוד ${ts.length - 4}` : '');
   for (const [issue, ts] of byIssue) {
-    alerts.push({ id: `issue-${issue}`, level: /מקומות/.test(issue) ? 'high' : 'medium', kind: 'ready', tripId: ts[0].id, title: ts.length === 1 ? `${ts[0].number}: ${issue}` : `${issue} · ${ts.length} נסיעות`, detail: list(ts) });
+    alerts.push({ id: `issue-${issue}`, queue: 'prep', level: /מקומות/.test(issue) ? 'high' : 'medium', kind: 'ready', tripId: ts[0].id, title: ts.length === 1 ? `${ts[0].number}: ${issue}` : `${issue} · ${ts.length} נסיעות`, detail: list(ts) });
   }
   const unpublished = trips.filter(t => t.live.phase === 'pending' && !t.published && !t.issues.length && minutesOf(t.departure) - now <= 120);
-  if (unpublished.length) alerts.push({ id: 'unpublished', level: 'medium', kind: 'publish', tripId: unpublished[0].id, title: `${unpublished.length} נסיעות לא פורסמו לנהג`, detail: list(unpublished) });
+  if (unpublished.length) alerts.push({ id: 'unpublished', queue: 'prep', level: 'medium', kind: 'publish', tripId: unpublished[0].id, title: `${unpublished.length} נסיעות לא פורסמו לנהג`, detail: list(unpublished) });
   const today = Date.parse(date);
   const days = (d: string) => Math.round((Date.parse(d) - today) / DAY);
-  const blocked = (field: string, id: string) => trips.filter(t => t[field] === id && t.live.phase === 'pending');
+  const waiting = (field: string, id: string) => trips.filter(t => t[field] === id && t.live.phase === 'pending');
   for (const d of drivers) if (d.licenseUntil && days(d.licenseUntil) < 0) {
-    const ts = blocked('driverId', d.id);
-    alerts.push({ id: `lic-${d.id}`, level: 'high', kind: 'fleet', entityId: d.id, tripId: ts[0]?.id, title: `רישיון הנהיגה של ${d.name} פג`, detail: ts.length ? `חוסם ${ts.length} נסיעות היום: ${list(ts)}` : `פג ב־${d.licenseUntil.split('-').reverse().join('.')}` });
+    const ts = waiting('driverId', d.id);
+    alerts.push({ id: `lic-${d.id}`, queue: 'prep', level: 'high', kind: 'fleet', entityId: d.id, tripId: ts[0]?.id, title: `רישיון הנהיגה של ${d.name} פג`, detail: ts.length ? `חוסם ${ts.length} נסיעות היום: ${list(ts)}` : `פג ב־${d.licenseUntil.split('-').reverse().join('.')}` });
   }
   for (const v of vehicles) {
     if (v.testUntil && days(v.testUntil) < 0) {
-      const ts = blocked('vehicleId', v.id);
-      alerts.push({ id: `test-${v.id}`, level: 'high', kind: 'fleet', entityId: v.id, tripId: ts[0]?.id, title: `הטסט של ${v.label} פג`, detail: ts.length ? `חוסם ${ts.length} נסיעות היום: ${list(ts)}` : `פג ב־${v.testUntil.split('-').reverse().join('.')}` });
-    } else if (v.serviceDue && days(v.serviceDue) <= 7) alerts.push({ id: `svc-${v.id}`, level: 'low', kind: 'fleet', entityId: v.id, title: `טיפול ל${v.label} בעוד ${Math.max(0, days(v.serviceDue))} ימים`, detail: v.serviceDue.split('-').reverse().join('.') });
+      const ts = waiting('vehicleId', v.id);
+      alerts.push({ id: `test-${v.id}`, queue: 'prep', level: 'high', kind: 'fleet', entityId: v.id, tripId: ts[0]?.id, title: `הטסט של ${v.label} פג`, detail: ts.length ? `חוסם ${ts.length} נסיעות היום: ${list(ts)}` : `פג ב־${v.testUntil.split('-').reverse().join('.')}` });
+    } else if (v.serviceDue && days(v.serviceDue) <= 7) alerts.push({ id: `svc-${v.id}`, queue: 'prep', level: 'low', kind: 'fleet', entityId: v.id, title: `טיפול ל${v.label} בעוד ${Math.max(0, days(v.serviceDue))} ימים`, detail: v.serviceDue.split('-').reverse().join('.') });
   }
-  // What is happening on the road now outranks what can be fixed in the schedule.
   const rank = { high: 0, medium: 1, low: 2 };
-  const live = (a: Alert) => (['count', 'late', 'delay'].includes(a.kind) ? 0 : 1);
-  return alerts.sort((a, b) => rank[a.level] - rank[b.level] || live(a) - live(b));
+  return alerts
+    .map(a => ({ ...a, handled: acks[a.id] ?? null }))
+    .sort((a, b) => rank[a.level] - rank[b.level]);
 }

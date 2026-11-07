@@ -14,8 +14,10 @@ npm run dev
 - Driver app on its own: <http://127.0.0.1:4173/driver.html?d=driver-10>
 - On a real phone over the same Wi-Fi: run `HOST=0.0.0.0 npm run dev`, then
   open `http://<laptop-ip>:4173/driver.html?d=driver-10` on the phone.
-- Reset before each run: the ↺ button at the top left. The day returns to
-  07:05 on Sunday.
+- Reset before each run: "הדגמה" in the top bar, then "איפוס" twice. The day
+  returns to 07:05 on Sunday and fleet edits are undone. The same menu holds the
+  clock (▶, +5 דק׳), the phone, which driver it shows, and "ללא קליטה".
+- ⌘K (or /) searches trips, routes, villages, drivers and buses.
 
 ## What is real and what is staged
 
@@ -34,8 +36,9 @@ npm run dev
 
 1. **The morning, at 07:05** (עכשיו).
    - Seven buses are already moving across the Golan, each on its real road.
-   - Four numbers at the top, and a short "דורש טיפול" list: one line per
-     cause, not one per trip.
+   - Four numbers at the top, then two queues: "עכשיו בכביש" (children and
+     buses on the move, each with a call button and "טופל") and "לפני יציאה"
+     (what to fix before a bus leaves). One line per cause, not one per trip.
    - Say: "This is the workbook you use today, read as a live picture."
 2. **What the system caught before the morning started.**
    - Bus 14's test expired on 6.11 and blocks 3 trips. Driver Yossi Hazan's
@@ -44,7 +47,8 @@ npm run dev
      comes from your own file.
    - Click the bus-14 alert to open the fleet page, with the row highlighted.
 3. **Fixing it** (סידור).
-   - Open 14-1, pick "אוטובוס חלופי", save the assignment, then "פרסום לנהג".
+   - Open 14-1, pick "אוטובוס חלופי" (buses that fit come first), then
+     "שמירה ופרסום לנהג".
    - The alert no longer lists 14-1.
    - Point out the rule: nothing reaches a driver until it's ready and
      published.
@@ -59,13 +63,15 @@ npm run dev
      Slide.
    - On the left, the top alert immediately reads "10-1: עלו 30 במקום 32 · 2
      חסרים".
-   - Send him a note from the trip ("הודעה לנהג"). A badge appears on the
-     phone's "הודעות" tab.
+   - Send him a note from the trip ("הודעה לנהג", typed in place). A badge
+     appears on the phone's "הודעות" tab.
+   - Mark the short-count alert "טופל": it moves to "טופלו" with your name,
+     and "ביטול" in the toast brings it back.
 5. **No reception.**
-   - Tick "ללא קליטה" above the phone. The status bar shows "אין שירות".
+   - Turn on "ללא קליטה" in the הדגמה menu. The status bar shows "אין שירות".
    - Slide the drop-off at the school. The trip completes on the phone and says
      the report is saved on the device; the dashboard doesn't change.
-   - Untick it. The report arrives within seconds, and 10-1 shows as completed
+   - Turn it off. The report arrives within seconds, and 10-1 shows as completed
      on the dispatcher's side.
    - Had David counted fewer children leaving than were on board, the trip
      would still complete, with "N תלמידים לא דווחו כיורדים" as the top alert.

@@ -3,8 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>מערך ההסעות · מועצה אזורית גולן</title>
-    <link rel="stylesheet" href="./aka-kit/theme.css">
+    <title>הסעת תלמידים · מועצה אזורית גולן</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="./transport.css">
   </head>
   <body>
@@ -12,7 +14,8 @@
       <header class="t-top" id="top"></header>
       <main id="main" style="min-height:0;display:grid"></main>
     </div>
-    <div id="toast" role="status" aria-live="polite"></div>
+    <div id="cmd"></div>
+    <div id="toast" class="t-toasts" role="status" aria-live="polite"></div>
     <script type="module" src="./transport.js"></script>
   </body>
 </html>
