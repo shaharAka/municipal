@@ -21,7 +21,7 @@ const S = {
   rides: store.get('t-rides-view', 'board'), mapOpen: false, map: null, inspMap: null,
   insp: null, // { id, date, tab }
   dirty: false, stale: false, composing: false, draft: '',
-  plan: { dir: 'all', q: '', onlyIssues: false }, table: { q: '', facet: '' },
+  plan: { day: TOMORROW, by: 'driver', q: '', onlyIssues: false, drag: null, ci: -1 }, table: { q: '', facet: '' },
   assist: null, // { date, ask, busy, result, applied: Set }
   tour: null, // { step }
   phone: false, offline: false, driver: 'driver-10', pop: false, confirmReset: false, cmd: null, help: false, flash: null,
@@ -145,7 +145,7 @@ function rail() {
     <button class="t-search" data-act="cmd">${I.search}<span>חיפוש</span><kbd class="t-kbd">${IS_MAC ? '⌘K' : 'Ctrl K'}</kbd></button>
     <nav class="t-rail-nav" aria-label="ניווט">
       ${item('rides', I.rides, 'נסיעות', '<span class="t-badge" id="b-road" hidden></span>')}
-      ${item('plan', I.calendar, 'תכנון שבועי')}
+      ${item('plan', I.calendar, 'בניית סידור')}
       ${item('fleet', I.fleet, 'נהגים ורכבים', '<span class="t-badge" id="b-fleet" hidden></span>')}
     </nav>
     <button class="t-rail-item t-rail-assist" data-act="assist" aria-expanded="${Boolean(S.assist)}">${I.assist}<span>עוזר התכנון</span></button>
@@ -199,22 +199,23 @@ function rideCard(t) {
   const next = t.points[t.live.departedIndex + 1];
   const where = t.status === 'completed' ? 'הגיעה לבית הספר'
     : t.live.blockedReason && t.live.phase === 'pending' ? t.live.blockedReason
-    : t.live.phase === 'pending' ? `יוצאת ב־${t.departure} · ${t.driverName}` : next ? `בדרך ל${next.name}` : '';
+    : t.live.phase === 'pending' ? t.driverName : next ? `בדרך ל${next.name}` : '';
   const figure = t.live.boarded != null ? `<span dir="ltr" class="num"><b>${num(t.live.boarded)}</b>/${num(t.planned)}</span>` : `<span class="num"><b>${num(t.planned)}</b> תלמידים</span>`;
   return `<button class="t-ride ${S.insp?.id === t.id ? 'is-open' : ''}" data-ride="${t.id}">
-    <span class="t-ride-top"><span class="t-code ${codeTone(t)}">${esc(t.routeCode)}</span><span class="num t-ride-time">${esc(t.departure)}</span>${pill(t.status)}</span>
+    <span class="t-ride-top"><span class="t-code ${codeTone(t)}">${esc(t.routeCode)}</span><span class="num t-ride-time">${esc(t.departure)}</span>${['late', 'delayed', 'blocked'].includes(t.status) ? pill(t.status) : ''}</span>
     <b>${esc(t.school)}</b>
     <span class="t-sub">${esc([where, t.live.lateMinutes ? `${t.live.lateMinutes} דק׳ איחור` : ''].filter(Boolean).join(' · '))}</span>
-    <span class="t-ride-foot">${figure}${t.checks.length ? `<span class="t-note" title="${esc(t.checks.join(' · '))}">הערה בקובץ</span>` : ''}</span>
+    <span class="t-ride-foot">${figure}</span>
   </button>`;
 }
-function alertCard(a) {
+function alertCard(a, lead = true) {
   const fix = a.kind === 'blocked' && a.fix;
+  const p = lead ? 'is-primary' : '';
   return `<div class="t-alert is-${a.level}">
     <button class="t-alert-open" data-ride="${esc(a.tripId)}"><b>${esc(a.title)}</b><span class="t-detail">${esc(a.detail)}</span></button>
     <div class="t-actions">
-      ${fix ? `<button class="t-btn is-primary is-sm" data-act="assist-today">${I.assist} הצעה לתיקון</button>` : ''}
-      ${a.call ? `<a class="t-btn is-primary is-sm" href="tel:${esc(a.call.phone)}" data-call="${esc(a.call.name)}|${esc(a.call.phone)}">${I.call} להתקשר ל${esc(firstName(a.call.name))}</a>` : ''}
+      ${fix ? `<button class="t-btn ${p} is-sm" data-act="assist-today">${I.assist} הצעה לתיקון</button>` : ''}
+      ${a.call ? `<a class="t-btn ${p} is-sm" href="tel:${esc(a.call.phone)}" data-call="${esc(a.call.name)}|${esc(a.call.phone)}">${I.call} להתקשר ל${esc(firstName(a.call.name))}</a>` : ''}
       <button class="t-btn is-sm" data-ack="${esc(a.id)}">${I.check} טופל</button>
     </div>
   </div>`;
@@ -234,7 +235,7 @@ function boardColumns() {
 function boardHtml() {
   const c = boardColumns();
   const col = (key, title, count, body, tone = '') => `<section class="t-col ${tone}" aria-labelledby="col-${key}"><header><h2 id="col-${key}">${title}</h2><span class="num">${num(count)}</span></header><div class="t-col-body">${body}</div></section>`;
-  const attention = (c.open.length ? c.open.map(alertCard).join('') : `<div class="t-calm">${I.check}<b>הכל בסדר</b><span>אין כרגע משהו שדורש טיפול.</span></div>`)
+  const attention = (c.open.length ? c.open.map((a, i) => alertCard(a, i === 0)).join('') : `<div class="t-calm">${I.check}<b>הכל בסדר</b><span>אין כרגע משהו שדורש טיפול.</span></div>`)
     + (c.handled.length ? `<details class="t-handled"><summary>טופלו (${num(c.handled.length)})</summary>${c.handled.map(a => `<div class="t-handled-row"><span><s>${esc(a.title)}</s><br>${esc(a.handled.by)}</span><button class="t-btn is-sm is-ghost" data-unack="${esc(a.id)}">החזרה</button></div>`).join('')}</details>` : '')
     + (c.prep.length ? `<button class="t-prep-link" data-act="assist-today">${I.assist}<span><b>${num(c.prep.length)} דברים לסדר לפני היציאה</b><small>העוזר מציע תיקון לכל אחד</small></span>${I.chev}</button>` : '');
   const list = (ts, empty) => ts.map(rideCard).join('') || `<p class="t-empty">${empty}</p>`;
@@ -506,53 +507,146 @@ async function openMap() {
 }
 function closeMap() { S.mapOpen = false; S.map?.destroy?.(); S.map = null; $('#mapfull').innerHTML = ''; }
 
-// ------------------------------------------------------------ weekly planner
+// ------------------------------------------------------------ plan builder: one day, drivers × time, drag to reassign
+// Quiet by default: every trip is a grey block with its route number. Colour only marks a conflict
+// (two trips at once, an expired licence or test, too few seats). Drops are drafts until published.
+const PX_MIN = 1.7; // pixels per minute
+// A trip occupies its driver from departure to its last stop, as the council's workbook lists them
+// (no estimated school arrival), so only overlaps the workbook itself contains count as conflicts.
+const span = t => { const ms = t.stops.map(x => (/^\d\d:\d\d$/.test(x.time || '') ? minutes(x.time) : -1)).filter(m => m >= 0); const s = Math.min(minutes(t.departure), ...ms); return [s, Math.max(s + 5, ...ms)]; };
+const editableTrip = (t, date) => t.phase === 'pending' && (date !== TODAY || t.live.phase === 'pending');
+function planModel(date) {
+  const d = dataFor(date);
+  const by = S.plan.by;
+  const key = by === 'driver' ? 'driverId' : 'vehicleId';
+  const people = by === 'driver' ? d.drivers : d.vehicles;
+  const valid = r => (by === 'driver' ? r.available !== false && r.licenseUntil >= date : r.available !== false && r.testUntil >= date);
+  const rows = people.map(r => ({ id: r.id, home: by === 'driver' ? r.routeCode : r.id.replace(/^bus-/, ''), label: by === 'driver' ? r.name : r.label, sub: by === 'driver' ? (r.routeCode ? `קו ${r.routeCode}` : 'חלופי') : (r.capacity ? `${r.capacity} מקומות` : ''), valid: valid(r), why: by === 'driver' ? 'הרישיון פג' : 'הטסט פג', trips: [] }));
+  const byId = new Map(rows.map(r => [r.id, r]));
+  for (const t of d.trips) byId.get(t[key])?.trips.push(t);
+  const conflicts = new Map(); // tripId -> reason
+  for (const r of rows) {
+    const ts = r.trips.sort((a, b) => span(a)[0] - span(b)[0]);
+    ts.forEach((t, i) => {
+      const [s, e] = span(t);
+      const clash = ts.find((o, j) => j !== i && span(o)[0] < e && s < span(o)[1]);
+      if (clash) conflicts.set(t.id, `באותה שעה כמו קו ${clash.routeCode} (${clash.departure})`);
+      else if (!r.valid) conflicts.set(t.id, by === 'driver' ? 'הרישיון של הנהג פג' : 'הטסט של הרכב פג');
+      else { const b = t.blockers.find(x => (by === 'driver' ? !/טסט|רכב/.test(x) : !/רישיון|נהג/.test(x))) ?? t.blockers[0]; if (b) conflicts.set(t.id, b); }
+    });
+    r.lanes = [];
+    for (const t of ts) { const [s] = span(t); const lane = r.lanes.findIndex(l => l <= s); if (lane < 0) r.lanes.push(span(t)[1]); else r.lanes[lane] = span(t)[1]; t._lane = lane < 0 ? r.lanes.length - 1 : lane; }
+  }
+  const q = S.plan.q.trim();
+  let shown = rows.filter(r => r.trips.length || !r.valid || /חלופי/.test(r.sub) || r.id === 'bus-spare');
+  if (q) shown = shown.filter(r => [r.label, r.sub, ...r.trips.map(t => `קו ${t.routeCode} ${t.school}`)].join(' ').includes(q));
+  if (S.plan.onlyIssues) shown = shown.filter(r => r.trips.some(t => conflicts.has(t.id)));
+  shown.sort((a, b) => Number(b.trips.some(t => conflicts.has(t.id))) - Number(a.trips.some(t => conflicts.has(t.id))) || Number(!a.trips.length) - Number(!b.trips.length) || (span(a.trips[0] ?? { stops: [], departure: '23:00' })[0] - span(b.trips[0] ?? { stops: [], departure: '23:00' })[0]));
+  const all = d.trips.map(span);
+  const from = Math.floor(Math.min(...all.map(x => x[0]), 6 * 60) / 60) * 60;
+  const to = Math.ceil(Math.max(...all.map(x => x[1]), 16 * 60) / 60) * 60;
+  return { d, rows: shown, conflicts, from, to, key };
+}
 function plannerPage() {
   return `<div class="t-page t-page-full">
     <header class="t-page-head">
-      <div><h1>תכנון שבועי</h1><p id="plan-meta">טוען את השבוע…</p></div>
+      <div><h1>בניית סידור</h1><p id="plan-meta"></p></div>
       <div class="t-spacer"></div>
-      <button class="t-btn is-primary" data-act="assist-tomorrow">${I.assist} בדיקת מחר עם העוזר</button>
+      <div class="t-seg" role="group" aria-label="יום">${DAYS.map(d => `<button data-pday="${d.date}" aria-pressed="${S.plan.day === d.date}">${d.date === TOMORROW ? 'מחר' : d.date === TODAY ? 'היום' : d.label}<i class="t-dot-bad" data-pday-dot="${d.date}" hidden></i></button>`).join('')}</div>
     </header>
     <div class="t-toolbar">
-      <label class="t-search-field">${I.search}<span class="sr-only">חיפוש בתכנון</span><input id="pq" type="search" placeholder="קו, בית ספר או נהג" value="${esc(S.plan.q)}"></label>
-      <div class="t-seg" role="group" aria-label="כיוון">${[['all', 'כל היום'], ['morning', 'בוקר'], ['afternoon', 'צהריים']].map(([k, l]) => `<button data-pdir="${k}" aria-pressed="${S.plan.dir === k}">${l}</button>`).join('')}</div>
-      <button class="t-chip" data-act="only-issues" aria-pressed="${S.plan.onlyIssues}">רק מה שצריך טיפול</button>
+      <div class="t-seg" role="group" aria-label="שורות לפי"><button data-pby="driver" aria-pressed="${S.plan.by === 'driver'}">נהגים</button><button data-pby="vehicle" aria-pressed="${S.plan.by === 'vehicle'}">רכבים</button></div>
+      <label class="t-search-field">${I.search}<span class="sr-only">חיפוש</span><input id="pq" type="search" placeholder="נהג, קו או בית ספר" value="${esc(S.plan.q)}"></label>
       <span class="t-spacer"></span>
-      <span class="t-key"><i class="is-ok"></i>מוכנה</span><span class="t-key"><i class="is-bad"></i>לא יכולה לצאת</span><span class="t-key"><i class="is-draft"></i>לא פורסמה</span><span class="t-key"><i class="is-note"></i>הערה בקובץ</span>
+      <span id="plan-conflicts"></span>
     </div>
-    <div class="t-planner" id="planner"><p class="t-empty">טוען…</p></div>
+    <div class="t-tl" id="timeline" aria-label="סידור לפי ${S.plan.by === 'driver' ? 'נהג' : 'רכב'} ושעה"><p class="t-empty">טוען…</p></div>
+    <div id="plan-bar"></div>
   </div>`;
 }
-async function loadWeek() { await Promise.all(DAYS.map(d => (d.date === TODAY && S.data ? (S.week[TODAY] = S.data) : loadDay(d.date)))); }
-function chipState(t) { return t.blockers.length ? 'is-bad' : !t.published ? 'is-draft' : 'is-ok'; }
+async function loadPlanDay() { if (!dataFor(S.plan.day)) await loadDay(S.plan.day); }
+async function loadWeek() { await Promise.all(DAYS.map(d => (dataFor(d.date) ? null : loadDay(d.date)))); }
 function paintPlanner() {
-  const el = $('#planner');
-  if (!el || DAYS.some(d => !S.week[d.date])) return;
-  const q = S.plan.q.trim();
-  const keep = t => (S.plan.dir === 'all' || t.direction === S.plan.dir) && (!q || [`קו ${t.routeCode}`, t.routeCode, t.school, t.driverName, t.vehicleName].join(' ').includes(q));
-  const routes = new Map();
-  for (const d of DAYS) for (const t of S.week[d.date].trips) if (keep(t)) {
-    const r = routes.get(t.routeCode) ?? { code: t.routeCode, schools: new Set(), days: {} };
-    r.schools.add(t.school); (r.days[d.date] ??= []).push(t); routes.set(t.routeCode, r);
-  }
-  let rows = [...routes.values()].sort((a, b) => (Number(a.code) || 1e9) - (Number(b.code) || 1e9) || String(a.code).localeCompare(b.code));
-  if (S.plan.onlyIssues) rows = rows.filter(r => Object.values(r.days).flat().some(t => t.blockers.length || !t.published));
-  const total = DAYS.reduce((s, d) => s + S.week[d.date].trips.length, 0);
-  const issues = DAYS.reduce((s, d) => s + S.week[d.date].trips.filter(t => t.blockers.length).length, 0);
-  $('#plan-meta').textContent = [`שבוע ${heDate(DAYS[0].date)}–${heDate(DAYS.at(-1).date)}`, `${num(total)} נסיעות`, issues ? `${num(issues)} לא יכולות לצאת` : 'כל הנסיעות יכולות לצאת'].join(' · ');
-  const head = DAYS.map(d => {
-    const ts = S.week[d.date].trips;
-    const bad = ts.filter(t => t.blockers.length).length;
-    return `<div class="t-day ${d.date === TODAY ? 'is-today' : ''} ${d.date === TOMORROW ? 'is-tomorrow' : ''}" role="columnheader"><b>${d.label} ${heDate(d.date)}${d.date === TODAY ? ' · היום' : d.date === TOMORROW ? ' · מחר' : ''}</b><small>${num(ts.length)} נסיעות${bad ? ` · <span class="is-bad">${num(bad)} חסומות</span>` : ''}</small></div>`;
-  }).join('');
-  const body = rows.map(r => `<div class="t-plan-row" role="row">
-    <div class="t-plan-route" role="rowheader"><span class="t-code is-quiet">${esc(r.code)}</span><span>${esc([...r.schools][0])}${r.schools.size > 1 ? ` ועוד ${r.schools.size - 1}` : ''}</span></div>
-    ${DAYS.map(d => `<div class="t-plan-cell ${d.date === TOMORROW ? 'is-tomorrow' : ''}" role="cell">${(r.days[d.date] ?? []).sort((a, b) => a.departure.localeCompare(b.departure)).map(t => `<button class="t-trip ${chipState(t)} ${t.checks.length ? 'has-note' : ''} ${S.insp?.id === t.id ? 'is-open' : ''}" data-plan-trip="${t.id}" data-date="${d.date}" title="${esc(`${t.school} · ${t.driverName} · ${t.vehicleName}${t.blockers.length ? ` · ${t.blockers[0]}` : ''}`)}"><span class="num">${esc(t.departure)}</span>${t.direction === 'morning' ? 'בוקר' : 'צהריים'}</button>`).join('')}</div>`).join('')}
-  </div>`).join('');
-  el.innerHTML = `<div class="t-plan-grid" role="table" aria-label="תכנון שבועי לפי קו ויום"><div class="t-plan-row t-plan-head" role="row"><div class="t-plan-route" role="columnheader">קו</div>${head}</div>${body || '<p class="t-empty">אין נסיעות שמתאימות לסינון.</p>'}</div>`;
+  const el = $('#timeline');
+  if (!el || !dataFor(S.plan.day)) return;
+  const { d, rows, conflicts, from, to } = planModel(S.plan.day);
+  const px = m => (m - from) * PX_MIN;
+  const width = px(to);
+  const hours = []; for (let m = from; m <= to; m += 60) hours.push(m);
+  const now = S.plan.day === TODAY ? minutes(S.data.clock) : null;
+  const scroll = { x: el.scrollLeft, y: el.scrollTop };
+  el.innerHTML = `<div class="t-tl-inner" style="--tl-w:${width}px">
+    <div class="t-tl-head"><div class="t-tl-label"></div><div class="t-tl-axis">${hours.map(m => `<span style="inset-inline-start:${px(m)}px">${hhmm(m)}</span>`).join('')}${now != null ? `<i class="t-tl-now" style="inset-inline-start:${px(now)}px" title="עכשיו ${S.data.clock}"></i>` : ''}</div></div>
+    ${rows.map(r => `<div class="t-tl-row ${r.valid ? '' : 'is-invalid'}" data-prow="${r.id}" style="--lanes:${Math.max(1, r.lanes.length)}">
+      <div class="t-tl-label"><b>${esc(r.label)}</b><small>${r.valid ? esc(r.sub) : `<span class="t-warn-text">${r.why}</span>`}</small></div>
+      <div class="t-tl-track">${hours.map(m => `<i class="t-tl-grid" style="inset-inline-start:${px(m)}px"></i>`).join('')}
+        ${r.trips.map(t => { const [s, e] = span(t); const c = conflicts.get(t.id); const can = editableTrip(t, S.plan.day); return `<button class="t-blk ${c ? 'is-conflict' : ''} ${!t.published ? 'is-draft' : ''} ${can ? '' : 'is-done'} ${S.insp?.id === t.id ? 'is-open' : ''}" data-plan-trip="${t.id}" data-date="${S.plan.day}" ${can ? 'draggable="true"' : ''} style="inset-inline-start:${px(s)}px;width:${Math.max(48, (e - s) * PX_MIN)}px;--lane:${t._lane}" title="${esc(`קו ${t.routeCode} · ${t.departure} · ${t.school}${c ? `\n${c}` : ''}`)}" aria-label="${esc(`קו ${t.routeCode}, ${t.departure}, ${t.school}${c ? `, ${c}` : ''}`)}">${t.routeCode === r.home ? esc(t.departure) : `<b>${esc(t.routeCode)}</b> ${esc(t.departure)}`}</button>`; }).join('')}
+      </div></div>`).join('') || '<p class="t-empty">אין שורות שמתאימות.</p>'}
+  </div>`;
+  el.scrollLeft = scroll.x; el.scrollTop = scroll.y;
+  const n = conflicts.size;
+  const drafts = d.trips.filter(t => !t.published && editableTrip(t, S.plan.day)).length;
+  $('#plan-meta').textContent = [`${dayWord(S.plan.day)}, ${dayOf(S.plan.day).label} ${heDate(S.plan.day)}`, `${num(d.trips.length)} נסיעות`, n ? `${num(n)} התנגשויות` : 'אין התנגשויות'].join(' · ');
+  $('#plan-conflicts').innerHTML = n
+    ? `<button class="t-btn is-sm" data-act="next-conflict">${num(n)} התנגשויות · לבאה</button><button class="t-btn is-sm is-ghost" data-act="assist-plan">${I.assist} הצעה לפתרון</button><button class="t-chip" data-act="only-issues" aria-pressed="${S.plan.onlyIssues}">רק עם התנגשות</button>`
+    : '<span class="t-ok-text">אין התנגשויות ביום הזה</span>';
+  $('#plan-bar').innerHTML = drafts ? `<div class="t-plan-bar" role="status"><span><b>${num(drafts)}</b> ${drafts === 1 ? 'שינוי שהנהג עוד לא רואה' : 'שינויים שהנהגים עוד לא רואים'}</span><button class="t-btn is-primary" data-act="publish-drafts">פרסום לנהגים</button></div>` : '';
+  for (const day of DAYS) { const dot = document.querySelector(`[data-pday-dot="${day.date}"]`); const dd = dataFor(day.date); if (dot && dd) dot.hidden = !planModelConflicts(day.date); }
 }
-function paintPlannerSelection() { document.querySelectorAll('.t-trip').forEach(x => x.classList.toggle('is-open', x.dataset.planTrip === S.insp?.id)); }
+function planModelConflicts(date) { const keep = S.plan.onlyIssues; S.plan.onlyIssues = false; const n = planModel(date).conflicts.size; S.plan.onlyIssues = keep; return n; }
+function paintPlannerSelection() { document.querySelectorAll('.t-blk').forEach(x => x.classList.toggle('is-open', x.dataset.planTrip === S.insp?.id)); }
+async function moveTrip(tripId, rowId) {
+  const date = S.plan.day;
+  const d = dataFor(date);
+  const t = d.trips.find(x => x.id === tripId);
+  const key = S.plan.by === 'driver' ? 'driverId' : 'vehicleId';
+  if (!t || t[key] === rowId) return;
+  const before = { tripId, driverId: t.driverId, vehicleId: t.vehicleId };
+  const name = S.plan.by === 'driver' ? d.drivers.find(x => x.id === rowId)?.name : d.vehicles.find(x => x.id === rowId)?.label;
+  try {
+    await command('plan', { assignments: [{ tripId, [key]: rowId }], publish: false, reason: `הועבר ל${name}` }, null, date);
+    await loadDay(date); paintPlanner(); if (S.insp?.id === tripId) paintInspector();
+    toast(`קו ${t.routeCode} (${t.departure}) עבר ל${name}`, { undo: () => run(async () => { await command('plan', { assignments: [before], publish: t.published, reason: 'בוטל' }, null, date); await loadDay(date); paintPlanner(); }, 'השינוי בוטל') });
+  } catch (e) { toast(e.message, { bad: true }); }
+}
+async function publishDrafts() {
+  const date = S.plan.day;
+  const ids = dataFor(date).trips.filter(t => !t.published && editableTrip(t, date)).map(t => ({ tripId: t.id }));
+  if (!ids.length) return;
+  await run(async () => { await command('plan', { assignments: ids, publish: true, reason: 'פורסם לנהג' }, null, date); await loadDay(date); paintPlanner(); }, 'פורסם. מה שאין בו התנגשות כבר אצל הנהגים.');
+}
+function nextConflict() {
+  const blocks = [...document.querySelectorAll('.t-blk.is-conflict')];
+  if (!blocks.length) return;
+  S.plan.ci = ((S.plan.ci ?? -1) + 1) % blocks.length;
+  const b = blocks[S.plan.ci];
+  b.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+  b.focus({ preventScroll: true });
+  spot(`[data-plan-trip="${b.dataset.planTrip}"]`, b.title.split('\n')[1] ?? b.title);
+}
+// drag and drop (pointer-free HTML5 drag; click or Enter opens the same trip for keyboard users)
+document.addEventListener('dragstart', e => {
+  const b = e.target.closest?.('.t-blk[draggable="true"]'); if (!b) return;
+  e.dataTransfer.setData('text/plain', b.dataset.planTrip); e.dataTransfer.effectAllowed = 'move';
+  S.plan.drag = b.dataset.planTrip; b.classList.add('is-dragging'); document.body.classList.add('is-planning-drag'); clearSpot();
+});
+document.addEventListener('dragend', () => { S.plan.drag = null; document.querySelectorAll('.is-dragging,.is-drop-ok,.is-drop-bad').forEach(x => x.classList.remove('is-dragging', 'is-drop-ok', 'is-drop-bad')); document.body.classList.remove('is-planning-drag'); });
+document.addEventListener('dragover', e => {
+  const row = e.target.closest?.('[data-prow]'); if (!row || !S.plan.drag) return;
+  e.preventDefault();
+  const t = dataFor(S.plan.day).trips.find(x => x.id === S.plan.drag);
+  const { rows } = planModel(S.plan.day);
+  const r = rows.find(x => x.id === row.dataset.prow);
+  const [s, en] = span(t);
+  const clash = !r?.valid || r.trips.some(o => o.id !== t.id && span(o)[0] < en && s < span(o)[1]);
+  document.querySelectorAll('.is-drop-ok,.is-drop-bad').forEach(x => x !== row && x.classList.remove('is-drop-ok', 'is-drop-bad'));
+  row.classList.toggle('is-drop-ok', !clash); row.classList.toggle('is-drop-bad', clash);
+  e.dataTransfer.dropEffect = 'move';
+});
+document.addEventListener('drop', e => {
+  const row = e.target.closest?.('[data-prow]'); if (!row || !S.plan.drag) return;
+  e.preventDefault(); const id = S.plan.drag; S.plan.drag = null; moveTrip(id, row.dataset.prow);
+});
 
 // ------------------------------------------------------------ the planning assistant
 async function openAssist(date = TOMORROW, askText = '') {
@@ -684,7 +778,7 @@ const BRIEF = [
   { title: 'ממשק הסדרנים', text: 'סידור יומי, שיוך נהג ורכב, תחנות ותלמידים, מצב כל נסיעה, מתוכנן מול בפועל, והתראות.', go: async () => { location.hash = '#/rides'; await wait(400); const t = S.data.trips.find(x => x.status === 'active'); if (t) await openRide(t.id, TODAY, 'overview'); }, spot: '.t-insp', say: 'כל נסיעה נפתחת בצד: תחנות עם מתוכנן מול בפועל, הנהג, הרכב, והתראות עם פעולה.' },
   { title: 'ממשק הנהג', text: 'סידור העבודה, תחנה אחת בכל מסך, ספירה, אישור יציאה בהחלקה, ופיזור.', go: async () => { if (!S.phone) { S.phone = true; paintPhone(); } }, spot: '.t-phone', say: 'הנהג רואה רק את הנסיעות שלו. מחליקים רק כשהרכב עומד.' },
   { title: 'נהגים וצי רכב', text: 'פרטי קשר, סוג רישיון ותוקפו, טסט, טיפולים וזמינות, עם התראה לפני שפג.', go: () => { S.fleetIssues = true; location.hash = '#/fleet'; }, spot: '.t-fleet', say: 'מה שפג או עומד לפוג, ולחיצה על תאריך מעדכנת.' },
-  { title: 'תהליך העבודה', text: 'שלב 1: בונים את הסידור למחר. משם הנהג רואה, מדווח, והדשבורד מתעדכן.', go: () => { location.hash = '#/plan'; }, spot: '.t-day.is-tomorrow', say: 'מחר במבט אחד: מה מוכן, מה חסום ומה לא פורסם.' },
+  { title: 'תהליך העבודה', text: 'שלב 1: בונים את הסידור למחר. משם הנהג רואה, מדווח, והדשבורד מתעדכן.', go: () => { location.hash = '#/plan'; }, spot: '#timeline', say: 'מחר במבט אחד: כל נהג והנסיעות שלו. גוררים נסיעה לנהג אחר, והתנגשויות נצבעות.' },
   { title: 'הדמו (MVP)', text: 'דשבורד עם מפה, סידור יומי, ממשק נהג, עדכון מיידי וניהול צי, כולם על הנתונים שלכם.', go: async () => { location.hash = '#/rides'; await wait(300); await openMap(); }, spot: '.t-mapfull', say: 'המפה החיה, עם כל האוטובוסים. נפתחת בלחיצה, לא מסתירה את העבודה.' },
   { title: 'מה למדנו מהקובץ', text: 'מסלולים ותחנות: קוד סידור הוא האוטובוס, נסיעה היא יום + קוד + מספר. יש קווי בוקר וצהריים שונים בכל יום, ושישי שונה. גם נהגי מועצה וגם קבלנים. בקובץ רק מספרי תלמידים, בלי שמות. אין בו נתוני נהגים ותוקפים, ולא GPS.' },
   { title: 'נקודות לתכנון', text: 'בטיחות: דיווח רק בהחלקה כשהרכב עומד. אמינות: כל מספר מסומן "דיווח נהג" או "משוער". הרשאות: נהג רואה רק את שלו. פרטיות: מספרים בלבד. בלי קליטה: הדיווחים נשמרים בטלפון ונשלחים כשחוזרת קליטה.' },
@@ -738,7 +832,7 @@ function paintHelp() {
     <div class="t-help-cols">
       <section><h3>המסכים</h3><ul>
         <li><b>נסיעות</b>: מה דורש טיפול עכשיו, מה יוצא, מה בדרך ומה הגיע. לחיצה על נסיעה פותחת אותה בצד.</li>
-        <li><b>תכנון שבועי</b>: כל הקווים מול ימי השבוע. אדום: לא יכולה לצאת. מקווקו: לא פורסמה.</li>
+        <li><b>בניית סידור</b>: כל נהג והנסיעות שלו לאורך היום. גוררים נסיעה לנהג אחר. אדום: התנגשות. מקווקו: עוד לא פורסם.</li>
         <li><b>נהגים ורכבים</b>: תוקפי רישיון, טסט וטיפולים. לחיצה על תאריך מעדכנת אותו.</li>
         <li><b>עוזר התכנון</b>: כותבים מה קרה ("דוד לא מגיע מחר") ומקבלים הצעה לאישור.</li>
       </ul></section>
@@ -764,7 +858,7 @@ function cmdItems() {
   const d = S.data;
   const items = [
     { kind: 'מסך', label: 'נסיעות', sub: 'מה דורש טיפול, מה בדרך ומה הגיע', go: () => { location.hash = '#/rides'; } },
-    { kind: 'מסך', label: 'תכנון שבועי', sub: 'כל הקווים מול ימי השבוע', go: () => { location.hash = '#/plan'; } },
+    { kind: 'מסך', label: 'בניית סידור', sub: 'נהגים מול שעות, גוררים כדי לשבץ', go: () => { location.hash = '#/plan'; } },
     { kind: 'מסך', label: 'נהגים ורכבים', sub: 'רישיונות, טסטים וטיפולים', go: () => { location.hash = '#/fleet'; } },
     { kind: 'פעולה', label: 'מפה חיה', sub: 'כל האוטובוסים על המפה', go: () => openMap() },
     { kind: 'פעולה', label: 'בדיקת מחר עם העוזר', sub: 'מה חסר בסידור של מחר', go: () => openAssist(TOMORROW) },
@@ -826,7 +920,7 @@ async function render() {
   dropGrids();
   if (v === 'plan') {
     main.innerHTML = plannerPage();
-    await loadWeek(); paintPlanner();
+    await loadPlanDay(); paintPlanner(); loadWeek().then(paintPlanner);
   } else if (v === 'fleet') {
     main.innerHTML = fleetPage(); mountFleet();
   } else {
@@ -862,7 +956,7 @@ document.addEventListener('click', async e => {
   if (pick) { applyTheme(pick.dataset.themePick); rail(); return; }
   const ci = e.target.closest('[data-ci]');
   if (ci) { pickCmd(Number(ci.dataset.ci)); return; }
-  const el = e.target.closest('[data-act],[data-ride],[data-plan-trip],[data-itab],[data-rides],[data-tfacet],[data-pdir],[data-ack],[data-unack],[data-prop-apply],[data-prop-open],[data-prop-more],[data-ask],[data-tour],[data-tour-step]');
+  const el = e.target.closest('[data-act],[data-ride],[data-plan-trip],[data-itab],[data-rides],[data-tfacet],[data-pday],[data-pby],[data-ack],[data-unack],[data-prop-apply],[data-prop-open],[data-prop-more],[data-ask],[data-tour],[data-tour-step]');
   if (!el) return;
   const ds = el.dataset;
   if (ds.ride) { openRide(ds.ride, TODAY, 'overview'); return; }
@@ -870,7 +964,8 @@ document.addEventListener('click', async e => {
   if (ds.itab) { if (S.insp.tab === 'assign' && ds.itab !== 'assign' && !(await leaveEdits())) return; S.dirty = false; S.insp.tab = ds.itab; S.composing = false; paintInspector(); return; }
   if (ds.rides) { S.rides = ds.rides; store.set('t-rides-view', S.rides); render(); return; }
   if (ds.tfacet) { S.table.facet = S.table.facet === ds.tfacet ? '' : ds.tfacet; document.querySelectorAll('[data-tfacet]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tfacet === S.table.facet)); paintTable(); return; }
-  if (ds.pdir) { S.plan.dir = ds.pdir; document.querySelectorAll('[data-pdir]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pdir === S.plan.dir)); paintPlanner(); return; }
+  if (ds.pday) { S.plan.day = ds.pday; S.plan.ci = -1; document.querySelectorAll('[data-pday]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pday === S.plan.day)); await loadPlanDay(); paintPlanner(); return; }
+  if (ds.pby) { S.plan.by = ds.pby; document.querySelectorAll('[data-pby]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pby === S.plan.by)); paintPlanner(); return; }
   if (ds.ack) {
     const alertId = ds.ack;
     command('ack', { alertId }).then(() => toast('סומן כטופל', { undo: () => run(() => command('unack', { alertId }), 'הוחזר לטיפול') })).catch(err => toast(err.message, { bad: true }));
@@ -897,7 +992,10 @@ document.addEventListener('click', async e => {
   if (act === 'assist-today') openAssist(TODAY);
   if (act === 'assist-tomorrow') openAssist(TOMORROW);
   if (act === 'close-assist') { S.assist = null; paintAssist(); rail(); }
-  if (act === 'only-issues') { S.plan.onlyIssues = !S.plan.onlyIssues; el.setAttribute('aria-pressed', S.plan.onlyIssues); paintPlanner(); }
+  if (act === 'only-issues') { S.plan.onlyIssues = !S.plan.onlyIssues; paintPlanner(); }
+  if (act === 'next-conflict') nextConflict();
+  if (act === 'publish-drafts') publishDrafts();
+  if (act === 'assist-plan') openAssist(S.plan.day);
   if (act === 'fleet-issues') { S.fleetIssues = !S.fleetIssues; el.setAttribute('aria-pressed', S.fleetIssues); paintFleet(); }
   if (act === 'tour') { S.pop = false; tourGo(0); }
   if (act === 'tour-close') { S.tour = null; paintTour(); }

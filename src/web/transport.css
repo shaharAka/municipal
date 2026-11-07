@@ -542,3 +542,50 @@ svg.i { width: 16px; height: 16px; flex: none; stroke-width: 1.75; }
 .t-insp > .t-insp-head, .t-assist > .t-insp-head { display: block; padding: 16px 18px 10px; border-bottom: 0; }
 .t-insp > .t-insp-head > div { flex: none; }
 .t-insp-title h2 { display: block; }
+
+/* ------------------------------------------------------------ plan builder: drivers × time */
+.t-dot-bad { width: 6px; height: 6px; border-radius: 999px; background: var(--bad); display: inline-block; margin-inline-start: 6px; vertical-align: middle; }
+.t-dot-bad[hidden] { display: none; }
+#plan-conflicts { display: flex; gap: 8px; align-items: center; }
+.t-ok-text { color: var(--muted); font-size: 13px; }
+.t-warn-text { color: var(--bad); }
+.t-tl { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.t-tl-inner { width: calc(var(--tl-w) + 232px); min-width: 100%; }
+.t-tl-head, .t-tl-row { display: grid; grid-template-columns: 200px minmax(calc(var(--tl-w) + 32px), 1fr); }
+.t-tl-head { position: sticky; top: 0; z-index: 3; height: 34px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.t-tl-label { position: sticky; inset-inline-start: 0; z-index: 2; background: var(--surface); padding: 6px 14px; border-inline-end: 1px solid var(--line); display: grid; align-content: center; min-width: 0; }
+.t-tl-label b { font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-tl-label small { color: var(--muted); font-size: 12px; }
+.t-tl-axis { position: relative; }
+.t-tl-axis span { position: absolute; top: 9px; transform: translateX(50%); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.t-tl-now { position: absolute; top: 4px; bottom: 0; width: 2px; background: var(--hi); border-radius: 2px; }
+.t-tl-row { min-height: calc(var(--lanes) * 34px + 12px); border-bottom: 1px solid var(--line); }
+.t-tl-row:last-child { border-bottom: 0; }
+.t-tl-track { position: relative; }
+.t-tl-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); opacity: .55; }
+.t-tl-row.is-invalid .t-tl-label b { color: var(--muted); }
+.t-tl-row.is-drop-ok, .t-tl-row.is-drop-ok .t-tl-label { background: var(--accent-soft); }
+.t-tl-row.is-drop-bad, .t-tl-row.is-drop-bad .t-tl-label { background: var(--bad-soft); }
+.is-planning-drag .t-tl-row { transition: background .1s; }
+.t-blk { position: absolute; top: calc(6px + var(--lane) * 34px); height: 28px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--ink-2); font-size: 12px; font-weight: 600; padding: 0 8px; text-align: start; cursor: grab; overflow: hidden; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.t-blk:hover { border-color: var(--ink-2); background: var(--surface); color: var(--ink); }
+.t-blk:active { cursor: grabbing; }
+.t-blk.is-draft { border-style: dashed; border-color: var(--ink-2); }
+.t-blk.is-conflict { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
+.t-blk.is-done { opacity: .5; cursor: pointer; }
+.t-blk.is-open { box-shadow: 0 0 0 2px var(--ink); }
+.t-blk.is-dragging { opacity: .35; }
+.t-plan-bar { position: sticky; bottom: 0; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 12px; background: var(--solid); color: var(--solid-ink); box-shadow: var(--shadow-2); animation: t-up .18s ease-out; }
+.t-plan-bar .t-btn.is-primary { background: var(--surface); color: var(--ink); border-color: var(--surface); }
+
+/* ------------------------------------------------------------ lower tones: colour only where it means something */
+.t-code { background: var(--surface-2); border-color: var(--line-2); color: var(--ink); }
+.t-ride .t-ride-top .t-pill { margin-inline-start: auto; }
+.t-pill.is-active { background: transparent; border-color: transparent; padding: 0; }
+/* the settings menu opens beside the sidebar, above everything (the sidebar scrolls, so it can't hold it) */
+.t-rail .t-pop { position: fixed; top: auto; bottom: 16px; inset-inline-start: 248px; inset-inline-end: auto; z-index: 90; max-height: calc(100vh - 32px); overflow-y: auto; }
+@media (max-width: 1280px) { .t-rail .t-pop { inset-inline-start: 220px; } }
+.t-blk { font-weight: 500; }
+.t-blk b { font-weight: 700; color: var(--ink); margin-inline-end: 2px; }
+.t-blk.is-conflict b { color: var(--bad); }
+.t-blk { padding: 0 5px; text-align: center; }
