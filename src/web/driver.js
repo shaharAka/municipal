@@ -18,7 +18,7 @@ const queue = () => read(QUEUE_KEY, '[]');
 // One slide queues a report and a departure; the driver made one report.
 const pendingReports = () => queue().filter(c => c.type === 'report' || c.type === 'delay' || (c.type === 'start' && c.data?.count != null)).length;
 const minutes = t => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3)) : 0);
-const svg = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+const svg = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
 const I = {
   back: svg('<path d="m9 6 6 6-6 6"/>'),
   chev: svg('<path d="m15 6-6 6 6 6"/>', 'class="i m-chev"'),

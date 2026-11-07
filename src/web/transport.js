@@ -15,7 +15,7 @@ const store = {
 const S = {
   viewer: store.get('t-viewer', 'shuki'), data: null, selected: null, phone: true, playing: false,
   day: TODAY, dir: 'morning', sched: null, drawer: null, flash: null, offline: false, driver: 'driver-10', map: null,
-  pop: false, confirmReset: false, expand: {}, composing: false, draft: '', tab: 'stops', q: '', dirty: false, stale: false, cmd: null,
+  pop: false, confirmReset: false, expand: {}, composing: false, draft: '', tab: 'stops', q: '', facet: new Set(), dirty: false, stale: false, cmd: null,
 };
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -26,7 +26,7 @@ const minutes = t => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
 const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const FLEET_CAUSE = /רישיון|רישוי|טיפול|זמין|חסר שיבוץ/;
 
-const svg = (d, fill = false) => `<svg class="i" viewBox="0 0 24 24" fill="${fill ? 'currentColor' : 'none'}" stroke="${fill ? 'none' : 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const svg = (d, fill = false) => `<svg class="i" viewBox="0 0 24 24" fill="${fill ? 'currentColor' : 'none'}" stroke="${fill ? 'none' : 'currentColor'}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const I = {
   bus: svg('<rect x="4" y="3" width="16" height="15" rx="3"/><path d="M4 11h16M8 21v-3M16 21v-3"/>'),
   play: svg('<path d="M8 5v14l11-7z"/>', true),
@@ -307,111 +307,207 @@ function phoneDock() {
   </div></div></div>`;
 }
 
+// ------------------------------------------------------------ grids
+// AG Grid Community with the Omni kit's DataGrid conventions: Quartz theme on our tokens, RTL,
+// a toolbar of search and facet chips above, a summary line, an inspector docked beside, a count below.
+const AG = window.agGrid;
+const gridTheme = AG?.themeQuartz.withParams({
+  backgroundColor: 'var(--surface)', foregroundColor: 'var(--ink)', borderColor: 'var(--line)',
+  rowBorder: { color: '#eceef1' }, headerBackgroundColor: 'var(--surface-2)', headerTextColor: 'var(--muted)',
+  rowHoverColor: '#f5f6f8', accentColor: 'var(--accent)', selectedRowBackgroundColor: 'var(--tangerine-soft)',
+  fontFamily: 'var(--font)', fontSize: 13, headerFontSize: 12, headerFontWeight: 500, headerHeight: 36,
+  cellHorizontalPadding: 12, wrapperBorderRadius: 12, wrapperBorder: false,
+});
+S.grids = {};
+function grid(el, key, options) {
+  if (!AG) { el.innerHTML = '<p class="t-empty">טעינת הטבלה נכשלה. בדקו את החיבור לרשת.</p>'; return null; }
+  S.grids[key]?.destroy();
+  S.grids[key] = AG.createGrid(el, {
+    theme: gridTheme, enableRtl: true, animateRows: false, ensureDomOrder: true, suppressMovableColumns: true,
+    rowHeight: 48, getRowId: p => p.data.id,
+    defaultColDef: { resizable: true, sortable: true, suppressHeaderMenuButton: true, cellClass: 't-gcell', minWidth: 80 },
+    ...options,
+  });
+  return S.grids[key];
+}
+function dropGrids() { Object.values(S.grids).forEach(g => g?.destroy()); S.grids = {}; }
+const endCell = 't-gcell is-end num';
+const two = (top, sub) => `<div class="t-g2"><b>${top}</b><span>${sub}</span></div>`;
+
 // ------------------------------------------------------------ schedule
 const blocking = x => x.issues.find(i => FLEET_CAUSE.test(i));
+const tripState = x => (x.issues.length ? 'fix' : x.published ? 'published' : 'draft');
+const FACETS = [['fix', 'לתיקון'], ['draft', 'טיוטה'], ['published', 'פורסמה']];
 function schedStatus(x) {
   if (blocking(x)) return `<span class="t-pill is-blocked">${esc(blocking(x))}</span>`;
   if (x.issues.length) return `<span class="t-pill is-warn">${esc(x.issues[0])}</span>`;
   return x.published ? '<span class="t-pill is-ok">פורסמה לנהג</span>' : '<span class="t-pill">טיוטה</span>';
 }
+const byDir = t => S.dir === 'all' || t.direction === S.dir;
 function schedRows() {
   const q = S.q.trim();
-  const trips = S.sched.trips
-    .filter(t => S.dir === 'all' || t.direction === S.dir)
+  return S.sched.trips.filter(byDir)
     .filter(t => !q || [t.number, t.routeCode, t.school, t.driverName, t.vehicleName, ...t.stops.map(s => s.name)].join(' ').includes(q))
+    .filter(t => !S.facet.size || S.facet.has(tripState(t)))
     .sort((a, b) => a.departure.localeCompare(b.departure));
-  return trips.map(x => `<tr data-row="${x.id}" tabindex="0" class="${x.id === S.drawer ? 'is-selected' : ''}">
-    <td class="num">${esc(x.departure)}</td><td><span class="t-code is-quiet">${esc(x.routeCode)}</span></td>
-    <td><b style="font-weight:500">${esc(x.school)}</b><div class="t-source">${esc(x.points.filter(p => p.kind === 'stop').map(p => p.name).join(' · '))}</div></td>
-    <td class="num">${num(x.stops.length)}</td><td class="num">${num(x.planned)}</td>
-    <td>${esc(x.driverName)}</td><td>${esc(x.vehicleName)}</td><td>${schedStatus(x)}</td></tr>`).join('')
-    || '<tr><td colspan="8" class="t-empty">אין נסיעות שמתאימות לחיפוש.</td></tr>';
 }
+const schedColumns = () => [
+  { headerName: 'יציאה', field: 'departure', width: 86, minWidth: 76, cellClass: 't-gcell num', sort: 'asc' },
+  { headerName: 'קו', field: 'routeCode', width: 78, minWidth: 70, comparator: (a, b) => (Number(a) || 1e9) - (Number(b) || 1e9) || String(a).localeCompare(b), cellRenderer: p => `<span class="t-code is-quiet">${esc(p.value)}</span>` },
+  { headerName: 'בית ספר ותחנות', field: 'school', flex: 2.4, minWidth: 260, cellRenderer: p => two(esc(p.value), esc(p.data.points.filter(x => x.kind === 'stop').map(x => x.name).join(' · '))) },
+  { headerName: 'תלמידים', field: 'planned', width: 100, cellClass: endCell, headerClass: 't-ghead-end' },
+  { headerName: 'נהג', field: 'driverName', flex: 1, minWidth: 120 },
+  { headerName: 'רכב', field: 'vehicleName', flex: 1, minWidth: 110 },
+  { headerName: 'מצב', colId: 'state', flex: 1.5, minWidth: 180, valueGetter: p => FACETS.findIndex(([k]) => k === tripState(p.data)), cellRenderer: p => schedStatus(p.data) },
+];
 function schedulePage() {
-  const d = S.sched;
-  const t = d.trips.find(x => x.id === S.drawer);
-  const toFix = d.trips.filter(x => x.issues.length).length;
-  return `<div class="t-page">
-    <div class="t-page-head">
-      <div><h1>סידור הסעות</h1><p>${num(d.trips.length)} נסיעות ביום ${esc(d.weekday)} · ${toFix ? `${num(toFix)} לתיקון לפני פרסום` : 'הכל מוכן'}</p></div>
+  return `<div class="t-page t-page-full">
+    <header class="t-page-head">
+      <div><h1>סידור הסעות</h1><p id="sched-meta"></p></div>
       <div class="t-spacer"></div>
-      <label class="sr-only" for="q">חיפוש בסידור</label>
-      <input id="q" class="t-filter" type="search" placeholder="חיפוש קו, בית ספר, יישוב או נהג" value="${esc(S.q)}">
       <div class="t-seg" role="group" aria-label="יום">${DAYS.map(x => `<button data-day="${x.date}" aria-pressed="${x.date === S.day}">${x.label}</button>`).join('')}</div>
+    </header>
+    <div class="t-toolbar">
+      <label class="t-search-field">${I.search}<span class="sr-only">חיפוש בסידור</span><input id="q" type="search" placeholder="קו, בית ספר, יישוב או נהג" value="${esc(S.q)}"></label>
       <div class="t-seg" role="group" aria-label="כיוון">${[['morning', 'בוקר'], ['afternoon', 'צהריים'], ['all', 'הכל']].map(([k, l]) => `<button data-dir="${k}" aria-pressed="${k === S.dir}">${l}</button>`).join('')}</div>
+      <div class="t-chips" id="facets" role="group" aria-label="מצב"></div>
     </div>
-    <div class="t-layout ${t ? 'has-drawer' : ''}">
-      <div class="t-card"><table class="t-table">
-        <thead><tr><th>יציאה</th><th>קו</th><th>בית ספר ותחנות</th><th class="num">תחנות</th><th class="num">תלמידים</th><th>נהג</th><th>רכב</th><th>מצב</th></tr></thead>
-        <tbody id="sched-body">${schedRows()}</tbody>
-      </table></div>
-      ${t ? drawer(t, d) : ''}
-    </div></div>`;
+    <div class="t-workspace" id="workspace">
+      <div class="t-grid-col"><div class="t-grid t-grid-main" id="g-sched"></div><p class="t-grid-foot" id="sched-foot"></p></div>
+      <div id="inspector"></div>
+    </div>
+  </div>`;
 }
-function drawer(t, d) {
+function paintSchedule() {
+  const d = S.sched;
+  const inDir = d.trips.filter(byDir);
+  const rows = schedRows();
+  const count = k => inDir.filter(t => tripState(t) === k).length;
+  $('#sched-meta').innerHTML = [`יום ${esc(d.weekday)} ${heDate(d.date)}`, `${num(d.trips.length)} נסיעות`, `${num(d.trips.filter(x => x.issues.length).length)} לתיקון לפני פרסום`].join(' · ');
+  $('#facets').innerHTML = FACETS.map(([k, l]) => `<button class="t-chip" data-facet="${k}" aria-pressed="${S.facet.has(k)}">${l} <span class="num">${num(count(k))}</span></button>`).join('')
+    + (S.facet.size ? '<button class="t-btn is-ghost is-sm" data-act="clear-facets">ניקוי</button>' : '');
+  $('#sched-foot').textContent = `מוצגות ${num(rows.length)} מתוך ${num(d.trips.length)} נסיעות · מקור: קובץ הסידור של המועצה`;
+  const g = S.grids.sched;
+  if (g) { g.setGridOption('rowData', rows); g.redrawRows(); }
+  paintInspector();
+}
+function paintInspector() {
+  const t = S.sched?.trips.find(x => x.id === S.drawer);
+  $('#workspace')?.classList.toggle('has-inspector', Boolean(t));
+  const slot = $('#inspector');
+  if (slot) slot.innerHTML = t ? inspector(t, S.sched) : '';
+}
+function openTrip(id) {
+  if (S.dirty && id !== S.drawer && !confirm('לצאת בלי לשמור את השינויים?')) return;
+  S.drawer = id; S.dirty = false; S.stale = false;
+  paintInspector();
+  S.grids.sched?.redrawRows();
+}
+function inspector(t, d) {
   const editable = t.live.phase === 'pending';
   const driverOk = x => x.licenseUntil >= S.day;
   const busOk = v => v.available !== false && v.testUntil >= S.day && (v.capacity == null || v.capacity >= (t.planned || 0));
   const rank = ok => (a, b) => (b.id === t.driverId || b.id === t.vehicleId) - (a.id === t.driverId || a.id === t.vehicleId) || ok(b) - ok(a);
-  const drivers = [...d.drivers].sort(rank(driverOk));
-  const buses = [...d.vehicles].sort(rank(busOk));
   const driverOpt = x => `<option value="${x.id}" ${x.id === t.driverId ? 'selected' : ''}>${esc(x.name)}${x.routeCode ? ` · קו ${esc(x.routeCode)}` : ' · חלופי'}${driverOk(x) ? '' : ' · רישיון פג'}</option>`;
   const busOpt = v => `<option value="${v.id}" ${v.id === t.vehicleId ? 'selected' : ''}>${esc(v.label)}${v.capacity ? ` · ${v.capacity} מק׳` : ''}${v.testUntil < S.day ? ' · טסט פג' : v.capacity != null && v.capacity < (t.planned || 0) ? ' · קטן מדי' : ''}</option>`;
   const done = t.published && !t.issues.length;
-  return `<aside class="t-card t-drawer" aria-label="נסיעה ${esc(t.number)}">
-    <h2><span><span class="t-code is-quiet">${esc(t.routeCode)}</span> ${esc(t.number)} · ${esc(t.school)}</span><button class="t-btn is-ghost is-sm" data-act="close-drawer" aria-label="סגירה">${I.x}</button></h2>
-    <div class="t-drawer-body">
+  return `<section class="t-insp t-drawer" aria-label="נסיעה ${esc(t.number)}">
+    <header class="t-insp-head">
+      <div><h2><span class="t-code is-quiet">${esc(t.routeCode)}</span> ${esc(t.school)}</h2>
+        <p>נסיעה ${esc(t.number)} · ${t.direction === 'morning' ? 'איסוף בוקר' : 'פיזור צהריים'} · יציאה ${esc(t.departure)} · ${num(t.planned)} תלמידים</p></div>
+      <button class="t-btn is-ghost is-sm" data-act="close-drawer" aria-label="סגירה">${I.x}</button>
+    </header>
+    <div class="t-insp-body">
       <div id="stale">${S.stale ? '<div class="t-stale"><span>הסידור השתנה בינתיים.</span><button class="t-btn is-sm" data-act="reload">טעינה מחדש</button></div>' : ''}</div>
       ${t.issues.length ? `<ul class="t-issues ${blocking(t) ? 'is-bad' : ''}">${t.issues.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : `<ul class="t-issues is-ok"><li>${t.published ? 'פורסמה לנהג' : 'מוכנה לפרסום'}</li></ul>`}
-      <div class="t-field"><label for="f-driver">נהג</label><select id="f-driver" class="t-select" ${editable ? '' : 'disabled'}>${drivers.map(driverOpt).join('')}</select></div>
-      <div class="t-field"><label for="f-bus">רכב · מתאימים קודם</label><select id="f-bus" class="t-select" ${editable ? '' : 'disabled'}>${buses.map(busOpt).join('')}</select></div>
-      <div class="t-actions">
-        <button class="t-btn is-primary" id="save-publish" data-act="save-publish" ${editable && (!done || S.dirty) ? '' : 'disabled'}>${done && !S.dirty ? `${I.check} פורסמה לנהג` : 'שמירה ופרסום לנהג'}</button>
-        <button class="t-btn is-ghost" data-act="assign" ${editable ? '' : 'disabled'}>שמירה כטיוטה</button>
-      </div>
-      ${editable ? '' : '<p class="t-source">הנסיעה כבר יצאה. אי אפשר לשנות אותה.</p>'}
+      <div class="t-field"><label for="f-driver">נהג</label><select id="f-driver" class="t-select" ${editable ? '' : 'disabled'}>${[...d.drivers].sort(rank(driverOk)).map(driverOpt).join('')}</select></div>
+      <div class="t-field"><label for="f-bus">רכב · המתאימים ראשונים</label><select id="f-bus" class="t-select" ${editable ? '' : 'disabled'}>${[...d.vehicles].sort(rank(busOk)).map(busOpt).join('')}</select></div>
       <div class="t-field"><label>תחנות · שעה · תלמידים</label>
         <div class="t-stops-edit">${t.stops.map((s, i) => `<div><span>${esc(s.name)}</span><input data-stop-time="${i}" value="${esc(s.time)}" inputmode="numeric" aria-label="שעה ב${esc(s.name)}" ${editable ? '' : 'disabled'}><input data-stop-count="${i}" type="number" min="0" value="${esc(s.planned ?? '')}" aria-label="תלמידים ב${esc(s.name)}" ${editable ? '' : 'disabled'}></div>`).join('')}</div>
       </div>
-      <div class="t-actions"><button class="t-btn" data-act="save-stops" ${editable ? '' : 'disabled'}>שמירת תחנות</button></div>
-      <p class="t-source">שינוי בשיבוץ או בתחנות מחזיר את הנסיעה לטיוטה עד שמפרסמים שוב. מקור: ${esc(t.source.sheet)} ${esc(t.source.range)}</p>
-    </div></aside>`;
+      <p class="t-source">${editable ? 'כל שינוי מחזיר את הנסיעה לטיוטה עד שמפרסמים שוב.' : 'הנסיעה כבר יצאה. אי אפשר לשנות אותה.'} מקור: ${esc(t.source.sheet)} ${esc(t.source.range)}</p>
+    </div>
+    <footer class="t-insp-foot">
+      <button class="t-btn is-primary" id="save-publish" data-act="save-publish" ${editable && (!done || S.dirty) ? '' : 'disabled'}>${done && !S.dirty ? `${I.check} פורסמה לנהג` : 'שמירה ופרסום לנהג'}</button>
+      <button class="t-btn is-ghost" data-act="save-draft" ${editable && S.dirty ? '' : 'disabled'}>שמירה כטיוטה</button>
+    </footer>
+  </section>`;
 }
-async function saveAndPublish(t) {
+async function saveTrip(t, publish) {
   const driverId = $('#f-driver').value;
   const vehicleId = $('#f-bus').value;
+  const stops = t.stops.map((s, i) => ({ name: s.name, time: $(`[data-stop-time="${i}"]`).value.trim(), planned: Number($(`[data-stop-count="${i}"]`).value) }));
+  const latest = async () => (await stateFor(S.day)).trips.find(x => x.id === t.id);
   if (driverId !== t.driverId || vehicleId !== t.vehicleId) await command('assign', { driverId, vehicleId }, t, S.day);
-  const fresh = (await stateFor(S.day)).trips.find(x => x.id === t.id);
+  if (stops.some((s, i) => s.time !== t.stops[i].time || s.planned !== t.stops[i].planned)) {
+    const now = await latest();
+    await command('edit', { departure: stops[0]?.time && t.direction === 'morning' ? stops[0].time : t.departure, stops }, now, S.day);
+  }
   S.dirty = false; S.stale = false;
-  if (fresh.issues.length) { await render(); throw new Error(`נשמר כטיוטה. לפני פרסום: ${fresh.issues[0]}`); }
-  if (!fresh.published) await command('publish', {}, fresh, S.day);
-  await render();
+  let fresh = await latest();
+  if (publish) {
+    if (fresh.issues.length) { await reloadSchedule(); throw new Error(`נשמר כטיוטה. לפני פרסום: ${fresh.issues[0]}`); }
+    if (!fresh.published) await command('publish', {}, fresh, S.day);
+  }
+  await reloadSchedule();
 }
+async function reloadSchedule() { S.sched = await stateFor(S.day); paintSchedule(); }
 
 // ------------------------------------------------------------ fleet
+const daysLeft = iso => Math.round((Date.parse(iso) - Date.parse(TODAY)) / 86_400_000);
+const due = (iso, soon = 14) => !iso ? '<span class="t-pill">לא ידוע</span>' : daysLeft(iso) < 0 ? '<span class="t-pill is-bad">פג תוקף</span>' : daysLeft(iso) <= soon ? `<span class="t-pill is-warn">בעוד ${daysLeft(iso)} ימים</span>` : '<span class="t-pill is-ok">בתוקף</span>';
+// The date and, only when it needs attention, its state: a valid date needs no badge.
+const dateCell = (kind, field, label, soon = 14) => ({
+  cellRenderer: p => `<span class="t-datecell"><input type="date" class="t-date num" data-fleet="${kind}" data-id="${p.data.id}" data-field="${field}" value="${esc(p.data[field])}" aria-label="${esc(label(p.data))}">${!p.data[field] || daysLeft(p.data[field]) <= soon ? due(p.data[field], soon) : ''}</span>`,
+  suppressKeyboardEvent: () => true, sortable: true, flex: 1, minWidth: 230,
+});
 function fleetPage() {
   const d = S.data;
-  const left = iso => Math.round((Date.parse(iso) - Date.parse(TODAY)) / 86_400_000);
-  const due = (iso, soon = 14) => !iso ? '<span class="t-pill">לא ידוע</span>' : left(iso) < 0 ? '<span class="t-pill is-bad">פג תוקף</span>' : left(iso) <= soon ? `<span class="t-pill is-warn">בעוד ${left(iso)} ימים</span>` : '<span class="t-pill is-ok">בתוקף</span>';
-  const tripsOf = (field, id) => d.trips.filter(t => t[field] === id).length;
-  const drivers = [...d.drivers].sort((a, b) => (a.licenseUntil < b.licenseUntil ? -1 : 1));
-  const buses = [...d.vehicles].sort((a, b) => ((a.testUntil || '9') < (b.testUntil || '9') ? -1 : 1));
   const problems = d.alerts.filter(a => a.kind === 'fleet' && a.level === 'high');
-  const date = (kind, x, field, label) => `<input type="date" class="t-date num" data-fleet="${kind}" data-id="${x.id}" data-field="${field}" value="${esc(x[field])}" aria-label="${label}">`;
-  return `<div class="t-page">
-    <div class="t-page-head"><div><h1>צי ונהגים</h1><p>${num(d.drivers.length)} נהגים · ${num(d.vehicles.length)} רכבים · ${problems.length ? `${num(problems.length)} חוסמים נסיעות היום` : 'הכל בתוקף'}</p></div></div>
-    <div class="t-layout" style="grid-template-columns:repeat(auto-fit,minmax(460px,1fr))">
-      <div class="t-card"><h2>נהגים <span>לחיצה על תאריך לעדכון</span></h2><table class="t-table">
-        <thead><tr><th>נהג</th><th>רישיון</th><th>בתוקף עד</th><th></th><th class="num">היום</th></tr></thead>
-        <tbody>${drivers.map(x => `<tr id="row-${x.id}" class="${S.flash === x.id ? 't-flash' : ''}"><td>${esc(x.name)}<div class="t-source">${x.routeCode ? `קו ${esc(x.routeCode)}` : 'חלופי'} · <span dir="ltr" class="num">${esc(x.contact)}</span></div></td><td>${esc(x.licenseType)}</td>
-          <td>${date('driver', x, 'licenseUntil', `תוקף רישיון של ${x.name}`)}</td><td>${due(x.licenseUntil)}</td><td class="num">${num(tripsOf('driverId', x.id))}</td></tr>`).join('')}</tbody></table></div>
-      <div class="t-card"><h2>רכבים <span>טסט וטיפול</span></h2><table class="t-table">
-        <thead><tr><th>רכב</th><th class="num">מקומות</th><th>טסט</th><th></th><th>טיפול</th><th></th></tr></thead>
-        <tbody>${buses.map(x => `<tr id="row-${x.id}" class="${S.flash === x.id ? 't-flash' : ''}"><td>${esc(x.label)}<div class="t-source num" dir="ltr" style="text-align:right">${esc(x.registration)}</div></td><td class="num">${x.capacity ? num(x.capacity) : 'לא ידוע'}</td>
-          <td>${date('vehicle', x, 'testUntil', `תוקף טסט ל${x.label}`)}</td><td>${due(x.testUntil)}</td>
-          <td>${date('vehicle', x, 'serviceDue', `מועד טיפול ל${x.label}`)}</td><td>${due(x.serviceDue, 7)}</td></tr>`).join('')}</tbody></table></div>
+  return `<div class="t-page t-page-full">
+    <header class="t-page-head"><div><h1>צי ונהגים</h1><p>${[`${num(d.drivers.length)} נהגים`, `${num(d.vehicles.length)} רכבים`, problems.length ? `${num(problems.length)} חוסמים נסיעות היום` : 'הכל בתוקף'].join(' · ')}</p></div></header>
+    <div class="t-fleet">
+      <section><div class="t-sec-title"><h2>נהגים</h2><span>לחיצה על תאריך לעדכון</span></div><div class="t-grid t-grid-fleet" id="g-drivers"></div></section>
+      <section><div class="t-sec-title"><h2>רכבים</h2><span>טסט וטיפול</span></div><div class="t-grid t-grid-fleet" id="g-buses"></div></section>
     </div>
-    <p class="t-source" style="margin-top:12px">נהגים, רכבים ותוקפים הם נתוני הדגמה. אין להם מקור בקובץ הסידור.</p></div>`;
+    <p class="t-grid-foot">נהגים, רכבים ותוקפים הם נתוני הדגמה. אין להם מקור בקובץ הסידור.</p>
+  </div>`;
+}
+function fleetRows() {
+  const d = S.data;
+  const trips = (field, id) => d.trips.filter(t => t[field] === id).length;
+  return {
+    drivers: [...d.drivers].sort((a, b) => (a.licenseUntil < b.licenseUntil ? -1 : 1)).map(x => ({ ...x, today: trips('driverId', x.id) })),
+    buses: [...d.vehicles].sort((a, b) => ((a.testUntil || '9') < (b.testUntil || '9') ? -1 : 1)).map(x => ({ ...x, today: trips('vehicleId', x.id) })),
+  };
+}
+function mountFleet() {
+  const rows = fleetRows();
+  const flash = { 't-flash': p => p.data?.id === S.flash };
+  const g1 = grid($('#g-drivers'), 'drivers', {
+    rowData: rows.drivers, rowClassRules: flash,
+    columnDefs: [
+      { headerName: 'נהג', field: 'name', flex: 1.4, minWidth: 170, cellRenderer: p => two(esc(p.value), `${p.data.routeCode ? `קו ${esc(p.data.routeCode)}` : 'חלופי'} · <span dir="ltr">${esc(p.data.contact)}</span>`) },
+      { headerName: 'רישיון', field: 'licenseType', width: 84 },
+      { headerName: 'רישיון בתוקף עד', field: 'licenseUntil', ...dateCell('driver', 'licenseUntil', x => `תוקף רישיון של ${x.name}`) },
+      { headerName: 'נסיעות היום', field: 'today', width: 110, cellClass: endCell },
+    ],
+  });
+  const g2 = grid($('#g-buses'), 'buses', {
+    rowData: rows.buses, rowClassRules: flash,
+    columnDefs: [
+      { headerName: 'רכב', field: 'label', flex: 1.2, minWidth: 140, cellRenderer: p => two(esc(p.value), `<span dir="ltr">${esc(p.data.registration)}</span>`) },
+      { headerName: 'מקומות', field: 'capacity', width: 84, minWidth: 76, cellClass: endCell, valueFormatter: p => (p.value ? num(p.value) : 'לא ידוע') },
+      { headerName: 'טסט בתוקף עד', field: 'testUntil', ...dateCell('vehicle', 'testUntil', x => `תוקף טסט ל${x.label}`) },
+      { headerName: 'טיפול הבא', field: 'serviceDue', ...dateCell('vehicle', 'serviceDue', x => `מועד טיפול ל${x.label}`, 7) },
+    ],
+  });
+  if (S.flash) for (const g of [g1, g2]) { const n = g?.getRowNode(S.flash); if (n) setTimeout(() => g.ensureNodeVisible(n, 'middle'), 50); }
+}
+function paintFleet() {
+  const rows = fleetRows();
+  S.grids.drivers?.setGridOption('rowData', rows.drivers);
+  S.grids.buses?.setGridOption('rowData', rows.buses);
 }
 
 // ------------------------------------------------------------ command bar
@@ -463,16 +559,21 @@ async function render() {
   top();
   const v = view();
   const main = $('#main');
+  if (v !== 'live') { dropGrids(); S.map = null; }
   if (v === 'schedule') {
-    S.sched = await stateFor(S.day); S.stale = false; S.map = null;
+    S.sched = await stateFor(S.day); S.stale = false;
     main.innerHTML = schedulePage();
+    grid($('#g-sched'), 'sched', {
+      rowData: schedRows(), columnDefs: schedColumns(), rowHeight: 56,
+      rowClassRules: { 't-grid-selected': p => p.data?.id === S.drawer },
+      onRowClicked: e => { if (!e.event?.target?.closest?.('a,button,input,select')) openTrip(e.data.id); },
+      onCellKeyDown: e => { if (e.event?.key === 'Enter') openTrip(e.data.id); },
+      onGridReady: e => e.api.setGridAriaProperty('label', 'סידור הסעות'),
+    });
+    paintSchedule();
     return;
   }
-  if (v === 'fleet') {
-    main.innerHTML = fleetPage(); S.map = null;
-    if (S.flash) $(`#row-${S.flash}`)?.scrollIntoView({ block: 'center' });
-    return;
-  }
+  if (v === 'fleet') { main.innerHTML = fleetPage(); mountFleet(); return; }
   if (!$('#map') || S.phoneChanged) {
     main.innerHTML = livePage();
     S.phoneChanged = false;
@@ -486,12 +587,13 @@ async function refresh() {
   try { S.data = await stateFor(TODAY); } catch (e) { toast(e.message, { bad: true }); return; }
   topTick();
   const v = view();
-  if (v === 'live' && $('#map')) { renderSide(); S.map?.update?.(S.data, S.selected); return; }
-  if (v === 'schedule') {
-    if (S.dirty) { S.stale = true; const el = $('#stale'); if (el && !el.innerHTML) el.innerHTML = '<div class="t-stale"><span>הסידור השתנה בינתיים.</span><button class="t-btn is-sm" data-act="reload">טעינה מחדש</button></div>'; return; }
+  if (v === 'live') { if ($('#map')) { renderSide(); S.map?.update?.(S.data, S.selected); } else await render(); return; }
+  if (v === 'schedule' && S.grids.sched) {
     if (S.day !== TODAY) return;
+    if (S.dirty) { S.stale = true; const el = $('#stale'); if (el && !el.innerHTML) el.innerHTML = '<div class="t-stale"><span>הסידור השתנה בינתיים.</span><button class="t-btn is-sm" data-act="reload">טעינה מחדש</button></div>'; return; }
+    S.sched = S.data; paintSchedule(); return;
   }
-  if (v === 'fleet' && document.activeElement?.matches?.('.t-date')) return;
+  if (v === 'fleet' && S.grids.drivers) { if (!document.activeElement?.matches?.('.t-date')) paintFleet(); return; }
   await render();
 }
 
@@ -502,7 +604,7 @@ document.addEventListener('click', e => {
   if (call) { e.preventDefault(); const [name, phone] = call.dataset.call.split('|'); toast(`חיוג ל${name} · ${phone} (בהדגמה אין חיוג)`); return; }
   const ci = e.target.closest('[data-ci]');
   if (ci) { pickCmd(Number(ci.dataset.ci)); return; }
-  const el = e.target.closest('[data-act],[data-trip],[data-alert],[data-row],[data-day],[data-dir],[data-ack],[data-unack],[data-expand],[data-tab]');
+  const el = e.target.closest('[data-act],[data-trip],[data-alert],[data-day],[data-dir],[data-facet],[data-ack],[data-unack],[data-expand],[data-tab]');
   if (!el) return;
   const d = S.data;
   const trip = d?.trips.find(t => t.id === S.selected);
@@ -522,9 +624,9 @@ document.addEventListener('click', e => {
     if (a.queue === 'prep') { const t = d.trips.find(x => x.id === a.tripId); S.day = TODAY; S.dir = t?.direction ?? 'morning'; S.drawer = a.tripId; S.dirty = false; location.hash = '#/schedule'; return; }
     select(a.tripId); return;
   }
-  if (el.dataset.row) { if (S.dirty && el.dataset.row !== S.drawer && !confirm('לצאת בלי לשמור את השינויים?')) return; S.drawer = el.dataset.row; S.dirty = false; render(); return; }
-  if (el.dataset.day) { S.day = el.dataset.day; S.drawer = null; S.dirty = false; render(); return; }
-  if (el.dataset.dir) { S.dir = el.dataset.dir; $('#sched-body').innerHTML = schedRows(); document.querySelectorAll('[data-dir]').forEach(b => b.setAttribute('aria-pressed', b.dataset.dir === S.dir)); return; }
+  if (el.dataset.day) { if (S.dirty && !confirm('לצאת בלי לשמור את השינויים?')) return; S.day = el.dataset.day; S.drawer = null; S.dirty = false; render(); return; }
+  if (el.dataset.dir) { S.dir = el.dataset.dir; document.querySelectorAll('[data-dir]').forEach(b => b.setAttribute('aria-pressed', b.dataset.dir === S.dir)); paintSchedule(); return; }
+  if (el.dataset.facet) { const k = el.dataset.facet; S.facet.has(k) ? S.facet.delete(k) : S.facet.add(k); paintSchedule(); return; }
   const act = el.dataset.act;
   if (act === 'cmd') openCmd();
   if (act === 'cmd-close' && e.target === el) closeCmd();
@@ -548,15 +650,11 @@ document.addEventListener('click', e => {
   if (act === 'compose') { S.composing = !S.composing; renderSide(); if (S.composing) $('#note-text')?.focus(); }
   if (act === 'to-schedule' && trip) { S.day = TODAY; S.dir = trip.direction; S.drawer = trip.id; S.dirty = false; location.hash = '#/schedule'; }
   const t = S.sched?.trips.find(x => x.id === S.drawer);
-  if (act === 'close-drawer') { if (S.dirty && !confirm('לצאת בלי לשמור את השינויים?')) return; S.drawer = null; S.dirty = false; render(); }
-  if (act === 'reload') { S.dirty = false; render(); }
-  if (act === 'save-publish' && t) run(() => saveAndPublish(t), 'נשמר ופורסם לנהג');
-  if (act === 'assign' && t) run(async () => { await command('assign', { driverId: $('#f-driver').value, vehicleId: $('#f-bus').value }, t, S.day); S.dirty = false; await render(); }, 'נשמר כטיוטה. הנהג לא רואה עד הפרסום.');
-  if (act === 'save-stops' && t) run(async () => {
-    const stops = t.stops.map((s, i) => ({ name: s.name, time: $(`[data-stop-time="${i}"]`).value.trim(), planned: Number($(`[data-stop-count="${i}"]`).value) }));
-    await command('edit', { departure: stops[0]?.time && t.direction === 'morning' ? stops[0].time : t.departure, stops }, t, S.day);
-    S.dirty = false; await render();
-  }, 'התחנות נשמרו. נדרש פרסום מחדש.');
+  if (act === 'clear-facets') { S.facet.clear(); paintSchedule(); }
+  if (act === 'close-drawer') { if (S.dirty && !confirm('לצאת בלי לשמור את השינויים?')) return; S.drawer = null; S.dirty = false; paintInspector(); S.grids.sched?.redrawRows(); }
+  if (act === 'reload') { S.dirty = false; S.stale = false; reloadSchedule(); }
+  if (act === 'save-publish' && t) run(() => saveTrip(t, true), 'נשמר ופורסם לנהג');
+  if (act === 'save-draft' && t) run(() => saveTrip(t, false), 'נשמר כטיוטה. הנהג לא רואה עד הפרסום.');
 });
 document.addEventListener('submit', e => {
   if (e.target.dataset.form !== 'note') return;
@@ -569,9 +667,9 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'note-text') S.draft = el.value;
-  if (el.id === 'q') { S.q = el.value; $('#sched-body').innerHTML = schedRows(); }
+  if (el.id === 'q') { S.q = el.value; paintSchedule(); }
   if (el.id === 'cmd-q') { S.cmd.q = el.value; S.cmd.i = 0; drawCmd(); }
-  if (el.closest('.t-drawer') && (el.matches('select,input'))) { S.dirty = true; const b = $('#save-publish'); if (b) { b.disabled = false; b.textContent = 'שמירה ופרסום לנהג'; } }
+  if (el.closest('.t-drawer') && (el.matches('select,input'))) { S.dirty = true; const b = $('#save-publish'); if (b) { b.disabled = false; b.textContent = 'שמירה ופרסום לנהג'; } const dr = $('[data-act=save-draft]'); if (dr) dr.disabled = false; }
 });
 document.addEventListener('change', e => {
   const el = e.target;
@@ -594,7 +692,6 @@ document.addEventListener('keydown', e => {
     if (S.composing) { S.composing = false; renderSide(); return; }
     if (view() === 'live' && S.selected) select(null);
   }
-  if (e.key === 'Enter' && e.target.matches?.('tr[data-row]')) e.target.click();
 });
 window.addEventListener('hashchange', () => { if (view() !== 'fleet') S.flash = null; render(); });
 

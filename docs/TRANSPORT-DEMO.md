@@ -18,6 +18,8 @@ npm run dev
   returns to 07:05 on Sunday and fleet edits are undone. The same menu holds the
   clock (▶, +5 דק׳), the phone, which driver it shows, and "ללא קליטה".
 - ⌘K (or /) searches trips, routes, villages, drivers and buses.
+- The laptop needs internet: Google Maps, and the schedule and fleet tables
+  (AG Grid Community 33.2.4 from jsDelivr, the version Omni's kit uses).
 
 ## What is real and what is staged
 
