@@ -1059,3 +1059,10 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-mapcard-top b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .t-mapcard small { color: var(--muted); font-size: 13px; }
 .t-mapfull > header .t-btn .t-kbd { margin-inline-start: 4px; }
+.t-mnav { display: flex; align-items: center; gap: 4px; }
+.t-mnav h2 { margin: 0 6px; font-size: 18px; font-weight: 600; min-width: 120px; text-align: center; }
+.t-mnav .t-icon-btn.is-next svg.i { transform: scaleX(-1); }
+.t-mnav .t-icon-btn:disabled { opacity: .3; }
+.t-problem .t-inbox-top .t-av { width: 28px; height: 28px; font-size: 11px; }
+.t-problem .t-inbox-top span { display: grid; }
+.t-problem .t-inbox-top small { color: var(--pill-bad); font-size: 12px; }

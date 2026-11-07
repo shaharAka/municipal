@@ -51,20 +51,28 @@ async function api(path, opts = {}) {
   return body;
 }
 const NEXT = new Date(Date.parse(DATE) + 86_400_000).toISOString().slice(0, 10);
-const load = async () => { S.data = await api(`/api/transport/state?date=${DATE}`); try { S.next = await api(`/api/transport/state?date=${NEXT}`); } catch { S.next = null; } };
+// Today, and the rest of the school week, so a new assignment on Tuesday is never a surprise.
+const load = async () => {
+  S.data = await api(`/api/transport/state?date=${DATE}`);
+  const rest = WEEK.filter(d => d !== DATE);
+  const got = await Promise.all(rest.map(d => api(`/api/transport/state?date=${d}`).catch(() => null)));
+  S.days = { [DATE]: S.data, ...Object.fromEntries(rest.map((d, i) => [d, got[i]])) };
+  S.next = S.days[NEXT] ?? null;
+};
 const DAYN = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 const dayName = iso => DAYN[new Date(iso + 'T00:00:00Z').getUTCDay()];
 const heDate = iso => iso.split('-').reverse().slice(0, 2).map(Number).join('.');
 const WEEK = Array.from({ length: 6 }, (_, i) => new Date(Date.parse(DATE) + i * 86_400_000).toISOString().slice(0, 10)).filter(d => new Date(d + 'T00:00:00Z').getUTCDay() < 6);
 const whenWord = d => (d === DATE ? 'היום' : d === NEXT ? 'מחר' : `יום ${dayName(d)}`);
 const changed = t => (t.events ?? []).some(e => e.kind === 'assign');
-const toConfirm = () => [...(S.data?.trips ?? []).map(t => ({ t, date: DATE })), ...(S.next?.trips ?? []).map(t => ({ t, date: NEXT }))].filter(x => changed(x.t) && !x.t.confirmed && x.t.phase === 'pending');
+const toConfirm = () => WEEK.flatMap(date => (S.days?.[date]?.trips ?? []).map(t => ({ t, date }))).filter(x => changed(x.t) && !x.t.confirmed && x.t.phase === 'pending');
+const tripOn = (date, id) => S.days?.[date]?.trips.find(x => x.id === id);
 // Commands about a ride on another day (tomorrow) or about the driver themself; reload after.
 async function sendOn(date, type, data, t = null) {
   await api('/api/transport/commands', { method: 'POST', body: JSON.stringify({ id: crypto.randomUUID(), type, date, tripId: t?.id, version: t?.version, data }) });
   await load(); S.week = null;
 }
-async function loadWeek() { const out = {}; for (const d of WEEK) { try { out[d] = (await api(`/api/transport/state?date=${d}`)).trips.length; } catch { out[d] = null; } } S.week = out; render(); }
+async function loadWeek() { S.week = Object.fromEntries(WEEK.map(d => [d, S.days?.[d]?.trips.length ?? null])); render(); }
 const pill = (text, tone = '') => `<span class="m-pill ${tone}">${esc(text)}</span>`;
 function tripPill(t, clock) {
   if (t.phase === 'completed') return pill('הושלמה', 'is-ok');
@@ -155,7 +163,7 @@ function todayScreen() {
     </button>`;
   // Tomorrow, so a change from the dispatcher is never a surprise at 6 in the morning.
   const nx = (S.next?.trips ?? []).slice().sort((a, b) => a.departure.localeCompare(b.departure));
-  const fresh = nx.filter(changed);
+  const fresh = nx.filter(t => changed(t) && !t.confirmed);
   const tomorrow = nx.length ? `<section class="m-section"><h2>מחר</h2>
       ${fresh.length && !toConfirm().some(x => x.date === NEXT) ? `<div class="m-notice">${pill('שיבוץ חדש', 'is-warn')}<span>${fresh.length === 1 ? 'נסיעה אחת' : `${fresh.length} נסיעות`} בקו ${esc([...new Set(fresh.map(t => t.routeCode))].join(', '))}. הסדרן שיבץ אותך במקום נהג אחר, והפרטים כבר כאן.</span></div>` : ''}
       <div class="m-group">${nx.map(t => `<div class="m-cell is-static"><span class="m-time num">${esc(t.departure)}</span><span><b>${esc(t.school)}</b><small>קו ${esc(t.routeCode)} · ${esc(t.vehicleName ?? '')}</small></span>${t.confirmed ? pill('אישרת', 'is-ok') : changed(t) ? pill('חדש', 'is-warn') : ''}<button class="m-link" data-issue="${NEXT}|${t.id}" aria-label="בעיה בנסיעה של ${esc(t.departure)}">בעיה?</button></div>`).join('')}</div></section>` : '';
@@ -163,20 +171,22 @@ function todayScreen() {
       <h1 class="m-large">${me ? `בוקר טוב, ${esc(me.name.split(' ')[0])}` : 'בוקר טוב'}</h1><p class="m-sub">${d.weekday ? `יום ${esc(d.weekday)} · ${esc(d.clock)} · ${trips.length ? `${trips.length} נסיעות היום` : 'אין נסיעות היום'}` : 'אין חיבור לשרת'}</p></header>
     ${netBanner()}
     <main class="m-scroll">
-      ${[...new Set(toConfirm().map(x => x.date))].map(date => { const list = toConfirm().filter(x => x.date === date).map(x => x.t); return `<section class="m-confirm" aria-label="שיבוץ חדש לאישור">
-        <div class="m-confirm-top">${pill('שיבוץ חדש', 'is-warn')}<small>${whenWord(date)} · ${list.length === 1 ? 'נסיעה אחת' : `${list.length} נסיעות`}</small></div>
-        <b>קו ${esc([...new Set(list.map(t => t.routeCode))].join(', '))} · ${esc(list[0].vehicleName ?? '')}</b>
-        <ul class="m-confirm-list">${list.map(t => `<li><span class="num">${esc(t.departure)}</span>${esc(t.school)}</li>`).join('')}</ul>
-        ${slider(list.length === 1 ? 'החלקה לאישור הנסיעה' : `החלקה לאישור ${list.length} הנסיעות`, false, `${date}|${list.map(t => t.id).join(',')}`)}
-        <button class="m-issue-btn" data-issue="${date}|${list[0].id}">יש לי בעיה עם השיבוץ</button>
-      </section>`; }).join('')}
+      ${(() => { const all = toConfirm(); if (!all.length) return ''; const days = [...new Set(all.map(x => x.date))];
+        const key = days.map(d => `${d}:${all.filter(x => x.date === d).map(x => x.t.id).join(',')}`).join(';');
+        return `<section class="m-confirm" aria-label="שיבוץ חדש לאישור">
+        <div class="m-confirm-top">${pill('שיבוץ חדש', 'is-warn')}<small>${all.length === 1 ? 'נסיעה אחת' : `${all.length} נסיעות`}${days.length > 1 ? ` ב־${days.length} ימים` : ` ${whenWord(days[0])}`}</small></div>
+        <b>קו ${esc([...new Set(all.map(x => x.t.routeCode))].join(', '))} · ${esc(all[0].t.vehicleName ?? '')}</b>
+        <ul class="m-confirm-list">${days.map(d => { const ts = all.filter(x => x.date === d).map(x => x.t).sort((p, q) => p.departure.localeCompare(q.departure)); return `<li><span class="m-confirm-day">${whenWord(d)}</span><span>${ts.length === 1 ? `${esc(ts[0].departure)} · ${esc(ts[0].school)}` : `${ts.length} נסיעות · <span dir="ltr" class="num">${esc(ts[0].departure)}–${esc(ts.at(-1).departure)}</span>`}</span></li>`; }).join('')}</ul>
+        ${slider(all.length === 1 ? 'החלקה לאישור הנסיעה' : `החלקה לאישור כל ${all.length} הנסיעות`, false, key)}
+        <button class="m-issue-btn" data-issue="${all[0].date}|${all[0].t.id}">יש לי בעיה עם השיבוץ</button>
+      </section>`; })()}
       ${now ? `<button class="m-now" data-open="${now.id}">
           <span class="m-now-top">${tripPill(now, clock) || '<small>הנסיעה הבאה</small>'}</span>
           <span class="m-now-time num">${esc(now.departure)}</span>
           <b>${esc(now.school)}</b>
           <small>קו ${esc(now.routeCode)} · ${esc(now.vehicleName ?? '')} · ${now.direction === 'morning' ? 'איסוף' : 'פיזור'} · ${now.stops.length} תחנות · ${now.planned} תלמידים</small>
           <span class="m-now-go">${now.phase === 'active' ? 'המשך הנסיעה' : 'לנסיעה'} ${I.go}</span>
-        </button>` : `<div class="m-empty">${I.check}<div>אין נסיעות נוספות היום</div></div>`}
+        </button>` : toConfirm().length ? '<p class="m-hint">אין לך עוד נסיעות היום.</p>' : `<div class="m-empty">${I.check}<div>אין נסיעות נוספות היום</div></div>`}
       ${later.length ? `<section class="m-section"><h2>בהמשך היום</h2><div class="m-group">${later.map(cell).join('')}</div></section>` : ''}
       ${done.length ? `<section class="m-section"><h2>הושלמו</h2><div class="m-group">${done.map(cell).join('')}</div></section>` : ''}
       ${tomorrow}
@@ -255,7 +265,7 @@ const AWAY = ['מחלה', 'חופשה', 'מילואים', 'אחר'];
 function sheet(t) {
   if (!S.sheet) return '';
   if (S.sheet === 'issue') {
-    const [date, id] = S.issue.key.split('|'); const r = (date === DATE ? S.data : S.next)?.trips.find(x => x.id === id);
+    const [date, id] = S.issue.key.split('|'); const r = tripOn(date, id);
     return `<div class="m-scrim" data-close></div><div class="m-sheet" role="dialog" aria-label="בעיה בנסיעה"><div class="m-grabber"></div>
       <h3>מה הבעיה?</h3><p class="m-sheet-sub">${r ? `${whenWord(date)} · ${esc(r.departure)} · קו ${esc(r.routeCode)}` : ''}</p>
       <div class="m-chips m-chips-wrap">${REASONS.map(x => `<button data-ireason="${x}" aria-pressed="${S.issue.reason === x}">${x}</button>`).join('')}</div>
@@ -303,12 +313,14 @@ function render() {
 // ------------------------------------------------------------ actions
 async function confirmSlide(track) {
   if (track?.dataset.confirm) {
-    const [date, ids] = track.dataset.confirm.split('|');
     if (S.busy) return;
     S.busy = true;
     try {
-      for (const id of ids.split(',')) { const t = (date === DATE ? S.data : S.next)?.trips.find(x => x.id === id); if (t) await sendOn(date, 'confirm', {}, t); }
-      navigator.vibrate?.(30); toast(ids.includes(',') ? 'אישרת את כל הנסיעות · הסדרן רואה שהן סגורות' : 'אישרת · הסדרן רואה שהנסיעה סגורה');
+      const groups = track.dataset.confirm.split(';').map(g => g.split(':'));
+      let n = 0;
+      for (const [date, ids] of groups) for (const id of ids.split(',')) { const t = tripOn(date, id); if (t) { await api('/api/transport/commands', { method: 'POST', body: JSON.stringify({ id: crypto.randomUUID(), type: 'confirm', date, tripId: t.id, version: t.version, data: {} }) }); n++; } }
+      await load();
+      navigator.vibrate?.(30); toast(n > 1 ? `אישרת ${n} נסיעות · הסדרן רואה שהן סגורות` : 'אישרת · הסדרן רואה שהנסיעה סגורה');
     } catch (e) { toast(e.network ? 'אין קליטה. נסו שוב כשתחזור' : e.message, 'bad'); }
     S.busy = false; render(); return;
   }
@@ -378,7 +390,7 @@ document.addEventListener('click', e => {
   if (el.dataset.ireason) { S.issue.reason = el.dataset.ireason; S.issue.text = document.querySelector('#issue-text')?.value ?? ''; render(); return; }
   if ('issueSend' in el.dataset || 'issueCall' in el.dataset) {
     const call = 'issueCall' in el.dataset; const [date, id] = S.issue.key.split('|');
-    const t = (date === DATE ? S.data : S.next)?.trips.find(x => x.id === id);
+    const t = tripOn(date, id);
     const text = call ? '' : (document.querySelector('#issue-text')?.value ?? '');
     sendOn(date, 'concern', { reason: call ? '' : S.issue.reason, text, call }, t).then(() => { S.sheet = null; navigator.vibrate?.(30); toast(call ? 'נשלח · הסדרן יתקשר אליך' : 'נשלח לסדרן'); }).catch(e => toast(e.network ? 'אין קליטה. נסו שוב כשתחזור' : e.message, 'bad'));
     return;

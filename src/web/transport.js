@@ -167,7 +167,7 @@ function rail() {
 function railTick() {
   const d = S.data;
   if (!d) return;
-  const road = d.alerts.filter(a => a.queue === 'road' && !a.handled).length + (d.inbox?.length ?? 0);
+  const road = attentionCount();
   const lic = d.drivers.filter(x => x.licenseUntil < TODAY).length;
   const test = d.vehicles.filter(x => x.testUntil < TODAY).length;
   const set = (id, n, label) => { const el = $(id); if (el) { el.hidden = !n; el.textContent = n; el.setAttribute('aria-label', `${n} ${label}`); } };
@@ -275,8 +275,12 @@ function boardColumns() {
   const d = S.data;
   const now = minutes(d.clock);
   const road = d.alerts.filter(a => a.queue === 'road');
+  // Today's problems, counted exactly like the planner; road alerts that only repeat one of them are folded in.
+  const fix = causes(TODAY);
+  const covered = new Set(fix.flatMap(c => c.rides.map(t => t.id)));
   return {
-    open: road.filter(a => !a.handled), handled: road.filter(a => a.handled),
+    fix,
+    open: road.filter(a => !a.handled && !(a.kind === 'blocked' && (a.tripIds ?? [a.tripId]).every(id => covered.has(id)))), handled: road.filter(a => a.handled),
     soon: d.trips.filter(t => ['upcoming', 'blocked'].includes(t.status) && minutes(t.departure) - now <= 60).sort((a, b) => a.departure.localeCompare(b.departure)),
     later: d.trips.filter(t => ['upcoming', 'blocked'].includes(t.status) && minutes(t.departure) - now > 60),
     moving: d.trips.filter(t => t.status === 'active' || t.status === 'delayed').sort((a, b) => b.live.lateMinutes - a.live.lateMinutes || a.departure.localeCompare(b.departure)),
@@ -284,16 +288,29 @@ function boardColumns() {
     prep: d.alerts.filter(a => a.queue === 'prep' && !a.handled && a.level !== 'low'),
   };
 }
+// One number for "needs you": drivers' messages, live alerts, and today's problems (the same ones the planner shows).
+function attentionCount() { const c = boardColumns(); return (S.data.inbox?.length ?? 0) + c.open.length + c.fix.length; }
+function problemCard(c, i, lead) {
+  const d = S.data;
+  const first = c.rides[0];
+  const left = minutes(first.departure) - minutes(d.clock);
+  return `<div class="t-alert t-problem is-high">
+    <div class="t-alert-open"><span class="t-inbox-top">${causeChip(c, d)}</span><span class="t-detail">${num(c.rides.length)} ${c.rides.length === 1 ? 'נסיעה' : 'נסיעות'} היום · הראשונה ${esc(first.departure)}${left > 0 && left <= 90 ? `, בעוד ${num(left)} דק׳` : ''}</span></div>
+    <div class="t-actions"><button class="t-btn ${lead ? 'is-primary' : ''} is-sm" data-fixtoday="${i}">${c.res === 'bus' ? 'בחירת רכב מחליף' : c.res === 'driver' ? 'בחירת נהג מחליף' : 'לפרטים'}</button></div>
+  </div>`;
+}
 function boardHtml() {
   const c = boardColumns();
   const col = (key, title, count, body, tone = '') => `<section class="t-col ${tone}" aria-labelledby="col-${key}"><header><h2 id="col-${key}">${title}</h2><span class="num">${num(count)}</span></header><div class="t-col-body">${body}</div></section>`;
   const inbox = S.data.inbox ?? [];
-  const attention = inbox.map(inboxCard).join('') + (c.open.length ? c.open.map((a, i) => alertCard(a, i === 0 && !inbox.length)).join('') : inbox.length ? '' : `<div class="t-calm">${I.check}<b>הכל בסדר</b><span>אין כרגע משהו שדורש טיפול.</span></div>`)
+  const total = attentionCount();
+  const attention = inbox.map(inboxCard).join('') + c.open.map((a, i) => alertCard(a, i === 0 && !inbox.length)).join('') + c.fix.map((x, i) => problemCard(x, i, !inbox.length && !c.open.length && i === 0)).join('')
+    + (total ? '' : `<div class="t-calm">${I.check}<b>הכל בסדר</b><span>כל הנסיעות של היום יכולות לצאת, ואין הודעות מנהגים.</span></div>`)
     + (c.handled.length ? `<details class="t-handled"><summary>טופלו (${num(c.handled.length)})</summary>${c.handled.map(a => `<div class="t-handled-row"><span><s>${esc(a.title)}</s><br>${esc(a.handled.by)}</span><button class="t-btn is-sm is-ghost" data-unack="${esc(a.id)}">החזרה</button></div>`).join('')}</details>` : '')
-    + (c.prep.length ? `<button class="t-prep-link" data-act="assist-today">${I.assist}<span><b>${num(c.prep.length)} דברים לסדר לפני היציאה</b><small>העוזר מציע תיקון לכל אחד</small></span>${I.chev}</button>` : '');
+    ;
   const list = (ts, empty) => ts.map(rideCard).join('') || `<p class="t-empty">${empty}</p>`;
   return `<div class="t-board" id="board">
-    ${col('now', 'דורש טיפול', c.open.length, attention, c.open.length ? 'is-attn' : '')}
+    ${col('now', 'דורש טיפול', total, attention, total ? 'is-attn' : '')}
     ${col('soon', 'יוצאות בשעה הקרובה', c.soon.length, list(c.soon, 'אין יציאות בשעה הקרובה.') + (c.later.length ? `<button class="t-more" data-act="later">ועוד ${num(c.later.length)} נסיעות בהמשך היום</button>` : ''))}
     ${col('moving', 'בדרך', c.moving.length, list(c.moving, 'אף אוטובוס לא בדרך כרגע.'))}
     ${col('done', 'הגיעו', c.done.length, c.done.map(t => `<button class="t-ride-mini ${S.insp?.id === t.id ? 'is-open' : ''}" data-ride="${t.id}"><span class="t-code">${esc(t.routeCode)}</span><span>${esc(t.school)}</span><span class="num">${t.live.boarded != null ? `<span dir="ltr">${num(t.live.boarded)}/${num(t.planned)}</span>` : ''}</span></button>`).join('') || '<p class="t-empty">עוד לא הגיעו נסיעות.</p>', 'is-done')}
@@ -320,7 +337,8 @@ function ridesMeta() {
   const d = S.data;
   const c = boardColumns();
   const el = $('#rides-meta');
-  if (el) el.innerHTML = [c.open.length ? `<b class="t-meta-attn">${num(c.open.length)} ${c.open.length === 1 ? 'דבר דורש' : 'דברים דורשים'} טיפול</b>` : 'אין כרגע מה לטפל', `${num(c.moving.length)} בדרך`, `${num(c.done.length)} הגיעו`, `${num(d.trips.length)} נסיעות ביום ${esc(d.weekday)} ${heDate(d.date)}`].join(' · ');
+  const n = attentionCount();
+  if (el) el.innerHTML = [n ? `<b class="t-meta-attn">${num(n)} ${n === 1 ? 'דבר דורש' : 'דברים דורשים'} טיפול</b>` : 'אין כרגע מה לטפל', `${num(c.moving.length)} בדרך`, `${num(c.done.length)} הגיעו`, `${num(d.trips.length)} נסיעות ביום ${esc(d.weekday)} ${heDate(d.date)}`].join(' · ');
 }
 function missingToday(d = S.data, date = TODAY) {
   const used = new Set(d.trips.flatMap(t => [t.driverId, t.vehicleId]));
@@ -648,7 +666,19 @@ function rideProblem(t, date, d) {
   if ((dp && sameRoute(dp)) || (bp && sameRoute(bp))) return { who: 'file', text: `בקובץ יש שתי נסיעות של קו ${t.routeCode} באותה שעה` };
   return null;
 }
-async function loadMonth() { S.plan.month = await api(`/api/transport/month?date=${S.plan.day.slice(0, 8)}01`); }
+const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const monthStart = (iso, add = 0) => { const d = new Date(`${iso.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + add); return d.toISOString().slice(0, 10); };
+async function loadMonth() {
+  S.plan.monthAt ??= monthStart(S.plan.day);
+  const cur = monthStart(TODAY);
+  const [m, c] = await Promise.all([api(`/api/transport/month?date=${S.plan.monthAt}`), S.plan.monthAt === cur ? null : api(`/api/transport/month?date=${cur}`)]);
+  S.plan.month = m; S.plan.cur = c ?? m;
+}
+async function shiftMonth(n) {
+  const next = monthStart(S.plan.monthAt ?? S.plan.day, n);
+  if (next < monthStart(TODAY) || next > monthStart(TODAY, 8)) return;
+  S.plan.monthAt = next; S.plan.month = null; S.mday = null; paintMonthDay(); paintPlanner(); await loadMonth(); paintPlanner();
+}
 async function loadSuggestions(date) {
   try {
     const r = await api(`/api/transport/assistant?date=${date}`);
@@ -673,7 +703,7 @@ function plannerPage() {
 function paintDays() {
   const el = $('#plan-days');
   if (!el) return;
-  const m = new Map((S.plan.month ?? []).map(x => [x.date, x]));
+  const m = new Map((S.plan.cur ?? S.plan.month ?? []).map(x => [x.date, x]));
   el.innerHTML = DAYS.map(x => { const s = m.get(x.date); const n = s?.issues ?? null; return `<button class="t-daytab ${S.plan.day === x.date && S.plan.view === 'fix' ? 'is-on' : ''}" data-pgo="${x.date}"><b>${x.date === TODAY ? 'היום' : x.date === TOMORROW ? 'מחר' : x.label}</b><small>${heDate(x.date)}</small><span>${n == null ? '' : s.noSchool ? '<i class="t-pill">אין הסעות</i>' : n ? `<i class="t-pill is-bad">${num(n)} ${n === 1 ? 'בעיה' : 'בעיות'}</i>` : '<i class="t-pill is-ok">מוכן</i>'}</span></button>`; }).join('')
     + `<span class="t-spacer"></span><button class="t-link" data-pview="month">כל החודש</button><button class="t-link" data-pview="week">הסידור הקבוע</button>`;
 }
@@ -789,7 +819,27 @@ function causeWeek(c, date = S.plan.day) {
   }).filter(Boolean);
 }
 const dayShort = date => (date === TODAY ? 'היום' : date === TOMORROW ? 'מחר' : dayOf(date).label);
-function scopeOf(key, c) { return S.optScope[key] ?? (causeWeek(c).length > 1 ? 'week' : 'day'); }
+function causeRecord(c, date = S.plan.day) {
+  const m = /^(bus|driver)-(.+)$/.exec(c.key); const d = dataFor(date);
+  if (!m || !d) return null;
+  const rec = (m[1] === 'bus' ? d.vehicles : d.drivers).find(x => x.id === m[2]);
+  if (!rec) return null;
+  const away = (rec.away ?? []).find(a => a.from <= date && date <= a.to);
+  return { rec, name: m[1] === 'bus' ? rec.label : rec.name, bus: m[1] === 'bus', away, lasting: !away };
+}
+// The choices for "how long", best first: a lasting problem holds until it's fixed; an absence holds for its days.
+function scopesFor(c, date = S.plan.day) {
+  if (!/^(bus|driver)-/.test(c.key)) return [];
+  const r = causeRecord(c, date); const week = causeWeek(c, date);
+  const weekN = week.reduce((a, x) => a + x.rides.length, 0);
+  const what = r?.bus ? (/טסט/.test(c.head) ? 'הטסט יחודש' : 'הרכב יחזור') : /רישיון/.test(c.head) ? 'הרישיון יחודש' : 'הנהג יחזור';
+  const out = [];
+  if (r?.lasting) out.push({ id: 'until', label: 'עד שזה יסודר', note: `בכל הימים מעכשיו, עד ש${what}` });
+  if (week.length > 1) out.push({ id: 'week', label: r?.away ? `בכל ימי ההיעדרות · ${num(weekN)}` : `רק השבוע · ${num(weekN)}`, note: `בימים: ${week.map(x => dayShort(x.date)).join(', ')}` });
+  out.push({ id: 'day', label: `רק ${dayWord(date)} · ${num(c.rides.length)}`, note: `רק ${dayWord(date)}. בשאר הימים זה יישאר לסידור.` });
+  return out;
+}
+function scopeOf(key, c) { return S.optScope[key] ?? scopesFor(c)[0]?.id ?? 'day'; }
 async function applyOption(c, id, scope, date) {
   const field = c.res === 'bus' ? 'vehicleId' : 'driverId';
   const days = scope === 'day' ? [{ date, rides: c.rides }] : causeWeek(c, date);
@@ -804,8 +854,8 @@ async function applyOption(c, id, scope, date) {
     await loadDay(x.date);
   }
   const routes = [...new Set(c.rides.map(t => t.routeCode))];
-  const tplBefore = scope === 'regular' ? routes.map(code => ({ routeCode: code, ...(S.data.template?.[code] ?? {}) })) : [];
-  if (scope === 'regular') for (const code of routes) await command('template', { routeCode: code, [field]: id }, null, TODAY);
+  const tplBefore = ['regular', 'until'].includes(scope) ? routes.map(code => ({ routeCode: code, ...(S.data.template?.[code] ?? {}) })) : [];
+  if (['regular', 'until'].includes(scope)) for (const code of routes) await command('template', { routeCode: code, [field]: id }, null, TODAY);
   const undo = async () => {
     for (const t of tplBefore) await command('template', t, null, TODAY);
     for (const x of done) { await command('plan', { assignments: x.before, publish: true, reason: 'בוטל' }, null, x.date); await loadDay(x.date); }
@@ -831,7 +881,7 @@ function whatHappens(c, sel, offSel, scope, date, d) {
   if (skip.length) lines.push(['warn', `${skip.map(x => dayShort(x.date)).join(', ')}: ${sel.label} לא פנוי, ולכן זה יישאר לסידור באותם ימים`]);
   if (!bus && rec?.routeCode && !offSel) lines.push(['', `הוא נוהג גם בקו ${rec.routeCode}, בלי חפיפה בשעות`]);
   if (bus && rec?.capacity) lines.push(['', `${num(rec.capacity)} מקומות ל־${num(Math.max(...c.rides.map(t => t.planned || 0)))} תלמידים לכל היותר`]);
-  if (scope === 'regular') lines.push(['', `מעכשיו ${sel.label} ${bus ? 'הרכב הקבוע' : 'הנהג הקבוע'} של קו ${c.rides[0].routeCode}, גם בחודשים הבאים`]);
+  if (scope === 'until') { const r = causeRecord(c, date); lines.push(['', `וגם בכל הימים שאחרי, עד שזה יסודר. החודש ייצא נקי מהבעיה הזו`]); lines.push(['', `כש${r?.bus ? 'הרכב' : 'הנהג'} יחזור, מחזירים אותו בסידור הקבוע של קו ${c.rides[0].routeCode}`]); }
   lines.push(['', bus ? 'הנהגים של הנסיעות יקבלו הודעה על הרכב החדש' : `${firstName(sel.label)} יקבל הודעה בטלפון ויתבקש לאשר`]);
   const left = causes(date).length - 1;
   lines.push(['ok', left ? `אחרי האישור יישארו ${num(left)} ${left === 1 ? 'בעיה' : 'בעיות'} ${dayWord(date)}` : `אחרי האישור ${dayWord(date)} מוכן`]);
@@ -879,11 +929,7 @@ function optionsBlock(c, date, d, scope, cancel = '') {
   const routes = [...new Set(c.rides.map(t => t.routeCode))];
   const sc = scope === 'plan' ? scopeOf(key, c) : 'day';
   const weekN = week.reduce((a, x) => a + x.rides.length, 0);
-  const scopes = scope === 'plan' && /^(bus|driver)-/.test(c.key) ? [
-    week.length > 1 ? { id: 'week', label: `כל השבוע · ${num(weekN)} נסיעות`, note: `המחליף ייכנס בכל הימים השבוע שבהם ${c.res === 'bus' ? 'הרכב' : 'הנהג'} לא יכול לצאת: ${week.map(x => dayShort(x.date)).join(', ')}` } : null,
-    { id: 'day', label: `רק ${dayWord(date)} · ${num(c.rides.length)}`, note: `רק ${dayWord(date)}. בשאר הימים זה יישאר ברשימה לסידור.` },
-    routes.length === 1 ? { id: 'regular', label: `קבוע בקו ${routes[0]}`, note: `${sel.label} ${c.res === 'bus' ? 'יהיה הרכב הקבוע' : 'יהיה הנהג הקבוע'} של קו ${routes[0]} מעכשיו, כולל השבוע.` } : null,
-  ].filter(Boolean) : [];
+  const scopes = scope === 'plan' ? scopesFor(c, date) : [];
   const cur = scopes.find(x => x.id === sc) ?? scopes[0];
   const count = cur ? (cur.id === 'day' ? c.rides.length : weekN || c.rides.length) : c.rides.length;
   const shown = more ? opts : opts.slice(0, 3);
@@ -897,7 +943,7 @@ function optionsBlock(c, date, d, scope, cancel = '') {
     </fieldset>
     ${scopes.length > 1 ? `<div class="t-scope"><span class="t-scope-q">לכמה זמן?</span><div class="t-seg" role="group" aria-label="לכמה זמן">${scopes.map(x => `<button type="button" data-oscope="${esc(key)}|${x.id}" aria-pressed="${x.id === cur.id}">${esc(x.label)}${x.id === scopes[0].id ? ' <i class="t-recommend">מומלץ</i>' : ''}</button>`).join('')}</div><small>${esc(cur.note)}</small></div>` : ''}
     ${scope === 'plan' ? whatHappens(c, sel, offSel, cur?.id ?? 'day', date, d) : ''}
-    <div class="t-actions">${okBtn(sel, Boolean(offSel)).replace('</button>', count > 1 ? ` · ${num(count)} נסיעות</button>` : '</button>')}${cancel}<span class="t-source">${c.res === 'driver' ? `${esc(firstName(sel.label))} יקבל הודעה` : 'הנהגים יקבלו הודעה'} · אפשר לבטל</span></div>
+    <div class="t-actions">${okBtn(sel, Boolean(offSel)).replace('</button>', cur?.id === 'until' ? ' · עד שזה יסודר</button>' : count > 1 ? ` · ${num(count)} נסיעות</button>` : '</button>')}${cancel}<span class="t-source">${c.res === 'driver' ? `${esc(firstName(sel.label))} יקבל הודעה` : 'הנהגים יקבלו הודעה'} · אפשר לבטל</span></div>
     ${fixLink ? `<p class="t-fixline">${fixLink}</p>` : ''}`;
 }
 // Too many students and no bigger bus free: split the ride. Some stops move to a second free bus with a free driver.
@@ -971,7 +1017,7 @@ async function confirmOption(scope, causeKey, id) {
   const sc = scope === 'plan' ? scopeOf(`plan|${causeKey}`, c) : 'day';
   try {
     const r = await applyOption(c, id, sc, date);
-    const text = `${name} שובץ ב־${num(r.n)} ${r.n === 1 ? 'נסיעה' : 'נסיעות'}${r.days > 1 ? ` ב־${num(r.days)} ימים` : ''}${sc === 'regular' ? `, וקבוע בקו ${c.rides[0].routeCode}` : ''}`;
+    const text = `${name} שובץ ב־${num(r.n)} ${r.n === 1 ? 'נסיעה' : 'נסיעות'}${r.days > 1 ? ` ב־${num(r.days)} ימים` : ''}${sc === 'until' ? ', ובכל הימים שאחרי עד שזה יסודר' : ''}`;
     (S.plan.done ??= []).push({ key: c.key, date, text, undo: r.undo });
     if (view() === 'plan') await refreshPlan(date); else { S.focus = null; await loadDay(date); repaint(); }
     toast(`${text} · נשלח לנהגים${r.skipped.length ? ` · ב${r.skipped.map(dayShort).join(', ')} ${name} לא פנוי, זה נשאר לסדר` : ''}`, { undo: () => run(async () => { await r.undo(); S.plan.done = S.plan.done.filter(x => x.undo !== r.undo); view() === 'plan' ? await refreshPlan(date) : (await loadDay(date), repaint()); }, 'בוטל') });
@@ -1076,12 +1122,21 @@ function paintMonth(el) {
   const lead = first.getUTCDay();
   const open = m.filter(x => !x.past && x.issues);
   const ready = m.filter(x => !x.past && !x.issues && !x.noSchool);
-  $('#plan-meta').textContent = `נובמבר ${first.getUTCFullYear()} · ${num(m.length)} ימי לימודים`;
+  const mName = `${MONTHS[first.getUTCMonth()]} ${first.getUTCFullYear()}`;
+  $('#plan-meta').textContent = `${num(m.length)} ימי לימודים`;
   // Problems that sit on a person or a bus repeat every day until fixed: say them once, above the calendar.
   const d = S.data;
   const used = new Set(Object.values(d.template ?? {}).flatMap(c => [c.driverId, c.vehicleId]));
+  // What already stops a regular crew, and what expires during the month on screen, with the date it does.
+  const mFrom = m[0].date.slice(0, 8) + '01'; const mTo = monthStart(mFrom, 1);
   const lasting = [...d.drivers.filter(x => used.has(x.id)).map(x => ({ x, people: true })), ...d.vehicles.filter(x => used.has(x.id)).map(x => ({ x, people: false }))]
-    .map(o => ({ ...o, st: recStatus(o.x, o.people, TOMORROW) })).filter(o => o.st[1] === 'is-bad');
+    .map(o => {
+      const now = recStatus(o.x, o.people, TOMORROW);
+      if (now[1] === 'is-bad') return { ...o, st: now };
+      const dates = o.people ? [['רישיון', o.x.licenseUntil]] : [['טסט', o.x.testUntil], ['טיפול', o.x.serviceDue]];
+      const hit = dates.filter(([, iso]) => iso && iso < mTo && iso >= TOMORROW).sort((a, b) => a[1].localeCompare(b[1]))[0];
+      return hit ? { ...o, st: [`${hit[0]} עד ${heDate(hit[1])}`, 'is-warn'] } : null;
+    }).filter(Boolean).sort((a, b) => (a.st[1] === 'is-bad' ? -1 : 0) - (b.st[1] === 'is-bad' ? -1 : 0));
   // Who is out on each day (HiBob's "who's out"), from the absences on each record.
   const outOn = date => [...d.drivers.map(x => ({ x, n: x.name })), ...d.vehicles.map(x => ({ x, n: x.label }))]
     .filter(o => !o.x.archived && (o.x.away ?? []).some(a => a.from <= date && date <= a.to))
@@ -1097,15 +1152,23 @@ function paintMonth(el) {
     const out = x.past ? [] : outOn(date);
     const state = x.past ? '<small class="t-quiet">עבר</small>' : x.noSchool ? `<i class="t-pill">אין הסעות${x.note ? ` · ${esc(x.note)}` : ''}</i>` : x.issues ? `<i class="t-pill is-bad">${num(x.issues)} ${x.issues === 1 ? 'בעיה' : 'בעיות'}</i>` : x.drafts ? `<i class="t-pill">${num(x.drafts)} לא נשלחו</i>` : '<i class="t-pill is-ok">מוכן</i>';
     const extra = !x.past && x.cancelled && !x.noSchool ? `<span class="t-out-chip is-cancel"><i aria-hidden="true"></i>${num(x.cancelled)} נסיעות בוטלו</span>` : '';
-    cells.push(`<button class="t-cal-cell ${x.past ? 'is-past' : ''} ${x.today ? 'is-today' : ''} ${x.date === TOMORROW ? 'is-tomorrow' : ''} ${S.mday === x.date ? 'is-sel' : ''}" ${x.past ? 'disabled' : `data-mday="${x.date}"`} aria-label="${x.weekday} ${k}.11, ${num(x.rides)} נסיעות">${extra}<b>${k}${x.today ? ' · היום' : x.date === TOMORROW ? ' · מחר' : ''}</b>${state}
+    cells.push(`<button class="t-cal-cell ${x.past ? 'is-past' : ''} ${x.today ? 'is-today' : ''} ${x.date === TOMORROW ? 'is-tomorrow' : ''} ${S.mday === x.date ? 'is-sel' : ''}" ${x.past ? 'disabled' : `data-mday="${x.date}"`} aria-label="${x.weekday} ${k}.${first.getUTCMonth() + 1}, ${num(x.rides)} נסיעות">${extra}<b>${k}${x.today ? ' · היום' : x.date === TOMORROW ? ' · מחר' : ''}</b>${state}
       ${out.slice(0, 2).map(o => `<span class="t-out-chip"><i aria-hidden="true"></i>${esc(firstName(o.n))} · ${esc(o.r)}</span>`).join('')}${out.length > 2 ? `<span class="t-out-chip">ועוד ${num(out.length - 2)}</span>` : ''}</button>`);
   }
   el.innerHTML = `<div class="t-mhead">
+      <div class="t-mnav"><button class="t-icon-btn" data-mshift="-1" aria-label="החודש הקודם" ${S.plan.monthAt <= monthStart(TODAY) ? 'disabled' : ''}>${I.back}</button><h2>${mName}</h2><button class="t-icon-btn is-next" data-mshift="1" aria-label="החודש הבא">${I.back}</button></div>
       <div class="t-mstats"><span class="t-pill is-bad">${num(open.length)} ימים לסדר</span><span class="t-pill is-ok">${num(ready.length)} ימים מוכנים</span></div>
       ${open.length ? `<button class="t-btn" data-pgo="${open[0].date}">לסידור של ${esc(dayWord(open[0].date))}</button>` : ''}
     </div>
     ${tip('month', 'איך לקרוא את החודש', 'כל יום נבנה מהסידור הקבוע. אדום: יש בעיות לסדר. ירוק: הכל מוכן. לחיצה על יום פותחת אותו: אפשר לבטל נסיעות (חג, טיול), להזיז שעות (יום קצר), או לסמן שאין הסעות בכלל.')}
-    ${lasting.length ? `<section class="t-lasting"><b>חוזרות בכל יום עד שיטופלו</b><div>${lasting.map(o => `<button class="t-lasting-item" data-rec-open="${o.people ? 'drivers' : 'vehicles'}:${esc(o.x.id)}">${avatar(o.people ? o.x.name : o.x.label, !o.people)}<span>${esc(o.people ? o.x.name : o.x.label)}</span>${statusPill(o.st)}</button>`).join('')}</div><small>כדי לנקות את כל הימים: מאשרים מחליף "לכל השבוע", או מעדכנים את התוקף בפרטים.</small></section>` : ''}
+    ${lasting.length ? `<section class="t-lasting"><b>${lasting.some(o => o.st[1] === 'is-warn') ? `חוזרות בכל יום עד שיטופלו, ומה שפג במהלך ${MONTHS[first.getUTCMonth()]}` : 'חוזרות בכל יום עד שיטופלו'}</b><div>${(() => {
+      const item = o => `<button class="t-lasting-item" data-rec-open="${o.people ? 'drivers' : 'vehicles'}:${esc(o.x.id)}">${avatar(o.people ? o.x.name : o.x.label, !o.people)}<span>${esc(o.people ? o.x.name : o.x.label)}</span>${statusPill(o.st)}</button>`;
+      const bad = lasting.filter(o => o.st[1] === 'is-bad'); const warn = lasting.filter(o => o.st[1] !== 'is-bad');
+      if (warn.length <= 6) return [...bad, ...warn].map(item).join('');
+      // Many at once: one line per kind, with the date range, instead of a wall of names.
+      const groups = new Map(); for (const o of warn) { const k = `${o.people ? 'drivers' : 'vehicles'}|${o.st[0].split(' ')[0]}`; (groups.get(k) ?? groups.set(k, []).get(k)).push(o); }
+      return bad.map(item).join('') + [...groups.entries()].map(([k, list]) => { const [v, what] = k.split('|'); const ds = list.map(o => o.st[0].split(' עד ')[1]).sort((a, b) => Number(a.split('.').reverse().join('')) - Number(b.split('.').reverse().join(''))); return `<a class="t-lasting-item" href="#/${v}">${avatar('', v === 'vehicles')}<span>${num(list.length)} ${v === 'vehicles' ? 'רכבים' : 'נהגים'}</span>${statusPill([`${what} בין ${ds[0]} ל־${ds.at(-1)}`, 'is-warn'])}</a>`; }).join('');
+    })()}</div><small>${lasting.some(o => o.st[1] === 'is-warn') ? 'כתום: עוד בתוקף, ויפוג בתאריך הזה. מעדכנים את התאריך בפרטים, והימים יתנקו. ' : ''}אדום: כבר לא יכול לצאת. מאשרים מחליף "עד שזה יסודר", או מעדכנים את התוקף.</small></section>` : ''}
     <div class="t-cal"><div class="t-cal-head">${['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'].map(n => `<span>${n}</span>`).join('')}</div><div class="t-cal-grid">${cells.join('')}</div></div>`;
 }
 // ---- one day of the month: what's on, who's out, and the changes people actually make
@@ -1884,6 +1947,10 @@ document.addEventListener('click', async e => {
   if (mf) { S.mapF = mf.dataset.mapf; paintMapSide(); mapUpdate(); return; }
   const msel = e.target.closest('[data-mapsel]');
   if (msel) { mapSelect(msel.dataset.mapsel); return; }
+  const msh = e.target.closest('[data-mshift]');
+  if (msh && !msh.disabled) { shiftMonth(Number(msh.dataset.mshift)); return; }
+  const ft = e.target.closest('[data-fixtoday]');
+  if (ft) { const i = Number(ft.dataset.fixtoday); location.hash = '#/plan'; S.plan.day = TODAY; S.plan.view = 'fix'; S.plan.ci = i; setTimeout(() => { S.plan.ci = i; planGo(TODAY).then(() => { S.plan.ci = i; paintPlanner(); }); }, 0); return; }
   const md = e.target.closest('[data-mday]');
   if (md) { S.mdayFocused = false; openMonthDay(md.dataset.mday); return; }
   const mdo = e.target.closest('[data-mdo]');
