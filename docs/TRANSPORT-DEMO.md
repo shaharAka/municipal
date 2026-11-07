@@ -102,6 +102,23 @@ it, or drive by hand as below.
    week's rides and its absences.
 9. **Close on what we need from them** (below).
 
+## The month planner: user stories it answers
+
+Each story is something Shuki or Inbal do in Excel today. "כל החודש" → click a day.
+
+| Story | Where |
+|---|---|
+| Hanukkah: no school 7–14 December | Day panel → "אין הסעות ביום הזה", reason "חג", "עד תאריך". Grey in the calendar, one undo. |
+| A school is on a trip on Thursday, no afternoon ride | Day panel → the school → "ביטול" → "צהריים" → "טיול". The drivers are told; "החזרה" puts them back. |
+| Short day: a school finishes an hour early | Day panel → the school → "שינוי שעה" → "שעה מוקדם". Stops move with the departure. |
+| A driver is on leave next week | Day panel → "נהג או רכב לא זמינים" (the same form as "משהו השתנה"). |
+| What is different on this day from the regular schedule? | Day panel → "מה השתנה מהסידור הקבוע". |
+| Change the driver or bus of one ride | Day panel → "כל הנסיעות, נסיעה־נסיעה". |
+| Which days still need work this month? | The calendar: one pill per day, counted the same way as the planner ("5 בעיות"). |
+
+Still open, to ask them: a driver's or a route's month at a glance, repeating changes ("every Friday"),
+and publishing a whole week to the drivers at once.
+
 ## The brief's questions, answered from the workbook
 
 | Question in the brief | What the file shows |

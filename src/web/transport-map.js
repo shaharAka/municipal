@@ -86,7 +86,7 @@ export async function mountTransportMap(element, { config, onSelect, focus = nul
   const Marker = markerClass();
   const map = new GoogleMap(element, {
     center: GOLAN, zoom: 11, styles: quiet(), backgroundColor: css('--map-bg'), mapTypeControl: false, streetViewControl: false,
-    fullscreenControl: false, clickableIcons: false, gestureHandling: 'greedy', keyboardShortcuts: false,
+    fullscreenControl: false, cameraControl: false, zoomControl: false, clickableIcons: false, gestureHandling: 'greedy', keyboardShortcuts: false,
   });
   const buses = new Map();
   const legs = new Map(); // tripId -> Promise<array of leg paths, one per consecutive pair of points>
@@ -236,5 +236,7 @@ export async function mountTransportMap(element, { config, onSelect, focus = nul
 
   function retheme() { map.setOptions({ styles: quiet(), backgroundColor: css('--map-bg') }); routes.forEach(r => r.overlays.forEach(o => o.setMap(null))); routes.clear(); const sel = shownRoute.split(':')[0]; shownRoute = ''; if (last) update(last, sel || null); }
   function fitBuses() { const b = new google.maps.LatLngBounds(); (last?.trips ?? []).forEach(t => t.live.position && b.extend(t.live.position)); if (!b.isEmpty()) map.fitBounds(b, 80); }
-  return { update, retheme, fitBuses, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, destroy() { clearTimeout(pending); clusters.forEach(c => c.remove()); buses.forEach(m => m.remove()); routes.forEach(r => r.overlays.forEach(o => o.setMap(null))); clearRoute(); }, get last() { return last; } };
+  return { update, retheme, fitBuses, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); },
+    zoom(d) { map.setZoom((map.getZoom() ?? 11) + d); },
+    focusOn(id) { const t = last?.trips.find(x => x.id === id); if (t?.live.position) { map.panTo(t.live.position); map.setZoom(Math.max(map.getZoom() ?? 11, 13)); } if (last) update(last, id); }, destroy() { clearTimeout(pending); clusters.forEach(c => c.remove()); buses.forEach(m => m.remove()); routes.forEach(r => r.overlays.forEach(o => o.setMap(null))); clearRoute(); }, get last() { return last; } };
 }

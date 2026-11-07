@@ -81,6 +81,14 @@ export function readiness(state: any, trip: any, date: string): string[] {
 export const FILE_CHECKS = new Set(['מספר התלמידים בתחנה אינו מאומת','שם תחנה דורש בירור','המקור מסומן לבדיקה','חסרות כמויות תלמידים בתחנות']);
 /** Blockers stop publishing and driving: an expired licence or test, a missing driver or bus, too few seats, no time. */
 export function blockers(state:any, trip:any, date:string): string[] { return readiness(state,trip,date).filter(i=>!FILE_CHECKS.has(i)); }
+/** One problem per cause: a driver, a bus, or a route short of seats. The planner and the calendar count the same way. */
+export function issueKeyFor(trip:any, list:string[]): string|null {
+  if(!list.length) return null;
+  if(list.some(x=>/נהג/.test(x))) return 'driver-'+(trip.driverId||'none');
+  if(list.some(x=>/רכב|טסט/.test(x)&&!/מקומות/.test(x))) return 'bus-'+(trip.vehicleId||'none');
+  if(list.some(x=>/מקומות/.test(x))) return 'seats-'+trip.routeCode;
+  return 'trip-'+trip.id;
+}
 export function nextStop(trip:any) {
   const stops=trip.stops.map((s:any)=>({...s,kind:trip.direction==='morning'?'pickup':'dropoff'}));
   if (trip.direction==='morning') stops.push({id:'school',name:trip.school,time:null,planned:trip.boarded,kind:'dropoff'});
@@ -105,7 +113,7 @@ export function snapshot(state:any,date:string,viewer:string) {
   const drivers=dispatcher?Object.values(state.drivers):[state.drivers[actor.id]];
   const vehicles=dispatcher?Object.values(state.vehicles):[...new Set(trips.map((t:any)=>t.vehicleId))].map(id=>state.vehicles[id as string]);
   const template=dispatcher?Object.fromEntries([...new Set(schedule.trips.map((t:any)=>t.routeCode))].map((c:any)=>[c,crewOf(state,c)])):{};
-  return {revision:state.revision,date,weekday:DAYS[weekday(date)],actor,clock:day.clock,template,inbox:dispatcher?(state.inbox??[]).filter((x:any)=>!x.done):[],source:schedule.source,trips:views,drivers,vehicles,alerts:dispatcher?alertsFor(views,drivers,vehicles,date,day.clock,day.acks??{}):[],events:day.events.filter((e:any)=>dispatcher||trips.some((t:any)=>t.id===e.tripId)),identityMode:'demo',gps:{connected:false,source:'simulation',label:'מיקומי הרכבים בהדגמה הם סימולציה לפי שעון ההדגמה; אין חיבור GPS'},serverTime:new Date().toISOString()};
+  return {revision:state.revision,date,weekday:DAYS[weekday(date)],actor,clock:day.clock,template,inbox:dispatcher?(state.inbox??[]).filter((x:any)=>!x.done):[],cancelled:dispatcher?(day.cancelled??[]).map((t:any)=>({id:t.id,routeCode:t.routeCode,school:t.school,direction:t.direction,departure:t.departure,reason:t.cancelReason})):[],note:day.note||'',source:schedule.source,trips:views,drivers,vehicles,alerts:dispatcher?alertsFor(views,drivers,vehicles,date,day.clock,day.acks??{}):[],events:day.events.filter((e:any)=>dispatcher||trips.some((t:any)=>t.id===e.tripId)),identityMode:'demo',gps:{connected:false,source:'simulation',label:'מיקומי הרכבים בהדגמה הם סימולציה לפי שעון ההדגמה; אין חיבור GPS'},serverTime:new Date().toISOString()};
 }
 function event(state:any, day:any, trip:any,actor:any,kind:string,text:string,extra:any={}) {
   const e={id:'transport-event-'+day.nextId++,tripId:trip?.id||null,actor:actor.name,actorId:actor.id,kind,text,at:new Date().toISOString(),source:actor.role==='driver'?'driver':'dispatcher',...extra};
@@ -129,11 +137,11 @@ export function execute(state:any,viewer:string,command:any) {
     const fresh=createTransportState();state.drivers=fresh.drivers;state.vehicles=fresh.vehicles;state.days={};state.inbox=[];dayFor(state,date);state.revision++;return {revision:state.revision};
   }
   const trip=day.trips.find((t:any)=>t.id===command.tripId);
-  const dispatcher=['assign','edit','publish','create','note','fleet','clock','ack','unack','plan','template','driver-save','vehicle-save','archive','split','merge'].includes(command.type);
+  const dispatcher=['assign','edit','publish','create','note','fleet','clock','ack','unack','plan','template','driver-save','vehicle-save','archive','split','merge','cancel','restore','shift'].includes(command.type);
   if(dispatcher&&actor.role!=='dispatcher')fail('הפעולה זמינה לסדרנים בלבד.',403);
   if(['inbox-done'].includes(command.type)&&actor.role!=='dispatcher')fail('הפעולה זמינה לסדרנים בלבד.',403);
   if(['confirm','concern','my-away'].includes(command.type)&&actor.role!=='driver')fail('הפעולה זמינה לנהגים בלבד.',403);
-  if(!['fleet','clock','create','ack','unack','plan','template','driver-save','vehicle-save','archive','my-away','inbox-done'].includes(command.type)&&!trip)fail('הנסיעה אינה קיימת ביום שנבחר.',404);
+  if(!['fleet','clock','create','ack','unack','plan','template','driver-save','vehicle-save','archive','my-away','inbox-done','cancel','restore','shift'].includes(command.type)&&!trip)fail('הנסיעה אינה קיימת ביום שנבחר.',404);
   if(trip && actor.role==='driver' && (trip.driverId!==actor.id||!trip.published))fail('לנהג אין גישה לנסיעה הזו.',403);
   if(trip && command.version!==trip.version)fail('הנסיעה השתנתה. רעננו את הנתונים לפני ניסיון נוסף.',409);
   const data=command.data||{};
@@ -212,6 +220,31 @@ export function execute(state:any,viewer:string,command:any) {
       if(changed)delete t.confirmed;
       t.version++;event(state,day,t,actor,changed?'assign':'publish',t.published?`${reason}. פורסם לנהג`:reason);
     }
+  } else if(command.type==='cancel') {
+    // No school, a school trip, a strike: rides come off the day and can be put back.
+    const pick=(t:any)=>t.phase==='pending'&&(data.all===true||(Array.isArray(data.tripIds)&&data.tripIds.includes(t.id))||(data.school&&t.school===data.school&&(!data.direction||t.direction===data.direction)));
+    const out=day.trips.filter(pick);if(!out.length)fail('אין נסיעות לביטול ביום הזה.');
+    const reason=String(data.reason||'').slice(0,80);
+    day.cancelled=[...(day.cancelled??[]),...out.map((t:any)=>({...t,cancelReason:reason}))];
+    day.trips=day.trips.filter((t:any)=>!pick(t));
+    if(!day.trips.length)day.note=reason;
+    event(state,day,null,actor,'cancel',`בוטלו ${out.length} נסיעות${data.school?` של ${data.school}`:''}${reason?`: ${reason}`:''}`,{tripIds:out.map((t:any)=>t.id)});
+  } else if(command.type==='restore') {
+    const back=(day.cancelled??[]).filter((t:any)=>data.all===true||(Array.isArray(data.tripIds)&&data.tripIds.includes(t.id)));
+    if(!back.length)fail('אין נסיעות להחזרה.');
+    day.cancelled=(day.cancelled??[]).filter((t:any)=>!back.includes(t));
+    day.trips=[...day.trips,...back.map(({cancelReason,...t}:any)=>({...t,version:t.version+1}))].sort((a:any,b:any)=>a.departure.localeCompare(b.departure));
+    if(day.trips.length)day.note='';
+    event(state,day,null,actor,'restore',`הוחזרו ${back.length} נסיעות`,{tripIds:back.map((t:any)=>t.id)});
+  } else if(command.type==='shift') {
+    // A short day or a late start: move rides earlier or later, stops and all.
+    const m=Number(data.minutes);if(!Number.isInteger(m)||!m||Math.abs(m)>240)fail('בחרו בכמה דקות להזיז.');
+    const list=day.trips.filter((t:any)=>Array.isArray(data.tripIds)&&data.tripIds.includes(t.id));
+    if(!list.length)fail('אין נסיעות להזזה.');
+    if(list.some((t:any)=>t.phase!=='pending'))fail('אי אפשר להזיז נסיעה שכבר יצאה.');
+    const at=(hm:string)=>{const v=minutes(hm)+m;if(v<0||v>=24*60)fail('השעה החדשה יוצאת מהיום.');return `${String(Math.floor(v/60)).padStart(2,'0')}:${String(v%60).padStart(2,'0')}`;};
+    for(const t of list){t.departure=at(t.departure);t.stops=t.stops.map((x:any)=>validTime(x.time)?{...x,time:at(x.time)}:x);t.version++;if(t.published)event(state,day,t,actor,'shift',`השעה זזה ב־${Math.abs(m)} דקות ${m<0?'מוקדם':'מאוחר'} יותר. פורסם לנהג`);}
+    day.trips.sort((a:any,b:any)=>a.departure.localeCompare(b.departure));
   } else if(command.type==='confirm') {
     // The driver saw a new or changed ride and confirms it.
     trip.confirmed={at:new Date().toISOString()};
@@ -333,7 +366,8 @@ export function monthSummary(state:any, anyDate:string) {
     const rides=schedule.trips.filter((t:any)=>t.weekday===wd).length;if(!rides)continue;
     const day=dayFor(state,date);
     const open=day.trips.filter((t:any)=>t.phase==='pending');
-    out.push({date,weekday:DAYS[wd],rides:day.trips.length,toFix:open.filter((t:any)=>blockers(state,t,date).length).length,drafts:open.filter((t:any)=>!t.published).length,past:date<DEMO_DATE,today:date===DEMO_DATE});
+    const keys=open.map((t:any)=>issueKeyFor(t,blockers(state,t,date))).filter(Boolean);
+    out.push({date,weekday:DAYS[wd],rides:day.trips.length,issues:new Set(keys).size,toFix:keys.length,cancelled:(day.cancelled??[]).length,noSchool:!day.trips.length&&(day.cancelled??[]).length>0,note:day.note||'',drafts:open.filter((t:any)=>!t.published).length,past:date<DEMO_DATE,today:date===DEMO_DATE});
   }
   return out;
 }

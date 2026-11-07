@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTransportState, execute, snapshot, DEMO_DATE } from '../src/transport/engine.ts';
+import { createTransportState, execute, snapshot, monthSummary, DEMO_DATE } from '../src/transport/engine.ts';
 import { placeFor, pointsFor } from '../src/transport/simulate.ts';
 import schedule from '../src/transport/schedule.json' with { type: 'json' };
 
@@ -299,4 +299,30 @@ test('a driver confirms a new ride, flags a problem, and marks a day off; the di
   const first = snapshot(s, DEMO_DATE, 'shuki').inbox[0];
   execute(s, 'shuki', { id: 'a-7', type: 'inbox-done', date: DEMO_DATE, data: { id: first.id } });
   assert.ok(!snapshot(s, DEMO_DATE, 'shuki').inbox.some((x: any) => x.id === first.id));
+});
+
+test('a day can lose its rides (holiday, school trip), move them earlier, and get them back', () => {
+  const s = createTransportState();
+  const date = '2026-11-10';
+  const v = () => snapshot(s, date, 'shuki');
+  const all = v().trips.length;
+  const school = v().trips.find((t: any) => t.direction === 'afternoon').school;
+  const pm = v().trips.filter((t: any) => t.school === school && t.direction === 'afternoon');
+  execute(s, 'shuki', { id: 'c-1', type: 'cancel', date, data: { school, direction: 'afternoon', reason: 'טיול שנתי' } });
+  assert.equal(v().trips.length, all - pm.length);
+  assert.equal(v().cancelled.length, pm.length);
+  execute(s, 'shuki', { id: 'c-2', type: 'restore', date, data: { all: true } });
+  assert.equal(v().trips.length, all);
+  const t = v().trips.find((x: any) => x.id === pm[0].id);
+  execute(s, 'shuki', { id: 'c-3', type: 'shift', date, data: { tripIds: [t.id], minutes: -60 } });
+  const moved = v().trips.find((x: any) => x.id === t.id);
+  const back = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3));
+  assert.equal(back(moved.departure), back(t.departure) - 60);
+  execute(s, 'shuki', { id: 'c-4', type: 'cancel', date, data: { all: true, reason: 'חנוכה' } });
+  assert.equal(v().trips.length, 0);
+  assert.equal(v().note, 'חנוכה');
+  const m = monthSummary(s, date).find((x: any) => x.date === date);
+  assert.ok(m.noSchool);
+  assert.equal(m.issues, 0);
+  assert.throws(() => execute(s, 'driver-10', { id: 'c-5', type: 'restore', date, data: { all: true } }), /לסדרנים/);
 });
