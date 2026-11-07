@@ -154,8 +154,8 @@ components:
     rounded: "{rounded.lg}"
     padding: "14px"
   pill:
-    backgroundColor: "{colors.surface-2}"
-    textColor: "{colors.ink-2}"
+    backgroundColor: "{colors.pill-gray}"
+    textColor: "#ffffff"
     typography: "{typography.small}"
     rounded: "{rounded.full}"
     height: "22px"
@@ -299,8 +299,18 @@ markers.
 - **Trip row:** the route code badge, the school, where the trip is now, and the count
   with a status pill. The badge is `accent` while the trip is moving, `bad` when it is late,
   and quiet otherwise.
-- **Pills:** a dot and a word. They are neutral by default, with `accent`, `ok`, `warn`
-  and `bad` variants. A blocked trip uses the solid pill.
+- **Pills:** one word on a solid, saturated colour with white text, no pastels, so a
+  status reads from across the room: `pill-info` teal for "בדרך", `pill-ok` green for
+  "הגיעה" and "מומלץ", `pill-warn` orange for late, `pill-bad` red for "לא יצאה",
+  "חסומה" and an expired licence or test, and `pill-gray` for not yet left. Every pill
+  colour passes 4.5:1 with white. The page around pills stays neutral, so colour shows
+  up only where it carries a status.
+- **Options:** every problem lists all the free replacements as a radio list. The
+  recommended one comes first, is pre-selected and tagged "מומלץ". Each option has one
+  line of reasons with no full stop, built the same way so options can be compared. The
+  ones that don't fit sit under "לא מתאימים כרגע" with the reason in red, and can still be
+  chosen ("שיבוץ בכל זאת", after a confirm). The one primary button names the change:
+  "אישור: רון אלמוג".
 - **Grids:** AG Grid Community 33.2.4, Quartz theme on our tokens, RTL. Rows are 48px,
   or 56px with two lines. Clicking a row or pressing Enter opens the inspector. A date
   cell shows a badge only when the date needs attention.
@@ -312,6 +322,10 @@ markers.
 
 - Do put one primary action on a card. Everything else is secondary or ghost.
 - Do write button labels as plain verbs in the user's words.
+- Do lead a status line with what needs action, then the scope: "3 דברים דורשים טיפול ·
+  18 בדרך".
+- Do write a toast as what changed plus one action: "רון אלמוג שובץ ב־4 נסיעות · נשלח
+  לנהגים · ביטול". Errors say what to do: "בחרו תאריך התחלה".
 - Do keep counts and times in tabular figures.
 - Don't add "demo", "simulation" or disclaimer text to the screens. The presenter says it
   once.
