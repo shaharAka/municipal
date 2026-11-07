@@ -37,7 +37,7 @@ function markerClass() {
       if (onClick) this.el.addEventListener('click', e => { e.stopPropagation(); onClick(); });
       this.setMap(map);
     }
-    onAdd() { this.getPanes().overlayMouseTarget.appendChild(this.el); }
+    onAdd() { this.getPanes()?.overlayMouseTarget?.appendChild(this.el); }
     draw() {
       const proj = this.getProjection();
       if (!proj || !this.at) return;
