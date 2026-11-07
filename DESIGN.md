@@ -181,8 +181,8 @@ holds the demo run of show.
 
 **Key characteristics**
 
-- One question per screen. "היום" answers "what needs me now"; "סידור" answers "is
-  tomorrow ready"; "נהגים ורכבים" answers "who and what is legal to drive".
+- One question per screen. "נסיעות" answers "what needs me now"; "בניית סידור" answers "is
+  tomorrow ready"; "נהגים" and "רכבים" answer "who and what is legal to drive".
 - Plain Hebrew verbs on buttons ("להתקשר לדוד", "לתיקון בסידור", "טופל"), never jargon.
 - Numbers first, tables second, settings last.
 - Hebrew RTL throughout; tabular figures for every time and count.
