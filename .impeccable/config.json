@@ -1,0 +1,44 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-color",
+        "value": "#000",
+        "createdAt": "2026-11-07T10:14:16.692Z",
+        "reason": "Agent: the presenter's phone-frame mockup copies a real device; DESIGN.md lists it as an exception"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#111315",
+        "createdAt": "2026-11-07T10:14:16.707Z",
+        "reason": "Agent: the presenter's phone-frame mockup copies a real device; DESIGN.md lists it as an exception"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "#2f3339",
+        "createdAt": "2026-11-07T10:14:16.720Z",
+        "reason": "Agent: the presenter's phone-frame mockup copies a real device; DESIGN.md lists it as an exception"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "rgba(0, 0, 0, .55)",
+        "createdAt": "2026-11-07T10:14:16.733Z",
+        "reason": "Agent: the presenter's phone-frame mockup copies a real device; DESIGN.md lists it as an exception"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "44px",
+        "createdAt": "2026-11-07T10:14:16.745Z",
+        "reason": "Agent: the presenter's phone-frame mockup copies a real device; DESIGN.md lists it as an exception"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "54px",
+        "createdAt": "2026-11-07T10:14:16.758Z",
+        "reason": "Agent: the presenter's phone-frame mockup copies a real device; DESIGN.md lists it as an exception"
+      }
+    ]
+  }
+}

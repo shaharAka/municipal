@@ -37,6 +37,11 @@ typography:
     fontWeight: 600
     lineHeight: 1.3
     letterSpacing: "-.01em"
+  panel-title:
+    fontFamily: "\"IBM Plex Sans Hebrew\", \"Heebo\", -apple-system, \"Segoe UI\", Arial, sans-serif"
+    fontSize: "19px"
+    fontWeight: 600
+    lineHeight: 1.3
   title:
     fontFamily: "\"IBM Plex Sans Hebrew\", \"Heebo\", -apple-system, \"Segoe UI\", Arial, sans-serif"
     fontSize: "16px"
@@ -222,7 +227,8 @@ system stack.
 
 - Display (26px, 600): the big numbers on the landing tiles.
 - Headline (22px, 600): the page title and the greeting.
-- Title (16px, 600): card titles, the inspector title.
+- Panel title (19px, 600): the ride panel's and the assistant's heading.
+- Title (16px, 600): card and section titles.
 - Body (14px): everything else; alert titles go up to 15px.
 - Label (13px, 500): buttons, chips, field labels.
 - Emphasis (15px, 600): alert titles, the trip school name, the bigger figures in a row.

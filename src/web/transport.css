@@ -452,7 +452,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke-width: 1.75; }
 .t-mapfull > header h2 { margin: 0; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .t-mapfull-canvas { flex: 1; position: relative; background: var(--map-bg); }
 .t-legend { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
-.t-legend i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; font-style: normal; }
+.t-legend i { width: 12px; height: 12px; border-radius: 6px; display: inline-block; font-style: normal; }
 .t-legend i.is-dashed { border: 1.5px dashed var(--ink-2); background: #fff; }
 .t-legend i.is-cluster { width: 18px; height: 18px; border-radius: 999px; background: var(--solid); color: var(--solid-ink); font-size: 12px; display: inline-grid; place-items: center; font-weight: 600; }
 .t-cluster { display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 999px; background: var(--solid); color: var(--solid-ink); border: 2px solid #fff; font-weight: 600; font-size: 13px; box-shadow: 0 2px 8px rgba(var(--shadow-rgb), .35); cursor: pointer; }
@@ -461,7 +461,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke-width: 1.75; }
 
 /* ------------------------------------------------------------ weekly planner (route × day) */
 .t-key { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-.t-key i { width: 14px; height: 10px; border-radius: 3px; display: inline-block; border: 1px solid var(--line-2); background: var(--surface); }
+.t-key i { width: 14px; height: 10px; border-radius: 6px; display: inline-block; border: 1px solid var(--line-2); background: var(--surface); }
 .t-key i.is-bad { border-color: var(--bad); background: var(--bad-soft); }
 .t-key i.is-draft { border-style: dashed; border-color: var(--ink-2); }
 .t-key i.is-note { position: relative; }
@@ -558,7 +558,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke-width: 1.75; }
 .t-tl-label small { color: var(--muted); font-size: 12px; }
 .t-tl-axis { position: relative; }
 .t-tl-axis span { position: absolute; top: 9px; transform: translateX(50%); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.t-tl-now { position: absolute; top: 4px; bottom: 0; width: 2px; background: var(--hi); border-radius: 2px; }
+.t-tl-now { position: absolute; top: 4px; bottom: 0; width: 2px; background: var(--hi); border-radius: 999px; }
 .t-tl-row { min-height: calc(var(--lanes) * 34px + 12px); border-bottom: 1px solid var(--line); }
 .t-tl-row:last-child { border-bottom: 0; }
 .t-tl-track { position: relative; }
@@ -590,3 +590,15 @@ svg.i { width: 16px; height: 16px; flex: none; stroke-width: 1.75; }
 .t-blk.is-conflict b { color: var(--bad); }
 .t-blk { padding: 0 5px; text-align: center; }
 body:has(.t-plan-bar) .t-toasts { bottom: 96px; }
+/* review fixes: type and radii on the scale, flat proposals inside the assistant, real tap targets */
+.t-insp-title h2 { font-size: 19px; }
+.t-help h2 { font-size: 22px; }
+.t-legend i { border-radius: 6px; }
+.t-key i { border-radius: 6px; }
+.t-tl-now { border-radius: 999px; }
+.t-assist .t-prop { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; padding: 14px 0; background: transparent; }
+.t-assist .t-prop.is-info { background: transparent; }
+.t-assist .t-prop.is-done { background: transparent; }
+.t-assist .t-prop.is-done b { color: var(--ok); }
+.t-link { min-height: 28px; padding: 4px 6px; margin: -4px -6px; border-radius: 8px; }
+.t-link:hover { background: var(--hover); }
