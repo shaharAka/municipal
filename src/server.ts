@@ -686,6 +686,16 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, 
   const platform = demo.primary;
   const viewer = viewerFor(platform, url);
 
+  if (parts[1] === 'workspace' && parts[2] === 'config') {
+    // This variable is explicitly a browser key; never expose a server credential.
+    return json(res, 200, {
+      googleMapsBrowserKey: process.env.GOOGLE_MAPS_ROUTES_ENABLED === 'false' ? '' : process.env.GOOGLE_MAPS_BROWSER_KEY ?? '',
+      googleMapsConfigured: Boolean(process.env.GOOGLE_MAPS_BROWSER_KEY),
+      googleMapsMapId: process.env.GOOGLE_MAPS_MAP_ID ?? 'DEMO_MAP_ID',
+      googleMapsProject: 'municipal-512612',
+    });
+  }
+
   if (parts[1] === 'overview') return json(res, 200, overview(platform, demo, viewer));
   if (parts[1] === 'connections') return json(res, 200, { connections: CONNECTIONS });
   if (parts[1] === 'ontology') {

@@ -8,8 +8,9 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "start": "node src/server.ts",
-    "dev": "node --watch src/server.ts",
+    "start": "node --env-file-if-exists=.env.local src/server.ts",
+    "dev": "node --env-file-if-exists=.env.local --watch src/server.ts",
+    "theme:build": "node scripts/build-aka-theme.mjs",
     "demo": "node src/demo.ts",
     "test": "node --test tests/*.test.ts"
   },

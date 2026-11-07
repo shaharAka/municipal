@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="מערכת המידע העירונית של גבעת רימון — מחלקת תברואה ובריאות." />
+    <title>גבעת רימון · מערכת המידע העירונית</title>
+    <link rel="stylesheet" href="./home.css" />
+    <link rel="stylesheet" href="./value.css" />
+  </head>
+  <body data-mode="landing">
+    <a class="skip" href="#main">דלג לתוכן</a>
+
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="ניווט צדדי"></aside>
+      <div class="app-body">
+        <header class="topbar" id="topbar"></header>
+        <main class="main" id="main" tabindex="-1"></main>
+      </div>
+    </div>
+
+    <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+      <div class="sheet-head">
+        <div class="sheet-heading">
+          <p class="sheet-eyebrow" id="sheet-eyebrow" hidden></p>
+          <h2 id="sheet-title">—</h2>
+        </div>
+        <button class="icon-btn" type="button" data-close-sheet aria-label="סגור">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body" id="sheet-body"></div>
+      <footer class="sheet-foot" id="sheet-foot" hidden></footer>
+    </dialog>
+
+    <script type="module" src="./home.js"></script>
+  </body>
+</html>

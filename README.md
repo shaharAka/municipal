@@ -3,9 +3,19 @@
 A proof of concept for a municipality on Microsoft cloud: a system that maps and learns the organization (structure, ontology,
 workflows), fills its own gaps, answers questions from the data, and grows automations.
 
-**Scope:** the Sanitation & Health department (תברואה ובריאות) of the fictional City of Givat Rimon, across three services —
-food-business health licence, sanitation-fee discount, and sanitation/pest complaints. A second, deliberately different
-municipality (Kiryat Gefen) is onboarded from the first one's graph to show what reusing the model actually saves.
+**Current demo:** a shared Upper Galilee sanitation workspace with monthly
+settlement, collection planning on Google Maps, and CRM service requests.
+Organisational memory, workflow stages, evidence and role examples share the
+same synthetic records. Record conversations and a personal attention inbox
+connect information requests, approvals and a separate Finance sign-off. It is an interactive UI skeleton; ERP/CRM connectors
+and authenticated permissions are not connected to this new surface yet.
+
+- Product purpose: [PRODUCT.md](PRODUCT.md)
+- Workspace implementation plan: [docs/WORKSPACE-PLAN.md](docs/WORKSPACE-PLAN.md)
+- UI reference and boundaries: [docs/WORKSPACE-UX.md](docs/WORKSPACE-UX.md)
+
+The original Givat Rimon licensing/eligibility platform remains available at
+`/classic.html`, including the second-municipality reuse demonstration.
 
 - Design brief: [docs/DESIGN.md](docs/DESIGN.md)
 - Build plan and board: [docs/board/README.md](docs/board/README.md) · [project board](https://github.com/users/shaharAka/projects/3)
@@ -18,11 +28,16 @@ Nothing to install. Node 22.18+:
 ```bash
 npm run demo   # the whole loop, narrated in the terminal with real numbers
 npm start      # the product at http://127.0.0.1:4173
-npm test       # 40 tests over the pipeline, the ontology, eligibility, forms, interviews and access
+npm test       # 63 tests across the platform and the shared workspace
 ```
 
-Open <http://127.0.0.1:4173> and choose one of the seven people from the
-directory. The signed-in product has five movements:
+Open <http://127.0.0.1:4173> for the new workspace. Its top-bar role switch
+simulates manager, finance and dispatcher views. AG Grid tables support dense
+rows, sorting, filtering and column resizing. Google road routes require the
+billing/key setup described in the workspace plan.
+
+The legacy platform at <http://127.0.0.1:4173/classic.html> lets you choose
+one of the seven people from the directory. That product has five movements:
 
 - **Home** — a role-shaped first block: the head sees department health against
   SLA and three findings, the coordinator her case queue, the food inspector her
