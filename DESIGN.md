@@ -311,6 +311,9 @@ markers.
   ones that don't fit sit under "לא מתאימים כרגע" with the reason in red, and can still be
   chosen ("שיבוץ בכל זאת", after a confirm). The one primary button names the change:
   "אישור: רון אלמוג".
+- **Tips:** a quiet note, never a control: a small outlined "i", grey 13px text with a bold
+  lead-in, and a "הסתרה" text link. No border, no fill, no pill, nothing shaped like a button,
+  so it is never mistaken for an action. "?" brings hidden tips back.
 - **Grids:** AG Grid Community 33.2.4, Quartz theme on our tokens, RTL. Rows are 48px,
   or 56px with two lines. Clicking a row or pressing Enter opens the inspector. A date
   cell shows a badge only when the date needs attention.

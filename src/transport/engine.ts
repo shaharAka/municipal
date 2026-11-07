@@ -4,7 +4,7 @@ import { refFor } from '../graph/graph.ts';
 import { liveFor, pointsFor, alertsFor, FLEET_CAUSE } from './simulate.ts';
 export const DEMO_DATE = '2026-11-08';
 export const DEMO_CLOCK = '07:05';
-const DEMO_NAMES = ['דוד מזרחי','יעקב אוחיון','סאמר חלבי','אבי ברק','מוחמד ספדי','משה דהן','אלון שגיא','ראובן לוי','ניר עמר','אדהם אבו סאלח','שלמה פרץ','יוסי חזן','רמי נחום','אייל גבאי','ואיל מסעדה','עמית כרמי','חיים אזולאי','טל רוזן','ג׳מאל אבו זייד','אורי שלום','בני אדרי','גיל נאור','סלים חוסיין','אליהו ביטון','עופר זיו','נתן פרידמן','מאיר כהן','יגאל טל','שמעון דוד','איתי בר','רפאל אסולין'];
+const DEMO_NAMES = ['דוד מזרחי','יעקב אוחיון','סאמר חלבי','אבי ברק','מוחמד ספדי','משה דהן','אלון שגיא','ראובן לוי','ניר עמר','אדהם אבו סאלח','שלמה פרץ','יוסי חזן','רמי נחום','אייל גבאי','ואיל מסעדה','עמית כרמי','חיים אזולאי','טל רוזן','ג׳מאל אבו זייד','אורי שלום','בני אדרי','גיל נאור','סלים חוסיין','אליהו ביטון','עופר זיו','נתן פרידמן','מאיר כהן','יגאל טל','שמעון דוד','איתי בר','רפאל אסולין','נאיף אבו שאהין','דניאל גולן','חסן אבו עוואד','אסף רביבו','קובי חדד','מג׳די אבו ג׳בל','אריאל סויסה','זיאד חלבי','עידו קורן','שאדי ספדי','רועי אלמליח','בועז שמש','פאדי ברכאת','אהרון מלכה','ליאור נגר','יהודה אוחנה','ויסאם טרביה','גדי שטרן','אמיר עזאם','צחי בן חמו'];
 export const DAYS = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
 const ontology = composeBaseline(loadPacks());
 export class TransportError extends Error {
@@ -134,7 +134,7 @@ export function execute(state:any,viewer:string,command:any) {
   if(command.type==='reset') {
     if(actor.role!=='dispatcher')fail('איפוס זמין לסדרנים בלבד.',403);
     // A full demo reset: every day, and the fleet records edited during the run.
-    const fresh=createTransportState();state.drivers=fresh.drivers;state.vehicles=fresh.vehicles;state.days={};state.inbox=[];dayFor(state,date);state.revision++;return {revision:state.revision};
+    const fresh=createTransportState();state.drivers=fresh.drivers;state.vehicles=fresh.vehicles;state.days={};state.inbox=[];state.template={};dayFor(state,date);state.revision++;return {revision:state.revision};
   }
   const trip=day.trips.find((t:any)=>t.id===command.tripId);
   const dispatcher=['assign','edit','publish','create','note','fleet','clock','ack','unack','plan','template','driver-save','vehicle-save','archive','split','merge','cancel','restore','shift'].includes(command.type);
@@ -274,13 +274,23 @@ export function execute(state:any,viewer:string,command:any) {
   } else if(command.type==='split') {
     // Too many students for one bus: some stops move to a second bus with its own driver.
     if(trip.phase!=='pending')fail('אי אפשר לפצל נסיעה שכבר יצאה.');
-    const ids=Array.isArray(data.stopIds)?data.stopIds.map(String):[];
-    const moving=trip.stops.filter((x:any)=>ids.includes(x.id));
-    if(!moving.length||moving.length===trip.stops.length)fail('בחרו אילו תחנות עוברות לרכב השני.');
     if(!state.drivers[data.driverId]||!state.vehicles[data.vehicleId])fail('יש לבחור נהג ורכב קיימים.');
-    const n=moving.reduce((a:number,x:any)=>a+(x.planned||0),0);
+    let moving:any[];let n:number;
+    if(data.partial){
+      // One busy stop: part of its students board the second bus there.
+      const st=trip.stops.find((x:any)=>x.id===data.partial.stopId);const c=Number(data.partial.count);
+      if(!st||!Number.isInteger(c)||c<=0||c>=st.planned)fail('מספר התלמידים שעוברים לא תקין.');
+      moving=[{...st,planned:c}];n=c;
+    } else {
+      const ids=Array.isArray(data.stopIds)?data.stopIds.map(String):[];
+      moving=trip.stops.filter((x:any)=>ids.includes(x.id));
+      if(!moving.length||moving.length===trip.stops.length)fail('בחרו אילו תחנות עוברות לרכב השני.');
+      n=moving.reduce((a:number,x:any)=>a+(x.planned||0),0);
+    }
     const twin={...structuredClone(trip),id:trip.id+'-b'+day.nextId++,number:trip.number+' ב',stops:moving,planned:n,driverId:data.driverId,vehicleId:data.vehicleId,version:1,events:[],notes:[],reports:{},departures:[],splitFrom:trip.id,published:false};
-    trip.stops=trip.stops.filter((x:any)=>!ids.includes(x.id));trip.planned-=n;trip.version++;
+    if(data.partial)trip.stops=trip.stops.map((x:any)=>x.id===data.partial.stopId?{...x,planned:x.planned-n}:x);
+    else trip.stops=trip.stops.filter((x:any)=>!moving.some((m:any)=>m.id===x.id));
+    trip.planned-=n;trip.version++;
     day.trips.push(twin);
     if(!blockers(state,twin,date).length)twin.published=true;
     if(!blockers(state,trip,date).length)trip.published=true;
@@ -290,7 +300,8 @@ export function execute(state:any,viewer:string,command:any) {
     const twin=day.trips.find((t:any)=>t.id===data.fromId&&t.splitFrom===trip.id);
     if(!twin)fail('הנסיעה הנוספת לא נמצאה.',404);
     if(trip.phase!=='pending'||twin.phase!=='pending')fail('אי אפשר לאחד נסיעות שכבר יצאו.');
-    trip.stops=[...trip.stops,...twin.stops].sort((a:any,b:any)=>minutes(a.time)-minutes(b.time));trip.planned+=twin.planned;trip.version++;
+    const merged=trip.stops.map((x:any)=>{const same=twin.stops.find((y:any)=>y.id===x.id);return same?{...x,planned:x.planned+same.planned}:x;});
+    trip.stops=[...merged,...twin.stops.filter((y:any)=>!trip.stops.some((x:any)=>x.id===y.id))].sort((a:any,b:any)=>minutes(a.time)-minutes(b.time));trip.planned+=twin.planned;trip.version++;
     day.trips=day.trips.filter((t:any)=>t!==twin);
     event(state,day,trip,actor,'merge','הפיצול בוטל, כל התחנות חזרו לרכב אחד');
   } else if(command.type==='assign') {

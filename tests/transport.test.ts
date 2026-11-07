@@ -326,3 +326,28 @@ test('a day can lose its rides (holiday, school trip), move them earlier, and ge
   assert.equal(m.issues, 0);
   assert.throws(() => execute(s, 'driver-10', { id: 'c-5', type: 'restore', date, data: { all: true } }), /לסדרנים/);
 });
+
+test('a demo reset also clears changes to the regular schedule', () => {
+  const s = createTransportState();
+  execute(s, 'shuki', { id: 'r-1', type: 'template', date: DEMO_DATE, data: { routeCode: '21', driverId: 'driver-spare' } });
+  execute(s, 'shuki', { id: 'r-2', type: 'reset', date: DEMO_DATE, data: {} });
+  assert.equal(snapshot(s, DEMO_DATE, 'shuki').template['21'].driverId, 'driver-21');
+});
+
+test('a one-stop ride splits by moving part of that stop to a second bus, and merges back whole', () => {
+  const s = createTransportState();
+  const date = '2026-11-09';
+  const v = () => snapshot(s, date, 'shuki');
+  const t = v().trips.find((x: any) => x.planned > (x.capacity ?? 999) && x.capacity);
+  const stop = [...t.stops].sort((a: any, b: any) => b.planned - a.planned)[0];
+  const need = t.planned - t.capacity;
+  execute(s, 'shuki', { id: 'ps-1', type: 'split', date, tripId: t.id, version: t.version, data: { partial: { stopId: stop.id, count: need }, vehicleId: 'bus-spare', driverId: 'driver-spare' } });
+  const a = v().trips.find((x: any) => x.id === t.id); const b = v().trips.find((x: any) => x.splitFrom === t.id);
+  assert.equal(a.planned, t.capacity);
+  assert.equal(b.planned, need);
+  assert.equal(b.stops[0].id, stop.id);
+  execute(s, 'shuki', { id: 'ps-2', type: 'merge', date, tripId: a.id, version: a.version, data: { fromId: b.id } });
+  const m = v().trips.find((x: any) => x.id === t.id);
+  assert.equal(m.planned, t.planned);
+  assert.equal(m.stops.length, t.stops.length);
+});
