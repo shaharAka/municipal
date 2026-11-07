@@ -21,6 +21,7 @@ import { answerInterview, listInterviews, openInterview, ATTENTION } from './int
 import { SOURCES, research, approveSuggestion, type Suggestion, type SourceId } from './research/sources.ts';
 import { refFor, type Viewer } from './graph/graph.ts';
 import { handleValueApi } from './value/api.ts';
+import { handleTransport } from './transport/api.ts';
 
 const WEB = new URL('./web/', import.meta.url).pathname;
 
@@ -683,6 +684,7 @@ function orgView(platform: Platform) {
 }
 
 async function handleApi(req: IncomingMessage, res: ServerResponse, demo: Demo, url: URL, parts: string[]) {
+  if (parts[1] === 'transport') return handleTransport(req, res, url);
   const platform = demo.primary;
   const viewer = viewerFor(platform, url);
 

@@ -1,0 +1,20 @@
+{
+  "pack": "transport",
+  "title": "School transport operations",
+  "description": "Aggregate trip planning, assignments and independently attributed driver reports. GPS observations never prove pickup or dropoff.",
+  "page_types": {
+    "transport_trip": {"properties":{"trip_id":{"type":"string"},"service_date":{"type":"string","format":"date"},"route_code":{"type":"string"},"school":{"type":"string"},"direction":{"type":"string","enum":["morning","afternoon"]},"phase":{"type":"string","enum":["pending","active","completed"]},"planned":{"type":"integer","minimum":0},"source_locator":{"type":"string"}},"required":["trip_id","service_date","route_code","direction","phase","source_locator"]},
+    "transport_stop": {"properties":{"stop_id":{"type":"string"},"name":{"type":"string"},"planned":{"type":"integer","minimum":0},"sequence":{"type":"integer","minimum":0}},"required":["stop_id","name","sequence"]},
+    "transport_driver": {"properties":{"driver_id":{"type":"string"},"display_name":{"type":"string"},"license_until":{"type":"string","format":"date"},"origin":{"type":"string","enum":["demo","verified"]}},"required":["driver_id","display_name","origin"]},
+    "transport_vehicle": {"properties":{"vehicle_id":{"type":"string"},"capacity":{"type":"integer","minimum":1},"test_until":{"type":"string","format":"date"},"origin":{"type":"string","enum":["demo","verified"]}},"required":["vehicle_id","capacity","origin"]},
+    "transport_report": {"properties":{"report_id":{"type":"string"},"count":{"type":"integer","minimum":0},"kind":{"type":"string","enum":["pickup","dropoff"]},"actor":{"type":"string"},"reported_at":{"type":"string","format":"date-time"},"source":{"type":"string","enum":["driver","demo"]}},"required":["report_id","count","kind","actor","reported_at","source"]},
+    "transport_assignment": {"properties":{"assignment_id":{"type":"string"},"published":{"type":"boolean"},"version":{"type":"integer","minimum":1}},"required":["assignment_id","published","version"]}
+  },
+  "edge_kinds": {
+    "transport_stops":{"from":"transport_trip","to":"transport_stop"},
+    "transport_driven_by":{"from":"transport_assignment","to":"transport_driver"},
+    "transport_uses":{"from":"transport_assignment","to":"transport_vehicle"},
+    "transport_assigned_to":{"from":"transport_trip","to":"transport_assignment"},
+    "transport_reported_on":{"from":"transport_report","to":"transport_stop"}
+  }
+}
