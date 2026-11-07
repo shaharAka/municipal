@@ -1077,3 +1077,25 @@ button.t-pick:hover, button.t-pick:focus-visible { background: var(--surface-2);
 .t-date.is-bad { color: var(--pill-bad); font-weight: 600; }
 .t-date.is-warn { color: var(--pill-warn); font-weight: 600; }
 .t-mapcard-when { color: var(--ink); font-weight: 600; }
+/* ---- presenter tour: the screen dims around one thing; a solid card says which point of the brief it answers */
+.t-tourlayer { position: fixed; inset: 0; z-index: 80; pointer-events: none; }
+.t-tourlayer.is-dim { background: rgba(12, 14, 18, .5); }
+.t-hole { position: fixed; border-radius: 16px; box-shadow: 0 0 0 200vmax rgba(12, 14, 18, .5); outline: 2px solid #fff; outline-offset: 0; transition: top .3s ease, left .3s ease, width .3s ease, height .3s ease; }
+.t-hole[hidden] { display: block; box-shadow: 0 0 0 200vmax rgba(12, 14, 18, .5); width: 0; height: 0; top: 50%; left: 50%; outline: 0; }
+.t-tourcard { position: fixed; bottom: 24px; width: 400px; max-width: calc(100vw - 32px); pointer-events: auto; background: var(--surface); color: var(--ink); border-radius: 18px; padding: 16px 18px 12px; display: grid; gap: 10px; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0, 0, 0, .06); animation: t-up .2s ease-out; }
+.t-tourcard[data-at="left"], .t-tourcard[data-at="corner"] { left: 24px; }
+.t-tourcard[data-at="right"] { right: 24px; }
+.t-tourcard[data-at="center"] { left: 50%; bottom: 50%; transform: translate(-50%, 50%); width: 480px; }
+.t-tourcard header { display: flex; align-items: center; justify-content: space-between; }
+.t-tour-kicker { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .01em; }
+.t-tourcard h3 { margin: 0; font-size: 20px; font-weight: 700; }
+.t-tour-ask { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.t-tour-ask span { font-weight: 600; color: var(--ink-2); }
+.t-tour-say { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink); }
+.t-tourcard footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
+.t-tour-scenes { display: inline-flex; gap: 5px; }
+.t-tour-scenes i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-2); }
+.t-tour-scenes i.is-on { background: var(--ink); }
+.t-tour-keys { font-size: 11px; color: var(--faint); }
+.t-tourcard .t-tour-steps { display: flex; gap: 4px; flex-wrap: wrap; }
+.t-tourcard .t-tour-steps button { width: 26px; height: 26px; font-size: 12px; cursor: pointer; }

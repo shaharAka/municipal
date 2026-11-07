@@ -45,8 +45,12 @@ npm run dev
 
 ## Run of show (about 12 minutes)
 
-The tour ("הבריף: 9 הנקודות") walks the same path and highlights each point; use
-it, or drive by hand as below.
+The tour ("הבריף: 9 הנקודות", in the demo menu, or press B) walks the brief point by point.
+Each point has one to three scenes: the platform moves to the right screen, the rest of the
+screen dims around the one thing to look at, and a card shows the point, the brief's own words
+and what this screen answers. Next and Back (or the arrow keys) move scene by scene; the numbers
+jump to a point; Esc closes. A link can open a point directly: `transport.html?tour=5` or
+`?tour=5.3` (point 5, third scene). Use it, or drive by hand as below.
 
 1. **נסיעות, 07:05.** A board, like a CRM pipeline: דורש טיפול, יוצאות בשעה
    הקרובה, בדרך, הגיעו. Say: "This is your workbook, read as a live picture."

@@ -181,7 +181,7 @@ function demoTray() {
   const d = S.data;
   const drivers = d.drivers.filter(x => d.trips.some(t => t.driverId === x.id && t.published && !t.blockers.length));
   return `<div class="t-pop" role="dialog" aria-label="תצוגה">
-    <button class="t-tour-btn" data-act="tour">${I.flag}<span><b>הבריף: 9 הנקודות</b><small>מעבר על כל נקודה בדמו</small></span>${I.chev}</button>
+    <button class="t-tour-btn" data-act="tour">${I.flag}<span><b>הבריף: 9 הנקודות</b><small>מעבר על כל נקודה בדמו · מקש B</small></span>${I.chev}</button>
     <hr>
     <h3>ערכת צבעים</h3>
     <div class="t-themes" role="radiogroup" aria-label="ערכת צבעים">${THEMES.map(t => `<button class="t-theme" role="radio" aria-checked="${S.theme === t.id}" data-theme-pick="${t.id}">
@@ -1795,53 +1795,115 @@ async function archiveRecord(restore = false) {
 }
 
 // ------------------------------------------------------------ the brief, point by point (presenter tour)
-const BRIEF = [
-  { title: 'מטרת המוצר', text: 'מקום אחד לתכנן, לעקוב בזמן אמת ולראות את כל המערך: נסיעות, נהגים, אוטובוסים ותלמידים.', go: () => { S.rides = 'board'; location.hash = '#/rides'; }, spot: '#board', say: 'כל המערך סביב הנסיעות: מה דורש טיפול, מה יוצא, מה בדרך ומה הגיע.' },
-  { title: 'ממשק הסדרנים', text: 'סידור יומי, שיוך נהג ורכב, תחנות ותלמידים, מצב כל נסיעה, מתוכנן מול בפועל, והתראות.', go: async () => { location.hash = '#/rides'; await wait(400); const t = S.data.trips.find(x => x.status === 'active'); if (t) await openRide(t.id, TODAY, 'overview'); }, spot: '.t-insp', say: 'כל נסיעה נפתחת בצד: תחנות עם מתוכנן מול בפועל, הנהג, הרכב, והתראות עם פעולה.' },
-  { title: 'ממשק הנהג', text: 'סידור העבודה, תחנה אחת בכל מסך, ספירה, אישור יציאה בהחלקה, ופיזור.', go: async () => { if (!S.phone) { S.phone = true; paintPhone(); } }, spot: '.t-phone', say: 'הנהג רואה רק את הנסיעות שלו. מחליקים רק כשהרכב עומד.' },
-  { title: 'נהגים וצי רכב', text: 'פרטי קשר, סוג רישיון ותוקפו, טסט, טיפולים וזמינות, עם התראה לפני שפג.', go: () => { S.fleetFilter = 'attn'; location.hash = '#/drivers'; }, spot: '#g-fleet', say: 'מה שפג או עומד לפוג, ולחיצה על תאריך מעדכנת.' },
-  { title: 'תהליך העבודה', text: 'שלב 1: בונים את הסידור למחר. משם הנהג רואה, מדווח, והדשבורד מתעדכן.', go: () => { location.hash = '#/plan'; }, spot: '#plan-body', say: 'הנסיעות כבר בסידור. רואים רק מה צריך לסדר מחר, סיבה בכל כרטיס, עם הצעה ואישור אחד.' },
-  { title: 'הדמו (MVP)', text: 'דשבורד עם מפה, סידור יומי, ממשק נהג, עדכון מיידי וניהול צי, כולם על הנתונים שלכם.', go: async () => { location.hash = '#/rides'; await wait(300); await openMap(); }, spot: '.t-mapfull', say: 'המפה החיה, עם כל האוטובוסים. נפתחת בלחיצה, לא מסתירה את העבודה.' },
-  { title: 'מה למדנו מהקובץ', text: 'מסלולים ותחנות: קוד סידור הוא האוטובוס, נסיעה היא יום + קוד + מספר. יש קווי בוקר וצהריים שונים בכל יום, ושישי שונה. גם נהגי מועצה וגם קבלנים. בקובץ רק מספרי תלמידים, בלי שמות. אין בו נתוני נהגים ותוקפים, ולא GPS.' },
-  { title: 'נקודות לתכנון', text: 'בטיחות: דיווח רק בהחלקה כשהרכב עומד. אמינות: כל מספר מסומן "דיווח נהג" או "משוער". הרשאות: נהג רואה רק את שלו. פרטיות: מספרים בלבד. בלי קליטה: הדיווחים נשמרים בטלפון ונשלחים כשחוזרת קליטה.' },
-  { title: 'הצעד הבא', text: 'כל 710 הנסיעות השבועיות מהאקסל שלכם כבר בפנים. כדי לעבור לפיילוט: חיבור ל־GPS הקיים, רשימת נהגים ורכבים עם תוקפים, ואישור של הזרימה הזו מול שוקי וענבל.' },
-];
+// Each point of the brief is a few scenes. A scene puts the platform in the right place, then the
+// screen dims around the one thing to look at, and a card says which point this is and what it shows.
 const wait = ms => new Promise(r => setTimeout(r, ms));
+async function tourScreen(view, { keepPhone = false } = {}) {
+  if (S.mapOpen) closeMap();
+  if (S.insp) { S.insp = null; S.dirty = false; S.inspMap?.destroy?.(); S.inspMap = null; $('#inspector').innerHTML = ''; }
+  if (S.rec) { S.rec = null; paintRecord(); }
+  if (S.mday) { S.mday = null; S.mdo = null; paintMonthDay(); }
+  if (S.assist) { S.assist = null; paintAssist(); }
+  if (S.phone && !keepPhone) { S.phone = false; paintPhone(); }
+  if (view && location.hash !== `#/${view}`) { location.hash = `#/${view}`; await wait(500); }
+}
+const firstMoving = () => S.data.trips.find(t => t.status === 'active') ?? S.data.trips[0];
+const BRIEF = [
+  { title: 'מטרת המוצר', ask: 'מקום אחד לתכנן, לעקוב בזמן אמת ולראות את כל המערך: נסיעות, נהגים, אוטובוסים ותלמידים.', scenes: [
+    { go: async () => { await tourScreen('rides'); if (S.rides !== 'board') { S.rides = 'board'; await render(); } }, spot: '#board', say: 'המסך הראשי: מה דורש טיפול, מה יוצא בשעה הקרובה, מה בדרך ומה הגיע. כל הנסיעות של היום, במבט אחד.' },
+    { go: async () => { await tourScreen('rides'); }, spot: '.t-rail', say: 'ארבעה מסכים, ולא יותר: נסיעות, סידור, נהגים ורכבים. המספר האדום ליד כל אחד הוא מה שמחכה לטיפול.' },
+  ] },
+  { title: 'ממשק הסדרנים', ask: 'סידור יומי, שיוך נהג ורכב, תחנות ותלמידים, מצב כל נסיעה, מתוכנן מול בפועל, והתראות.', scenes: [
+    { go: async () => { await tourScreen('rides'); if (S.rides !== 'board') { S.rides = 'board'; await render(); } }, spot: '.t-col.is-attn', say: 'התראות: כל בעיה פעם אחת, לפי הסיכון לילדים. נהג שלא יכול לצאת, רכב בלי טסט, הודעה מנהג. ליד כל אחת הפעולה עצמה.' },
+    { go: async () => { await tourScreen('rides'); await openRide(firstMoving().id, TODAY, 'overview'); }, spot: '#inspector .t-insp', say: 'נסיעה אחת: התחנות עם מתוכנן מול בפועל, איפה האוטובוס עכשיו, הנהג עם כפתור חיוג, והרכב.' },
+    { go: async () => { await tourScreen('rides'); S.rides = 'table'; await render(); await wait(700); }, spot: '#g-rides', say: 'אותן נסיעות כטבלה, כמו באקסל: חיפוש, סינון ומיון לפי כל עמודה.', after: () => { S.rides = 'board'; render(); } },
+  ] },
+  { title: 'ממשק הנהג', ask: 'סידור העבודה, תחנה אחת בכל מסך, ספירה, אישור יציאה בהחלקה, ופיזור.', scenes: [
+    { go: async () => { await tourScreen('rides', { keepPhone: true }); if (!S.phone) { S.phone = true; paintPhone(); } await wait(900); }, spot: '.t-phone', say: 'הנהג רואה רק את הנסיעות שלו: הנסיעה הבאה גדולה, תחנה אחת בכל מסך, סופרים ומחליקים כשהרכב עומד.' },
+    { go: async () => { await tourScreen('rides', { keepPhone: true }); if (!S.phone) { S.phone = true; paintPhone(); } await wait(400); }, spot: '.t-phone', say: 'שיבוץ חדש מאושר בהחלקה אחת. "יש בעיה" בשתי נגיעות, או רק "שיתקשרו אליי". והזמינות לשבוע: מתג לכל יום.' },
+  ] },
+  { title: 'נהגים וצי רכב', ask: 'פרטי קשר, סוג רישיון ותוקפו, טסט, טיפולים וזמינות, עם התראה לפני שפג.', scenes: [
+    { go: async () => { S.fleetFilter = 'all'; await tourScreen('drivers'); paintFleet(); }, spot: '#g-fleet', say: 'כל הנהגים, עם מצב אחד ברור לכל אחד: זמין, רישיון פג, מחלה עד יום מסוים. תאריך שפג או קרוב לפוג נצבע.' },
+    { go: async () => { await tourScreen('drivers'); openRecord('drivers', 'driver-21'); await wait(400); }, spot: '#inspector .t-insp', say: 'נהג אחד: הנסיעות שלו השבוע, הפרטים, והיעדרויות. כשמחדשים רישיון, המערכת מציעה להחזיר לו את הקו.' },
+  ] },
+  { title: 'תהליך העבודה', ask: 'שלב 1: בונים את הסידור למחר. משם הנהג רואה, מדווח, והדשבורד מתעדכן.', scenes: [
+    { go: async () => { await tourScreen('plan'); await planView('week'); await wait(300); }, spot: '.t-reg', say: 'הסידור הקבוע מהאקסל של המועצה, קו אחרי קו. ממנו נבנה כל יום, ושינוי כאן חל מעכשיו והלאה.' },
+    { go: async () => { await tourScreen('plan'); S.plan.monthAt = monthStart(TODAY); await planView('month'); await wait(300); }, spot: '.t-cal', say: 'החודש במבט אחד: בעיות בכל יום, מי חסר, וימים בלי הסעות. לחיצה על יום פותחת אותו לעריכה.' },
+    { go: async () => { await tourScreen('plan'); await planGo(TOMORROW); await wait(300); $('.t-carousel')?.scrollIntoView({ block: 'center' }); await wait(300); }, spot: '.t-carousel', say: 'מחר: כל בעיה בכרטיס, כל האפשרויות, המומלצת כבר מסומנת, ו"מה יקרה" לפני האישור. מאשרים, והנהגים מקבלים הודעה.' },
+  ] },
+  { title: 'הדמו (MVP)', ask: 'דשבורד עם מפה, סידור יומי, ממשק נהג, עדכון מיידי וניהול צי, כולם על הנתונים שלכם.', scenes: [
+    { go: async () => { await tourScreen('rides'); await openMap(); await wait(1500); }, spot: '.t-mapfull-canvas', say: 'המפה החיה: כל האוטובוסים, ומסלול עם תחנות למי שבדרך. נפתחת בלחיצה ולא מסתירה את העבודה.' },
+    { go: async () => { if (!S.mapOpen) { await tourScreen('rides'); await openMap(); await wait(1500); } mapSelect(firstMoving().id); await wait(1200); }, spot: '#map-card', say: 'בוחרים נסיעה: המפה עפה אל האוטובוס, ובכרטיס מי הנהג, כמה תלמידים, וכפתור חיוג.' },
+  ] },
+  { title: 'מה למדנו מהקובץ', ask: 'מסלולים, תחנות, נהגים, רכבים ותלמידים, כפי שהם באקסל של המועצה.', scenes: [
+    { go: async () => { await tourScreen('plan'); await planView('week'); await wait(300); }, spot: '#plan-sub', say: 'כל 710 הנסיעות השבועיות מהקובץ כבר כאן: 47 קווים, בוקר וצהריים שונים בכל יום, ושישי שונה. בקובץ אין שמות תלמידים, רק מספרים, ואין נתוני נהגים ותוקפים.' },
+  ] },
+  { title: 'נקודות לתכנון', ask: 'בטיחות, אמינות הנתונים, הרשאות, פרטיות, ועבודה בלי קליטה.', scenes: [
+    { go: async () => { await tourScreen('rides', { keepPhone: true }); if (!S.phone) { S.phone = true; paintPhone(); } await wait(700); }, spot: '.t-phone', say: 'בטיחות: מדווחים רק בהחלקה, כשהרכב עומד. הרשאות: נהג רואה רק את שלו. בלי קליטה: הדיווח נשמר בטלפון ונשלח כשהקליטה חוזרת.' },
+    { go: async () => { await tourScreen('rides'); if (S.rides !== 'board') { S.rides = 'board'; await render(); } }, spot: '#board', say: 'אמינות: כל מספר מסומן אם הוא מהנהג או לפי לוח הזמנים. פרטיות: מספרים בלבד, בלי שמות ילדים.' },
+  ] },
+  { title: 'הצעד הבא', ask: 'מה צריך כדי לעבור מהדמו לפיילוט.', scenes: [
+    { go: async () => { await tourScreen('rides'); if (S.rides !== 'board') { S.rides = 'board'; await render(); } }, spot: null, say: 'כדי לעבור לפיילוט: חיבור ל־GPS הקיים, רשימת נהגים ורכבים עם תוקפים, ואישור הזרימה הזו מול שוקי וענבל.' },
+  ] },
+];
 function paintTour() {
   const slot = $('#tour');
-  if (!S.tour) { slot.innerHTML = ''; clearSpot(); return; }
-  const i = S.tour.step;
-  const b = BRIEF[i];
-  slot.innerHTML = `<aside class="t-tour ${i === 2 ? 'is-away' : ''}" aria-label="הבריף, 9 הנקודות">
-    <header><b>הבריף · ${i + 1} מתוך ${BRIEF.length}</b><button class="t-icon-btn" data-act="tour-close" aria-label="סגירת הסיור">${I.x}</button></header>
-    <ol class="t-tour-steps">${BRIEF.map((x, k) => `<li><button data-tour="${k}" aria-current="${k === i}">${k + 1}</button></li>`).join('')}</ol>
-    <h3>${esc(b.title)}</h3><p>${esc(b.text)}</p>
-    <div class="t-actions">${i > 0 ? '<button class="t-btn is-sm" data-tour-step="-1">הקודם</button>' : ''}${i < BRIEF.length - 1 ? '<button class="t-btn is-primary is-sm" data-tour-step="1">הבא</button>' : '<button class="t-btn is-primary is-sm" data-act="tour-close">סיום</button>'}</div>
-  </aside>`;
+  if (!S.tour) { slot.innerHTML = ''; window.removeEventListener('resize', placeHole); document.removeEventListener('scroll', placeHole, true); return; }
+  const { step: i, scene: j } = S.tour;
+  const b = BRIEF[i]; const sc = b.scenes[j];
+  const last = i === BRIEF.length - 1 && j === b.scenes.length - 1;
+  slot.innerHTML = `<div class="t-tourlayer"><div class="t-hole" id="tour-hole" hidden></div>
+    <aside class="t-tourcard" id="tour-card" role="dialog" aria-label="הבריף, נקודה ${i + 1} מתוך ${BRIEF.length}">
+      <header><span class="t-tour-kicker">הבריף · נקודה ${i + 1} מתוך ${BRIEF.length}</span><button class="t-icon-btn" data-act="tour-close" aria-label="סגירת הסיור">${I.x}</button></header>
+      <ol class="t-tour-steps" aria-label="הנקודות">${BRIEF.map((x, k) => `<li><button data-tour="${k}" aria-current="${k === i}" title="${esc(x.title)}">${k + 1}</button></li>`).join('')}</ol>
+      <h3>${esc(b.title)}</h3>
+      <p class="t-tour-ask"><span>בבריף:</span> ${esc(b.ask)}</p>
+      <p class="t-tour-say" aria-live="polite">${esc(sc.say)}</p>
+      <footer>${b.scenes.length > 1 ? `<span class="t-tour-scenes" aria-label="מסך ${j + 1} מתוך ${b.scenes.length}">${b.scenes.map((_, k) => `<i class="${k === j ? 'is-on' : ''}"></i>`).join('')}</span>` : '<span></span>'}
+        <span class="t-actions">${i > 0 || j > 0 ? '<button class="t-btn is-sm" data-tour-step="-1">הקודם</button>' : ''}${last ? '<button class="t-btn is-primary is-sm" data-act="tour-close">סיום</button>' : `<button class="t-btn is-primary is-sm" data-tour-step="1">${j < b.scenes.length - 1 ? 'הבא' : `לנקודה ${i + 2}`}</button>`}</span></footer>
+      <small class="t-tour-keys">חיצים במקלדת לדפדוף · Esc לסגירה</small>
+    </aside></div>`;
+  window.addEventListener('resize', placeHole); document.addEventListener('scroll', placeHole, true);
+  placeHole();
+  $('#tour-card [data-tour-step="1"], #tour-card [data-act=tour-close]')?.focus({ preventScroll: true });
 }
-async function tourGo(i) {
-  S.tour = { step: i }; S.pop = false; rail();
-  clearSpot();
-  if (S.mapOpen && i !== 5) closeMap();
+// The cut-out follows its target; the card sits where it covers the least.
+function placeHole() {
+  const hole = $('#tour-hole'); const card = $('#tour-card'); if (!hole || !S.tour) return;
+  const sc = BRIEF[S.tour.step].scenes[S.tour.scene];
+  const el = sc.spot ? document.querySelector(sc.spot) : null;
+  const layer = hole.parentElement;
+  if (!el) { hole.hidden = true; layer.classList.add('is-dim'); card.dataset.at = 'center'; return; }
+  layer.classList.remove('is-dim');
+  const r = el.getBoundingClientRect(); const pad = 8;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const top = Math.max(6, r.top - pad), left = Math.max(6, r.left - pad);
+  hole.hidden = false;
+  Object.assign(hole.style, { top: `${top}px`, left: `${left}px`, width: `${Math.min(vw - 12, r.right + pad) - left}px`, height: `${Math.min(vh - 12, r.bottom + pad) - top}px` });
+  // Prefer a corner the target leaves free; a target that fills the screen gets the card in the bottom corner.
+  const big = r.width > vw * 0.6 && r.height > vh * 0.5;
+  card.dataset.at = big ? 'corner' : (r.left + r.width / 2 > vw / 2 ? 'left' : 'right');
+}
+async function tourGo(i, j = 0) {
+  const prev = S.tour && BRIEF[S.tour.step].scenes[S.tour.scene];
+  prev?.after?.();
+  S.tour = { step: i, scene: j }; S.pop = false; rail();
   paintTour();
-  const b = BRIEF[i];
-  if (b.go) { await b.go(); await wait(700); }
-  if (b.spot) spot(b.spot, b.say);
+  $('#tour-hole')?.setAttribute('hidden', '');
+  const sc = BRIEF[i].scenes[j];
+  try { await sc.go?.(); } catch {}
+  await wait(250);
+  if (S.tour?.step === i && S.tour?.scene === j) placeHole();
 }
-function spot(sel, text) {
-  clearSpot();
-  const el = document.querySelector(sel);
-  if (!el) return;
-  el.scrollIntoView({ block: 'nearest' });
-  el.classList.add('t-spot');
-  const r = el.getBoundingClientRect();
-  const tip = document.createElement('div');
-  tip.className = 't-callout'; tip.textContent = text; tip.setAttribute('role', 'note');
-  document.body.append(tip);
-  const top = r.top > 120 ? r.top - tip.offsetHeight - 12 : Math.min(window.innerHeight - tip.offsetHeight - 12, r.bottom + 12);
-  tip.style.top = `${Math.max(12, top)}px`;
-  tip.style.left = `${Math.max(12, Math.min(window.innerWidth - tip.offsetWidth - 12, r.left + r.width / 2 - tip.offsetWidth / 2))}px`;
+function tourMove(d) {
+  if (!S.tour) return;
+  let { step: i, scene: j } = S.tour;
+  j += d;
+  if (j >= BRIEF[i].scenes.length) { if (i >= BRIEF.length - 1) return; i++; j = 0; }
+  if (j < 0) { if (i === 0) return; i--; j = BRIEF[i].scenes.length - 1; }
+  tourGo(i, j);
 }
+function spot() {}
 function clearSpot() { document.querySelectorAll('.t-spot').forEach(x => x.classList.remove('t-spot')); document.querySelectorAll('.t-callout').forEach(x => x.remove()); }
 
 // ------------------------------------------------------------ help
@@ -2072,7 +2134,7 @@ document.addEventListener('click', async e => {
   if (ds.propMore) { S.assist.open.add(ds.propMore); paintAssist(); return; }
   if (ds.ask) { S.assist.ask = ds.ask; runAssist(); return; }
   if (ds.tour) { tourGo(Number(ds.tour)); return; }
-  if (ds.tourStep) { tourGo(Math.max(0, Math.min(BRIEF.length - 1, S.tour.step + Number(ds.tourStep)))); return; }
+  if (ds.tourStep) { tourMove(Number(ds.tourStep)); return; }
   const act = ds.act;
   const d = S.data;
   if (act === 'cmd') openCmd();
@@ -2112,7 +2174,7 @@ document.addEventListener('click', async e => {
   if (act === 'tips-on') { try { ['plan', 'month', 'regular'].forEach(k => localStorage.removeItem(`t-tip-${k}`)); } catch {} S.help = false; paintHelp(); repaint(); toast('הטיפים יוצגו שוב'); return; }
   if (act === 'fleet-issues') { S.fleetFilter = S.fleetFilter === 'attn' ? 'all' : 'attn'; paintFleet(); }
   if (act === 'tour') { S.pop = false; tourGo(0); }
-  if (act === 'tour-close') { S.tour = null; paintTour(); }
+  if (act === 'tour-close') { BRIEF[S.tour?.step]?.scenes[S.tour?.scene]?.after?.(); S.tour = null; paintTour(); if (S.mapOpen) closeMap(); }
   if (act === 'play') { S.playing = !S.playing; tick(); rail(); }
   if (act === 'plus5') run(() => command('clock', { time: hhmm(minutes(d.clock) + 5) }));
   if (act === 'phone') { S.phone = !S.phone; el.setAttribute('aria-checked', S.phone); paintPhone(); }
@@ -2193,14 +2255,17 @@ document.addEventListener('keydown', e => {
   if (e.key === '?') { S.help = !S.help; paintHelp(); return; }
   if ((e.key === 'p' || e.key === 'P' || e.key === 'פ') && view() === 'plan' && S.plan.view === 'day') { publishDrafts(); return; }
   if (e.key.toLowerCase() === 'm' || e.key === 'צ') { S.mapOpen ? closeMap() : openMap(); return; }
+  if (e.key.toLowerCase() === 'b' || e.key === 'נ') { S.tour ? (S.tour = null, paintTour()) : tourGo(0); return; }
   if (e.key.toLowerCase() === 'a' || e.key === 'ש') { S.assist ? (S.assist = null, paintAssist(), rail()) : openAssist(TOMORROW); return; }
   if (e.key === 'Escape' && S.change) { S.change = null; paintChange(); return; }
   if (e.key === 'Escape' && S.picker) { const a = S.picker.anchor; closePicker(); a?.focus?.(); return; }
   if (e.key === 'Enter' && e.target.matches?.('[data-tpick]')) { e.target.click(); return; }
+  if (S.tour && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.target.closest('input,textarea,select')) { e.preventDefault(); tourMove(e.key === 'ArrowLeft' ? 1 : -1); return; }
   if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && view() === 'plan' && S.plan.view === 'fix' && !e.target.closest('input,textarea,select,[role=radio],.t-picker')) {
     const n = causes(S.plan.day).length; const next = (S.plan.ci ?? 0) + (e.key === 'ArrowLeft' ? 1 : -1);
     if (next >= 0 && next < n) { S.plan.ci = next; paintPlanner(); e.preventDefault(); } return;
   }
+  if (e.key === 'Escape' && S.tour) { BRIEF[S.tour.step]?.scenes[S.tour.scene]?.after?.(); S.tour = null; paintTour(); if (S.mapOpen) closeMap(); return; }
   if (e.key === 'Escape') {
     clearSpot();
     if (S.help) { S.help = false; paintHelp(); return; }
@@ -2236,3 +2301,4 @@ if (location.hash === '#/fleet') history.replaceState(null, '', '#/drivers');
 await loadDay(TODAY);
 await render();
 listen();
+{ const t = new URLSearchParams(location.search).get('tour'); if (t) { const [i, j] = t.split('.').map(Number); if (BRIEF[i - 1]) tourGo(i - 1, Math.max(0, Math.min((j || 1) - 1, BRIEF[i - 1].scenes.length - 1))); } }
