@@ -132,8 +132,9 @@ export function proposalsFor(state: any, baseDate: string, ask = '', read: Inten
 
   const drivers = (Object.values(state.drivers) as any[]);
   const vehicles = (Object.values(state.vehicles) as any[]);
-  const okDriver = (d: any) => d.available !== false && d.licenseUntil >= date;
-  const okBus = (v: any, seats = 0) => v.available !== false && v.testUntil >= date && v.serviceDue >= date && (seats ? v.capacity != null && v.capacity >= seats : true);
+  const isAway = (r: any) => (r.away ?? []).some((x: any) => x.from <= date && date <= x.to);
+  const okDriver = (d: any) => !d.archived && d.available !== false && !isAway(d) && d.licenseUntil >= date;
+  const okBus = (v: any, seats = 0) => !v.archived && v.available !== false && !isAway(v) && v.testUntil >= date && v.serviceDue >= date && (seats ? v.capacity != null && v.capacity >= seats : true);
   const pickDriver = (ts: any[], not: string) => drivers
     .filter(d => d.id !== not && okDriver(d) && ts.every(t => free(`d:${d.id}`, windows.get(t.id)!)))
     .sort((a, b) => Number(Boolean(a.routeCode)) - Number(Boolean(b.routeCode)) || tripsOf('driverId', a.id) - tripsOf('driverId', b.id))[0];
@@ -178,12 +179,12 @@ export function proposalsFor(state: any, baseDate: string, ask = '', read: Inten
   for (const d of drivers) {
     if (okDriver(d)) continue;
     const ts = open.filter((t: any) => t.driverId === d.id && !handled.has(t.id));
-    driverOut(d, ts, d.available === false ? `${d.name} סומן כלא זמין.` : `הרישיון של ${d.name} פג ב־${ddmm(d.licenseUntil)}.`);
+    driverOut(d, ts, d.archived ? `${d.name} הוסר מהצי.` : isAway(d) ? `${d.name} לא זמין בתאריך הזה (${(d.away.find((x: any) => x.from <= date && date <= x.to)?.reason) || 'היעדרות'}).` : d.available === false ? `${d.name} סומן כלא זמין.` : `הרישיון של ${d.name} פג ב־${ddmm(d.licenseUntil)}.`);
   }
   for (const v of vehicles) {
     if (okBus(v)) continue;
     const ts = open.filter((t: any) => t.vehicleId === v.id && !handled.has(t.id));
-    const cause = v.available === false ? `${v.label} סומן כלא זמין.` : v.testUntil < date ? `הטסט של ${v.label} פג ב־${ddmm(v.testUntil)}.` : `${v.label} לא עבר טיפול בזמן (${ddmm(v.serviceDue)}).`;
+    const cause = v.archived ? `${v.label} הוסר מהצי.` : isAway(v) ? `${v.label} לא זמין בתאריך הזה (${(v.away.find((x: any) => x.from <= date && date <= x.to)?.reason) || 'מושבת'}).` : v.available === false ? `${v.label} סומן כלא זמין.` : v.testUntil < date ? `הטסט של ${v.label} פג ב־${ddmm(v.testUntil)}.` : `${v.label} לא עבר טיפול בזמן (${ddmm(v.serviceDue)}).`;
     busOut(v, ts, cause);
   }
   for (const t of open.filter((x: any) => !handled.has(x.id) && x.capacity != null && x.planned > x.capacity)) {

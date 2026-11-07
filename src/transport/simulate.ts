@@ -80,7 +80,7 @@ const at = (points: Point[], i: number, f: number) => {
 };
 
 /** Issues that legally stop a bus from running (as opposed to planning-data questions). */
-export const FLEET_CAUSE = /רישיון|טסט|טיפול|זמין|חסר שיבוץ/;
+export const FLEET_CAUSE = /רישיון|טסט|טיפול|זמין|חסר שיבוץ|הוסר/;
 
 export function liveFor(trip: any, clock: string, blockedReason: string | null = null): Live {
   const points = pointsFor(trip);

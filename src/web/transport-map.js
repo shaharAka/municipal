@@ -155,6 +155,32 @@ export async function mountTransportMap(element, { config, onSelect, focus = nul
     if (!bounds.isEmpty()) map.fitBounds(bounds, { top: 60, bottom: 60, left: 60, right: 60 });
   };
 
+  // Every moving bus shows its route: driven part grey, the rest in the accent, a dot per stop,
+  // a square at the school. The selected route is drawn bolder on top (drawRoute).
+  const routes = new Map(); // tripId -> { key, overlays }
+  const drawLight = async trip => {
+    const key = `${trip.id}:${trip.live.departedIndex}`;
+    const had = routes.get(trip.id);
+    if (had?.key === key) return;
+    const paths = await legsFor(trip);
+    had?.overlays.forEach(o => o.setMap(null));
+    const overlays = [];
+    const done = trip.live.departedIndex;
+    paths?.forEach((path, i) => overlays.push(new Polyline({ map, path, strokeColor: i < done ? css('--line-2') : css('--accent'), strokeOpacity: i < done ? 0.8 : 0.45, strokeWeight: 3, zIndex: 0, clickable: false })));
+    trip.points.forEach((p, i) => {
+      if (!located(p)) return;
+      const dot = document.createElement('div');
+      dot.className = `t-stopdot${p.kind === 'school' ? ' is-end' : ''}${i === 0 ? ' is-start' : ''}${i <= done ? ' is-done' : ''}`;
+      overlays.push(new Marker({ map, position: { lat: p.lat, lng: p.lng }, content: dot, title: `${p.name}${p.time ? ` · ${p.time}` : ''}`, zIndex: 1 }));
+    });
+    routes.set(trip.id, { key, overlays });
+  };
+  const syncRoutes = state => {
+    const moving = new Set(focus ? [] : state.trips.filter(t => ['active', 'delayed'].includes(t.status)).map(t => t.id));
+    for (const [id, r] of routes) if (!moving.has(id)) { r.overlays.forEach(o => o.setMap(null)); routes.delete(id); }
+    state.trips.filter(t => moving.has(t.id)).forEach(drawLight);
+  };
+
   // Buses that would sit on top of each other become one round count; clicking it zooms in.
   let clusters = [];
   let lastSelected = null;
@@ -201,13 +227,14 @@ export async function mountTransportMap(element, { config, onSelect, focus = nul
       placeBus(trip, marker);
     }
     for (const [id, marker] of buses) if (!seen.has(id)) { marker.remove(); buses.delete(id); }
+    syncRoutes(state);
     const selected = state.trips.find(t => t.id === (focus ?? selectedId)) ?? null;
     const key = selected ? `${selected.id}:${selected.live.departedIndex}` : '';
     if (key !== shownRoute) drawRoute(selected);
     soon();
   }
 
-  function retheme() { map.setOptions({ styles: quiet(), backgroundColor: css('--map-bg') }); const sel = shownRoute.split(':')[0]; shownRoute = ''; if (last) update(last, sel || null); }
+  function retheme() { map.setOptions({ styles: quiet(), backgroundColor: css('--map-bg') }); routes.forEach(r => r.overlays.forEach(o => o.setMap(null))); routes.clear(); const sel = shownRoute.split(':')[0]; shownRoute = ''; if (last) update(last, sel || null); }
   function fitBuses() { const b = new google.maps.LatLngBounds(); (last?.trips ?? []).forEach(t => t.live.position && b.extend(t.live.position)); if (!b.isEmpty()) map.fitBounds(b, 80); }
-  return { update, retheme, fitBuses, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, destroy() { clearTimeout(pending); clusters.forEach(c => c.remove()); buses.forEach(m => m.remove()); clearRoute(); }, get last() { return last; } };
+  return { update, retheme, fitBuses, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, destroy() { clearTimeout(pending); clusters.forEach(c => c.remove()); buses.forEach(m => m.remove()); routes.forEach(r => r.overlays.forEach(o => o.setMap(null))); clearRoute(); }, get last() { return last; } };
 }

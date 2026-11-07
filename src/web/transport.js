@@ -21,7 +21,7 @@ const S = {
   rides: store.get('t-rides-view', 'board'), mapOpen: false, map: null, inspMap: null,
   insp: null, // { id, date, tab }
   dirty: false, stale: false, composing: false, draft: '',
-  plan: { day: TOMORROW, by: 'driver', q: '', onlyIssues: false, drag: null, ci: -1 }, table: { q: '', facet: '' },
+  plan: { view: 'day', day: TOMORROW, q: '', sel: null, route: null, showReady: false, suggest: new Map(), proposals: [], month: null }, table: { q: '', facet: '' },
   assist: null, // { date, ask, busy, result, applied: Set }
   tour: null, // { step }
   phone: false, offline: false, driver: 'driver-10', pop: false, confirmReset: false, cmd: null, help: false, flash: null,
@@ -36,7 +36,7 @@ const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 6
 const dayOf = date => DAYS.find(d => d.date === date) ?? DAYS[0];
 const dayWord = date => (date === TODAY ? 'היום' : date === TOMORROW ? 'מחר' : `יום ${dayOf(date).label}`);
 const firstName = name => String(name).split(' ')[0];
-const FLEET_CAUSE = /רישיון|טסט|טיפול|זמין|חסר שיבוץ/;
+const FLEET_CAUSE = /רישיון|טסט|טיפול|זמין|חסר שיבוץ|הוסר/;
 
 const svg = (d, fill = false) => `<svg class="i" viewBox="0 0 24 24" fill="${fill ? 'currentColor' : 'none'}" stroke="${fill ? 'none' : 'currentColor'}" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const I = {
@@ -64,6 +64,7 @@ const I = {
   help: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/>'),
   flag: svg('<path d="M4 21V4M4 4h12l-2 4 2 4H4"/>'),
   send: svg('<path d="m22 2-7 20-4-9-9-4 20-7z"/>'),
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
 };
 const STATUS = {
   upcoming: ['טרם יצאה', ''], blocked: ['חסומה', 'is-blocked'], late: ['לא יצאה', 'is-bad'],
@@ -88,16 +89,17 @@ const dataFor = date => (date === TODAY ? S.data : S.week[date]);
 async function loadDay(date) { const d = await stateFor(date); if (date === TODAY) S.data = d; S.week[date] = d; return d; }
 
 // Errors stay until dismissed and can be retried; confirmations can be undone.
-function toast(text, { bad = false, undo = null, retry = null } = {}) {
+function toast(text, { bad = false, undo = null, retry = null, action = null } = {}) {
   const el = document.createElement('div');
   el.className = `t-toast${bad ? ' is-bad' : ''}`;
   el.setAttribute('role', bad ? 'alert' : 'status');
-  el.innerHTML = `<span>${esc(text)}</span>${undo ? '<button type="button" data-t="undo">ביטול</button>' : ''}${retry ? '<button type="button" data-t="retry">לנסות שוב</button>' : ''}${bad ? `<button type="button" data-t="close" aria-label="סגירה">${I.x}</button>` : ''}`;
+  el.innerHTML = `<span>${esc(text)}</span>${action ? `<button type="button" data-t="action">${esc(action.label)}</button>` : ''}${undo ? '<button type="button" data-t="undo">ביטול</button>' : ''}${retry ? '<button type="button" data-t="retry">לנסות שוב</button>' : ''}${bad ? `<button type="button" data-t="close" aria-label="סגירה">${I.x}</button>` : ''}`;
   el.querySelector('[data-t=undo]')?.addEventListener('click', () => { el.remove(); undo(); });
+  el.querySelector('[data-t=action]')?.addEventListener('click', () => { el.remove(); action.fn(); });
   el.querySelector('[data-t=retry]')?.addEventListener('click', () => { el.remove(); retry(); });
   el.querySelector('[data-t=close]')?.addEventListener('click', () => el.remove());
   $('#toast').replaceChildren(el);
-  if (!bad) setTimeout(() => el.remove(), undo ? 7000 : 3200);
+  if (!bad) setTimeout(() => el.remove(), undo || action ? 8000 : 3200);
 }
 async function run(fn, ok) {
   try { await fn(); if (ok) toast(ok); return true; } catch (e) { toast(e.message, { bad: true, retry: () => run(fn, ok) }); return false; }
@@ -197,6 +199,17 @@ function demoTray() {
 }
 
 // ------------------------------------------------------------ rides: board and table
+function progress(t) {
+  const n = t.points.length;
+  if (n < 2 || !['active', 'delayed'].includes(t.status)) return '';
+  const at = Math.min(1, Math.max(0, (t.live.departedIndex + t.live.fraction) / (n - 1)));
+  const next = t.points[t.live.departedIndex + 1];
+  return `<span class="t-prog" role="img" aria-label="${esc(`עברה ${t.live.departedIndex + 1} מתוך ${n} תחנות${next ? `, בדרך ל${next.name}` : ''}`)}">
+    <i class="t-prog-line"></i><i class="t-prog-done" style="width:${(at * 100).toFixed(1)}%"></i>
+    ${t.points.map((p, i) => `<i class="t-prog-dot ${i <= t.live.departedIndex ? 'is-done' : ''} ${p.kind === 'school' ? 'is-end' : ''}" style="inset-inline-start:${((i / (n - 1)) * 100).toFixed(1)}%" title="${esc(`${p.name}${p.time ? ` · ${p.time}` : ''}`)}"></i>`).join('')}
+    <i class="t-prog-bus ${t.status === 'delayed' ? 'is-late' : ''}" style="inset-inline-start:${(at * 100).toFixed(1)}%">${I.bus}</i>
+  </span>`;
+}
 function rideCard(t) {
   const next = t.points[t.live.departedIndex + 1];
   const where = t.status === 'completed' ? 'הגיעה לבית הספר'
@@ -207,6 +220,7 @@ function rideCard(t) {
     <span class="t-ride-top"><span class="t-code ${codeTone(t)}">${esc(t.routeCode)}</span><span class="num t-ride-time">${esc(t.departure)}</span>${['late', 'delayed', 'blocked'].includes(t.status) ? pill(t.status) : ''}</span>
     <b>${esc(t.school)}</b>
     <span class="t-sub">${t.live.lateMinutes ? `<b class="t-late">${t.live.lateMinutes} דק׳ איחור</b> · ` : ''}${esc(where)}</span>
+    ${progress(t)}
     <span class="t-ride-foot">${figure}${t.live.mode === 'manual' && t.live.boarded != null ? '<span class="t-src">דיווח נהג</span>' : ''}</span>
   </button>`;
 }
@@ -216,11 +230,46 @@ function alertCard(a, lead = true) {
   return `<div class="t-alert is-${a.level}">
     <button class="t-alert-open" data-ride="${esc(a.tripId)}"><b>${esc(a.title)}</b><span class="t-detail">${esc(a.detail)}</span></button>
     <div class="t-actions">
-      ${fix ? `<button class="t-btn ${p} is-sm" data-act="assist-today">${I.assist} הצעה להחלפה עכשיו</button>` : ''}
+      ${fix ? `<button class="t-btn ${p} is-sm" data-focus="${esc(a.id)}" aria-expanded="${S.focus?.alertId === a.id}">${I.assist} הצעה להחלפה</button>` : ''}
       ${a.call ? `<a class="t-btn ${p} is-sm" href="tel:${esc(a.call.phone)}" data-call="${esc(a.call.name)}|${esc(a.call.phone)}">${I.call} להתקשר ל${esc(firstName(a.call.name))}</a>` : ''}
       <button class="t-btn is-sm" data-ack="${esc(a.id)}">${I.check} טופל</button>
     </div>
+    ${S.focus?.alertId === a.id ? focusBlock() : ''}
   </div>`;
+}
+// One issue, one suggestion: what to change and why, approved in place.
+function focusBlock() {
+  const f = S.focus;
+  if (f.busy) return '<div class="t-focus"><p class="t-source">מחפש נהג או רכב פנויים…</p></div>';
+  const p = f.proposal;
+  if (!p) return `<div class="t-focus"><p>אין כרגע ${f.kind === 'bus' ? 'רכב' : 'נהג'} פנוי ותקין בשעות האלה. אפשר לבקש מקבלן, או לבחור ידנית בבניית הסידור.</p><div class="t-actions"><button class="t-btn is-sm" data-pgo-today="1">לבניית הסידור</button><button class="t-btn is-sm is-ghost" data-act="focus-close">סגירה</button></div></div>`;
+  return `<div class="t-focus" role="region" aria-label="הצעה">
+    <b>${esc(p.title)}</b><p>${esc(p.why)}</p>
+    ${p.changes.length ? `<ul>${p.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+    <div class="t-actions">${p.apply ? `<button class="t-btn is-primary is-sm" data-act="focus-apply">${I.check} אישור ופרסום לנהגים</button>` : ''}<button class="t-btn is-sm is-ghost" data-act="focus-close">לא עכשיו</button></div>
+  </div>`;
+}
+async function focusFix(alertId) {
+  if (S.focus?.alertId === alertId) { S.focus = null; paintRides(); return; }
+  const a = S.data.alerts.find(x => x.id === alertId);
+  if (!a?.fix) return;
+  S.focus = { alertId, busy: true, kind: a.fix.kind }; paintRides();
+  try {
+    const r = await api(`/api/transport/assistant?date=${TODAY}`);
+    const proposal = r.proposals.find(p => p.id === `${a.fix.kind === 'bus' ? 'bus' : 'driver'}-${a.fix.id}`) ?? r.proposals.find(p => (p.tripIds ?? []).some(id => (a.tripIds ?? [a.tripId]).includes(id)));
+    S.focus = { alertId, proposal, kind: a.fix.kind };
+  } catch (e) { S.focus = null; toast(e.message, { bad: true }); }
+  paintRides();
+}
+async function focusApply() {
+  const p = S.focus?.proposal;
+  if (!p?.apply) return;
+  const undo = p.apply.assignments.map(x => { const t = S.data.trips.find(y => y.id === x.tripId); return { tripId: x.tripId, driverId: t?.driverId, vehicleId: t?.vehicleId }; });
+  try {
+    await command('plan', p.apply, null, TODAY);
+    S.focus = null; await loadDay(TODAY); repaint();
+    toast(`בוצע ופורסם: ${p.title}`, { undo: () => run(async () => { await command('plan', { assignments: undo, publish: true, reason: 'בוטל' }, null, TODAY); await loadDay(TODAY); repaint(); }, 'השינוי בוטל') });
+  } catch (e) { toast(e.message, { bad: true, retry: focusApply }); }
 }
 function boardColumns() {
   const d = S.data;
@@ -400,6 +449,8 @@ function overviewTab(t) {
   const today = S.insp.date === TODAY;
   const road = today ? S.data.alerts.filter(a => (a.tripIds ?? [a.tripId]).includes(t.id) && a.queue === 'road' && !a.handled) : [];
   const d = t.live.departedIndex;
+  const moving = today && ['active', 'delayed'].includes(t.status);
+  const eta = p => (p?.time ? hhmm(minutes(p.time) + (t.live.lateMinutes || 0)) : '');
   const stops = t.points.map((p, i) => {
     const c = today ? t.live.stopCounts[p.id] : null;
     const cls = today && i <= d ? 'is-done' : today && i === d + 1 && t.live.phase !== 'pending' ? 'is-next' : '';
@@ -408,7 +459,10 @@ function overviewTab(t) {
       ? (today && t.direction === 'morning' && i <= d ? `<b class="num">${num(t.live.boarded)}</b> ירדו` : '')
       : c ? `<span dir="ltr"><b class="num ${c.expected != null && c.count !== c.expected ? 'is-off' : ''}">${num(c.count)}</b>/${num(p.planned)}</span><div class="t-source">${c.source === 'driver' ? 'דיווח נהג' : 'משוער'}</div>`
       : `<span class="num">${num(p.planned)}</span> צפויים`;
-    return `<li class="${cls}"><span class="t-dot ${p.kind === 'school' ? 'is-school' : ''}">${label}</span><span><b>${esc(p.name)}</b><small>${esc(p.time ?? '')}${p.located ? '' : ' · מיקום לא ידוע'}</small></span><span class="t-count-cell">${count}</span></li>`;
+    const when = today && i <= d ? `עברה · ${esc(p.time ?? '')}` : moving && i === d + 1 && t.live.lateMinutes ? `צפויה ב־${eta(p)} <span class="t-late">(+${t.live.lateMinutes})</span>` : esc(p.time ?? '');
+    const row = `<li class="${cls}"><span class="t-dot ${p.kind === 'school' ? 'is-school' : ''}">${label}</span><span><b>${esc(p.name)}</b><small>${when}${p.located ? '' : ' · מיקום לא ידוע'}</small></span><span class="t-count-cell">${count}</span></li>`;
+    const here = moving && i === d ? `<li class="is-here"><span class="t-dot is-bus">${I.bus}</span><span><b>האוטובוס כאן</b><small>בדרך ל${esc(t.points[d + 1]?.name ?? '')}${t.points[d + 1]?.time ? ` · צפוי ב־${eta(t.points[d + 1])}` : ''}</small></span><span></span></li>` : '';
+    return row + here;
   }).join('');
   const blocked = today && t.live.blockedReason && t.live.phase === 'pending';
   return `${road.length ? `<div class="t-insp-alerts">${road.map(alertCard).join('')}</div>` : ''}
@@ -509,155 +563,309 @@ async function openMap() {
   const config = S.config ?? (S.config = await fetch('/api/workspace/config').then(r => r.json()).catch(() => ({})));
   S.map = await mountTransportMap($('#map'), { config, onSelect: id => openRide(id, TODAY, 'overview') }).catch(e => (toast(e.message, { bad: true }), null));
   S.map?.update?.(S.data, S.insp?.id ?? null);
-  S.map?.fitBuses?.();
+  setTimeout(() => S.map?.fitBuses?.(), 400);
   $('[data-act=close-map]')?.focus();
 }
 function closeMap() { S.mapOpen = false; S.map?.destroy?.(); S.map = null; $('#mapfull').innerHTML = ''; }
 
-// ------------------------------------------------------------ plan builder: one day, drivers × time, drag to reassign
-// Quiet by default: every trip is a grey block with its route number. Colour only marks a conflict
-// (two trips at once, an expired licence or test, too few seats). Drops are drafts until published.
-const PX_MIN = 1.7; // pixels per minute
-// A trip occupies its driver from departure to its last stop, as the council's workbook lists them
-// (no estimated school arrival), so only overlaps the workbook itself contains count as conflicts.
+// ------------------------------------------------------------ plan builder: rides first, then a crew (driver + bus) for each
+// The rides already exist: the council's workbook is a weekly schedule, and every ride carries its route's
+// regular crew. Planning a day means finding the rides whose crew can't run them and giving them one.
+// Month: what each day needs. Week: the fixed schedule and the regular crews. Day: allocate and publish.
 const span = t => { const ms = t.stops.map(x => (/^\d\d:\d\d$/.test(x.time || '') ? minutes(x.time) : -1)).filter(m => m >= 0); const s = Math.min(minutes(t.departure), ...ms); return [s, Math.max(s + 5, ...ms)]; };
-const blockMin = (t, r) => (t.routeCode === r.home ? 50 : 72);
 const editableTrip = (t, date) => t.phase === 'pending' && (date !== TODAY || t.live.phase === 'pending');
-function planModel(date) {
-  const d = dataFor(date);
-  const by = S.plan.by;
-  const key = by === 'driver' ? 'driverId' : 'vehicleId';
-  const people = by === 'driver' ? d.drivers : d.vehicles;
-  const valid = r => (by === 'driver' ? r.available !== false && r.licenseUntil >= date : r.available !== false && r.testUntil >= date);
-  const rows = people.map(r => ({ id: r.id, home: by === 'driver' ? r.routeCode : r.id.replace(/^bus-/, ''), label: by === 'driver' ? r.name : r.label, sub: by === 'driver' ? (r.routeCode ? `קו ${r.routeCode}` : 'חלופי') : (r.capacity ? `${r.capacity} מקומות` : ''), valid: valid(r), why: by === 'driver' ? 'הרישיון פג' : 'הטסט פג', trips: [] }));
-  const byId = new Map(rows.map(r => [r.id, r]));
-  for (const t of d.trips) byId.get(t[key])?.trips.push(t);
-  const conflicts = new Map(); // tripId -> reason: stops the trip, or a clash someone made (red)
-  const notes = new Map(); // tripId -> reason: an overlap already in the council's workbook (amber, to check)
-  for (const r of rows) {
-    const ts = r.trips.sort((a, b) => span(a)[0] - span(b)[0]);
-    ts.forEach((t, i) => {
-      const [s, e] = span(t);
-      const clash = ts.find((o, j) => j !== i && span(o)[0] < e && s < span(o)[1]);
-      const own = x => x.routeCode === r.home;
-      if (clash && own(t) && own(clash)) notes.set(t.id, `בקובץ המועצה יש שתי נסיעות של קו ${t.routeCode} באותה שעה (${clash.departure})`);
-      if (clash && !(own(t) && own(clash))) conflicts.set(t.id, `באותה שעה כמו קו ${clash.routeCode} (${clash.departure})`);
-      else if (!r.valid) conflicts.set(t.id, by === 'driver' ? 'הרישיון של הנהג פג' : 'הטסט של הרכב פג');
-      else { const b = t.blockers.find(x => (by === 'driver' ? !/טסט|רכב/.test(x) : !/רישיון|נהג/.test(x))) ?? t.blockers[0]; if (b) conflicts.set(t.id, b); }
-    });
-    r.lanes = [];
-    for (const t of ts) { const [s, e] = span(t); const end = s + Math.max(e - s, blockMin(t, r) / PX_MIN) + 2; const lane = r.lanes.findIndex(l => l <= s); if (lane < 0) r.lanes.push(end); else r.lanes[lane] = end; t._lane = lane < 0 ? r.lanes.length - 1 : lane; }
-  }
-  const q = S.plan.q.trim();
-  let shown = rows.filter(r => r.trips.length || !r.valid || /חלופי/.test(r.sub) || r.id === 'bus-spare');
-  if (q) shown = shown.filter(r => [r.label, r.sub, ...r.trips.map(t => `קו ${t.routeCode} ${t.school}`)].join(' ').includes(q));
-  if (S.plan.onlyIssues) shown = shown.filter(r => r.trips.some(t => conflicts.has(t.id)));
-  shown.sort((a, b) => Number(b.trips.some(t => conflicts.has(t.id))) - Number(a.trips.some(t => conflicts.has(t.id))) || Number(!a.trips.length) - Number(!b.trips.length) || (span(a.trips[0] ?? { stops: [], departure: '23:00' })[0] - span(b.trips[0] ?? { stops: [], departure: '23:00' })[0]));
-  const all = d.trips.map(span);
-  const from = Math.floor(Math.min(...all.map(x => x[0]), 6 * 60) / 60) * 60 - 30;
-  const to = Math.ceil(Math.max(...all.map(x => x[1]), 16 * 60) / 60) * 60;
-  return { d, rows: shown, conflicts, notes, from, to, key };
+const overlaps = (a, b) => span(a)[0] < span(b)[1] && span(b)[0] < span(a)[1];
+const away = (r, date) => (r.away ?? []).some(x => x.from <= date && date <= x.to);
+function driverState(x, t, date, d) {
+  if (x.archived) return 'הוסר מהצי';
+  if (x.available === false) return 'סומן כלא זמין';
+  if (away(x, date)) return 'בהיעדרות';
+  if (!x.licenseUntil || x.licenseUntil < date) return 'הרישיון פג';
+  const clash = d.trips.find(o => o.id !== t.id && o.driverId === x.id && overlaps(o, t));
+  return clash ? `נוסע בקו ${clash.routeCode} ב־${clash.departure}` : '';
+}
+function busState(v, t, date, d) {
+  if (v.archived) return 'הוסר מהצי';
+  if (v.available === false) return 'מושבת';
+  if (away(v, date)) return 'מושבת בתאריך הזה';
+  if (!v.testUntil || v.testUntil < date) return 'הטסט פג';
+  if (!v.serviceDue || v.serviceDue < date) return 'לא עבר טיפול';
+  if (v.capacity != null && v.capacity < (t.planned || 0)) return `${v.capacity} מקומות ל־${t.planned} תלמידים`;
+  const clash = d.trips.find(o => o.id !== t.id && o.vehicleId === v.id && overlaps(o, t));
+  return clash ? `נוסע בקו ${clash.routeCode} ב־${clash.departure}` : '';
+}
+// What stops a ride from running with its crew today: the crew itself, or two rides at once.
+function rideProblem(t, date, d) {
+  if (!editableTrip(t, date)) return null;
+  const drv = d.drivers.find(x => x.id === t.driverId);
+  const bus = d.vehicles.find(x => x.id === t.vehicleId);
+  const dp = drv ? driverState(drv, t, date, d) : 'אין נהג';
+  const bp = bus ? busState(bus, t, date, d) : 'אין רכב';
+  const sameRoute = msg => /נוסע בקו/.test(msg) && msg.includes(`בקו ${t.routeCode} `);
+  if (dp && !sameRoute(dp)) return { who: 'driver', text: drv ? `${drv.name}: ${dp}` : dp };
+  if (bp && !sameRoute(bp)) return { who: 'bus', text: bus ? `${bus.label}: ${bp}` : bp };
+  if ((dp && sameRoute(dp)) || (bp && sameRoute(bp))) return { who: 'file', text: `בקובץ יש שתי נסיעות של קו ${t.routeCode} באותה שעה` };
+  return null;
+}
+async function loadMonth() { S.plan.month = await api(`/api/transport/month?date=${S.plan.day.slice(0, 8)}01`); }
+async function loadSuggestions(date) {
+  try {
+    const r = await api(`/api/transport/assistant?date=${date}`);
+    const map = new Map();
+    for (const p of r.proposals) if (p.tone === 'fix' && p.apply) for (const a of p.apply.assignments) if (a.driverId || a.vehicleId) map.set(a.tripId, { ...a, proposal: p.id, title: p.title });
+    S.plan.suggest = map; S.plan.proposals = r.proposals.filter(p => p.tone === 'fix' && p.apply);
+  } catch { S.plan.suggest = new Map(); S.plan.proposals = []; }
 }
 function plannerPage() {
+  const v = S.plan.view;
   return `<div class="t-page t-page-full">
     <header class="t-page-head">
       <div><h1>בניית סידור</h1><p id="plan-meta"></p></div>
       <div class="t-spacer"></div>
-      <div class="t-seg" role="group" aria-label="יום">${DAYS.map(d => `<button data-pday="${d.date}" aria-pressed="${S.plan.day === d.date}">${d.date === TOMORROW ? 'מחר' : d.date === TODAY ? 'היום' : d.label}<i class="t-dot-bad" data-pday-dot="${d.date}" hidden></i></button>`).join('')}</div>
+      <div class="t-seg" role="group" aria-label="תצוגה">${[['month', 'חודש'], ['week', 'סידור קבוע'], ['day', 'יום']].map(([k, l]) => `<button data-pview="${k}" aria-pressed="${v === k}">${l}</button>`).join('')}</div>
     </header>
-    <div class="t-toolbar">
-      <div class="t-seg" role="group" aria-label="שורות לפי"><button data-pby="driver" aria-pressed="${S.plan.by === 'driver'}">נהגים</button><button data-pby="vehicle" aria-pressed="${S.plan.by === 'vehicle'}">רכבים</button></div>
-      <label class="t-search-field">${I.search}<span class="sr-only">חיפוש</span><input id="pq" type="search" placeholder="נהג, קו או בית ספר" value="${esc(S.plan.q)}"></label>
-      <span class="t-spacer"></span>
-      <span id="plan-conflicts"></span>
-    </div>
-    <div class="t-tl" id="timeline" aria-label="סידור לפי ${S.plan.by === 'driver' ? 'נהג' : 'רכב'} ושעה"><p class="t-empty">טוען…</p></div>
-    <div id="plan-bar"></div>
+    ${store.get('t-plan-guide', '1') === '1' ? `<ol class="t-guide" aria-label="איך בונים סידור">
+      <li><b>1. הנסיעות כבר כאן</b><span>הסידור הקבוע מהקובץ שלכם: 710 נסיעות בשבוע, ולכל קו נהג ורכב קבועים.</span><button class="t-link" data-pview="week">לסידור הקבוע</button></li>
+      <li><b>2. רואים מה חסר בכל יום</b><span>המערכת שמה את הצוות הקבוע ומסמנת רק נסיעות שאין להן נהג או רכב שיכולים לצאת.</span><button class="t-link" data-pview="month">לחודש</button></li>
+      <li><b>3. משבצים ומפרסמים</b><span>מאשרים את ההצעה או בוחרים נהג ורכב פנויים, ושולחים לנהגים.</span><button class="t-link" data-pgo="${TOMORROW}">למחר</button></li>
+      <button class="t-icon-btn t-guide-x" data-act="guide-hide" aria-label="הסתרת ההסבר">${I.x}</button>
+    </ol>` : ''}
+    <div class="t-plan-body" id="plan-body"><p class="t-empty">טוען…</p></div>
   </div>`;
 }
-async function loadPlanDay() { if (!dataFor(S.plan.day)) await loadDay(S.plan.day); }
-async function loadWeek() { await Promise.all(DAYS.map(d => (dataFor(d.date) ? null : loadDay(d.date)))); }
 function paintPlanner() {
-  const el = $('#timeline');
-  if (!el || !dataFor(S.plan.day)) return;
-  const { d, rows, conflicts, notes, from, to } = planModel(S.plan.day);
-  const px = m => (m - from) * PX_MIN;
-  const width = px(to);
-  const hours = []; for (let m = Math.ceil(from / 60) * 60; m <= to; m += 60) hours.push(m);
-  const now = S.plan.day === TODAY ? minutes(S.data.clock) : null;
-  const scroll = { x: el.scrollLeft, y: el.scrollTop };
-  el.innerHTML = `<div class="t-tl-inner" style="--tl-w:${width}px">
-    <div class="t-tl-head"><div class="t-tl-label"></div><div class="t-tl-axis">${hours.map(m => `<span style="inset-inline-start:${px(m)}px">${hhmm(m)}</span>`).join('')}${now != null ? `<i class="t-tl-now" style="inset-inline-start:${px(now)}px" title="עכשיו ${S.data.clock}"></i>` : ''}</div></div>
-    ${rows.map(r => `<div class="t-tl-row ${r.valid ? '' : 'is-invalid'}" data-prow="${r.id}" style="--lanes:${Math.max(1, r.lanes.length)}">
-      <div class="t-tl-label"><b>${esc(r.label)}</b><small>${r.valid ? esc(r.sub) : `<span class="t-warn-text">${r.why}</span>`}</small></div>
-      <div class="t-tl-track">${hours.map(m => `<i class="t-tl-grid" style="inset-inline-start:${px(m)}px"></i>`).join('')}
-        ${r.trips.map(t => { const [s, e] = span(t); const c = conflicts.get(t.id) ?? notes.get(t.id); const can = editableTrip(t, S.plan.day); return `<button class="t-blk ${conflicts.has(t.id) ? 'is-conflict' : notes.has(t.id) ? 'is-note' : ''} ${!t.published ? 'is-draft' : ''} ${can ? '' : 'is-done'} ${S.insp?.id === t.id ? 'is-open' : ''}" data-plan-trip="${t.id}" data-date="${S.plan.day}" ${can ? 'draggable="true"' : ''} style="inset-inline-start:${px(s)}px;width:${Math.max(blockMin(t, r), (e - s) * PX_MIN)}px;--lane:${t._lane}" title="${esc(`קו ${t.routeCode} · ${t.departure} · ${t.school}${c ? `\n${c}` : ''}`)}" aria-label="${esc(`קו ${t.routeCode}, ${t.departure}, ${t.school}${c ? `, ${c}` : ''}`)}">${t.routeCode === r.home ? esc(t.departure) : `<b>${esc(t.routeCode)}</b> ${esc(t.departure)}`}</button>`; }).join('')}
-      </div></div>`).join('') || '<p class="t-empty">אין שורות שמתאימות.</p>'}
-  </div>`;
-  el.scrollLeft = scroll.x; el.scrollTop = scroll.y;
-  const n = conflicts.size;
-  const drafts = d.trips.filter(t => !t.published && editableTrip(t, S.plan.day)).length;
-  $('#plan-meta').textContent = [`${dayWord(S.plan.day)}, ${dayOf(S.plan.day).label} ${heDate(S.plan.day)}`, `${num(d.trips.length)} נסיעות`, n ? `${num(n)} לתיקון` : 'הכל יכול לצאת', notes.size ? `${num(notes.size)} לבדוק מול הקובץ` : null].filter(Boolean).join(' · ');
-  $('#plan-conflicts').innerHTML = n
-    ? `<button class="t-btn is-sm" data-act="next-conflict">${num(n)} לתיקון · לבא</button><button class="t-btn is-sm is-ghost" data-act="assist-plan">${I.assist} הצעה לתיקון</button><button class="t-chip" data-act="only-issues" aria-pressed="${S.plan.onlyIssues}">רק מה שצריך תיקון</button>`
-    : '<span class="t-ok-text">כל הנסיעות ביום הזה יכולות לצאת</span>';
-  $('#plan-bar').innerHTML = drafts ? `<div class="t-plan-bar" role="status"><span><b>${num(drafts)}</b> ${drafts === 1 ? 'שינוי שהנהג עוד לא רואה' : 'שינויים שהנהגים עוד לא רואים'}</span><button class="t-btn is-primary" data-act="publish-drafts">פרסום לנהגים</button></div>` : '';
-  for (const day of DAYS) { const dot = document.querySelector(`[data-pday-dot="${day.date}"]`); const dd = dataFor(day.date); if (dot && dd) dot.hidden = !planModelConflicts(day.date); }
+  const el = $('#plan-body');
+  if (!el) return;
+  if (S.plan.view === 'month') return paintMonth(el);
+  if (S.plan.view === 'week') return paintWeek(el);
+  return paintDayPlan(el);
 }
-function planModelConflicts(date) { const keep = S.plan.onlyIssues; S.plan.onlyIssues = false; const n = planModel(date).conflicts.size; S.plan.onlyIssues = keep; return n; }
-function paintPlannerSelection() { document.querySelectorAll('.t-blk').forEach(x => x.classList.toggle('is-open', x.dataset.planTrip === S.insp?.id)); }
-async function moveTrip(tripId, rowId) {
+function paintMonth(el) {
+  const m = S.plan.month;
+  if (!m) { el.innerHTML = '<p class="t-empty">טוען…</p>'; return; }
+  const first = new Date(`${m[0].date.slice(0, 8)}01T00:00:00Z`);
+  const lead = first.getUTCDay();
+  const fix = m.filter(x => !x.past && x.toFix).length;
+  $('#plan-meta').textContent = [`נובמבר ${first.getUTCFullYear()}`, `${num(m.length)} ימי לימודים`, fix ? `${num(fix)} ימים שחסר בהם צוות` : 'בכל הימים יש צוות'].join(' · ');
+  const byDate = new Map(m.map(x => [x.date, x]));
+  const days = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push('<div class="t-cal-cell is-blank"></div>');
+  for (let d = 1; d <= days; d++) {
+    const date = `${m[0].date.slice(0, 8)}${String(d).padStart(2, '0')}`;
+    const x = byDate.get(date);
+    if (!x) { cells.push(`<div class="t-cal-cell is-off"><b>${d}</b><small>${new Date(date + 'T00:00:00Z').getUTCDay() === 6 ? 'שבת' : 'אין הסעות'}</small></div>`); continue; }
+    const state = x.past ? `<small class="t-quiet">עבר</small>` : x.toFix ? `<small class="t-bad-text">${num(x.toFix)} חסר להן צוות</small>` : x.drafts ? `<small>${num(x.drafts)} לא פורסמו</small>` : `<small class="t-ok-text">${I.check} מוכן</small>`;
+    cells.push(`<button class="t-cal-cell ${x.past ? 'is-past' : ''} ${x.today ? 'is-today' : ''} ${x.date === TOMORROW ? 'is-tomorrow' : ''} ${!x.past && x.toFix ? 'is-fix' : ''}" data-pgo="${x.date}"><b>${d}${x.today ? ' · היום' : x.date === TOMORROW ? ' · מחר' : ''}</b><span>${num(x.rides)} נסיעות</span>${state}</button>`);
+  }
+  el.innerHTML = `<div class="t-cal"><div class="t-cal-head">${['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'].map(n => `<span>${n}</span>`).join('')}</div><div class="t-cal-grid">${cells.join('')}</div></div>
+    <p class="t-grid-foot">כל יום נבנה מהסידור הקבוע. אדום: יש נסיעות שהצוות הקבוע שלהן לא יכול לצאת (רישיון, טסט, מקומות). לחיצה על יום פותחת אותו.</p>`;
+}
+function paintWeek(el) {
+  const ready = DAYS.every(x => dataFor(x.date));
+  if (!ready) { el.innerHTML = '<p class="t-empty">טוען…</p>'; return; }
+  const d0 = dataFor(TOMORROW);
+  const routes = new Map();
+  for (const day of DAYS) for (const t of dataFor(day.date).trips) {
+    const r = routes.get(t.routeCode) ?? { code: t.routeCode, schools: new Set(), days: {} };
+    r.schools.add(t.school); (r.days[day.date] ??= []).push(t); routes.set(t.routeCode, r);
+  }
+  const q = S.plan.q.trim();
+  let rows = [...routes.values()].sort((a, b) => (Number(a.code) || 1e9) - (Number(b.code) || 1e9));
+  if (q) rows = rows.filter(r => [`קו ${r.code}`, ...r.schools].join(' ').includes(q));
+  const total = DAYS.reduce((n, x) => n + dataFor(x.date).trips.length, 0);
+  $('#plan-meta').textContent = [`הסידור הקבוע מהקובץ "${S.data.source?.file ?? 'סידור מקור'}"`, `${num(routes.size)} קווים`, `${num(total)} נסיעות בשבוע`].join(' · ');
+  const crew = code => { const c = S.data.template?.[code]; const drv = d0.drivers.find(x => x.id === c?.driverId); const bus = d0.vehicles.find(x => x.id === c?.vehicleId); return { drv, bus, bad: (drv && (drv.licenseUntil < TOMORROW || drv.available === false)) || (bus && (bus.testUntil < TOMORROW || bus.available === false)) }; };
+  el.innerHTML = `<div class="t-toolbar"><label class="t-search-field">${I.search}<span class="sr-only">חיפוש קו</span><input id="pq" type="search" placeholder="קו או בית ספר" value="${esc(q)}"></label><span class="t-spacer"></span><span class="t-source">הנהג והרכב של כל קו חלים על כל הימים מעכשיו והלאה. לחיצה כדי להחליף.</span></div>
+    <div class="t-week" role="table" aria-label="הסידור הקבוע לפי קו ויום">
+      <div class="t-week-row t-week-head" role="row"><span role="columnheader">קו</span><span role="columnheader">צוות קבוע</span>${DAYS.map(x => `<span role="columnheader">${x.label}</span>`).join('')}</div>
+      ${rows.map(r => { const c = crew(r.code); return `<div class="t-week-row" role="row">
+        <span role="cell"><span class="t-code">${esc(r.code)}</span><small>${esc([...r.schools][0])}${r.schools.size > 1 ? ` ועוד ${r.schools.size - 1}` : ''}</small></span>
+        <span role="cell" class="t-row2-crew">${[['driver', c.drv?.name ?? '—', c.drv && (c.drv.licenseUntil < TOMORROW || c.drv.available === false || c.drv.archived)], ['bus', c.bus?.label ?? '—', c.bus && (c.bus.testUntil < TOMORROW || c.bus.available === false || c.bus.archived)]].map(([k, l, bad]) => `<span class="t-chip-pick ${bad ? 'is-bad' : ''}" role="button" tabindex="0" data-tpick="${k}:${esc(r.code)}" aria-haspopup="listbox" title="${bad ? 'לא זמין: צריך להחליף' : 'החלפת הצוות הקבוע'}">${k === 'driver' ? I.user : I.bus}<span>${esc(l)}</span><i class="t-caret" aria-hidden="true">▾</i></span>`).join('')}</span>
+        ${DAYS.map(x => `<span role="cell" class="t-week-times num">${(r.days[x.date] ?? []).sort((a, b) => a.departure.localeCompare(b.departure)).map(t => t.departure).join(' · ') || '<i class="t-quiet">—</i>'}</span>`).join('')}
+      </div>`; }).join('')}
+    </div>`;
+}
+function paintDayPlan(el) {
   const date = S.plan.day;
   const d = dataFor(date);
-  const t = d.trips.find(x => x.id === tripId);
-  const key = S.plan.by === 'driver' ? 'driverId' : 'vehicleId';
-  if (!t || t[key] === rowId) return;
+  if (!d) { el.innerHTML = '<p class="t-empty">טוען…</p>'; return; }
+  const rides = [...d.trips].sort((a, b) => a.departure.localeCompare(b.departure));
+  const need = [], file = [], ok = [];
+  for (const t of rides) { const p = rideProblem(t, date, d); (p ? (p.who === 'file' ? file : need) : ok).push({ t, p }); }
+  const drafts = rides.filter(t => !t.published && editableTrip(t, date));
+  const sugg = S.plan.suggest ?? new Map();
+  const autoN = need.filter(x => sugg.has(x.t.id)).length;
+  const i = DAYS.findIndex(x => x.date === date);
+  $('#plan-meta').textContent = [`${dayWord(date)}, ${d.weekday} ${heDate(date)}`, `${num(rides.length)} נסיעות`, need.length ? `${num(need.length)} צריכות צוות` : 'לכל הנסיעות יש צוות'].join(' · ');
+  const name = (list, id) => list.find(x => x.id === id);
+  const crewText = t => `${esc(name(d.drivers, t.driverId)?.name ?? 'אין נהג')} · ${esc(name(d.vehicles, t.vehicleId)?.label ?? 'אין רכב')}`;
+  const row = ({ t, p }, kind) => {
+    const sg = sugg.get(t.id);
+    const can = editableTrip(t, date);
+    const drv = name(d.drivers, t.driverId), bus = name(d.vehicles, t.vehicleId);
+    const dBad = p && p.who === 'driver', bBad = p && p.who === 'bus';
+    const chip = (kindKey, label, bad, why) => `<button class="t-chip-pick ${bad ? 'is-bad' : ''}" data-pick="${kindKey}:${t.id}" ${can ? '' : 'disabled'} title="${esc(why || 'החלפה')}" aria-haspopup="listbox">${kindKey === 'driver' ? I.user : I.bus}<span>${esc(label)}</span>${can ? '<i class="t-caret" aria-hidden="true">▾</i>' : ''}</button>`;
+    const sgText = sg ? [sg.driverId ? name(d.drivers, sg.driverId)?.name : null, sg.vehicleId ? name(d.vehicles, sg.vehicleId)?.label : null].filter(Boolean).join(' · ') : '';
+    return `<div class="t-row2 ${kind}" data-row-trip="${t.id}">
+      <span class="num t-alloc-time">${esc(t.departure)}</span>
+      <span class="t-code">${esc(t.routeCode)}</span>
+      <button class="t-row2-what" data-ride-open="${t.id}"><b>${esc(t.school)}</b><small>${num(t.planned)} תלמידים${p ? ` · <span class="${kind === 'is-need' ? 't-bad-text' : 't-warn-text'}">${esc(p.text)}</span>` : ''}</small></button>
+      <span class="t-row2-crew">${chip('driver', drv?.name ?? 'אין נהג', dBad, dBad ? p.text : '')}${chip('bus', bus?.label ?? 'אין רכב', bBad, bBad ? p.text : '')}</span>
+      <span class="t-row2-act">${kind === 'is-need' && sg ? `<button class="t-sugg" data-paccept="${t.id}" title="${esc(sg.title)}"><span>${I.assist}${esc(sgText)}</span><b>${I.check} אישור</b></button>` : !t.published && can ? '<i class="t-draft">טיוטה</i>' : ''}
+        <button class="t-icon-btn" data-rowmenu="${t.id}" aria-label="פעולות נוספות" aria-haspopup="menu">⋯</button></span>
+    </div>`;
+  };
+  const shown = S.plan.showReady;
+  el.innerHTML = `<div class="t-day-nav">
+      <button class="t-icon-btn" data-pgo="${DAYS[i - 1]?.date ?? ''}" ${i > 0 ? '' : 'disabled'} aria-label="היום הקודם">${I.back}</button>
+      <b>${dayWord(date)} · ${d.weekday} ${heDate(date)}</b>
+      <button class="t-icon-btn" data-pgo="${DAYS[i + 1]?.date ?? ''}" ${i >= 0 && i < DAYS.length - 1 ? '' : 'disabled'} aria-label="היום הבא">${I.chev}</button>
+      <span class="t-spacer"></span>
+      ${autoN ? `<button class="t-btn is-primary" data-act="auto-alloc">${I.assist} שיבוץ אוטומטי ופרסום (${num(autoN)})</button>` : ''}
+    </div>
+    <div class="t-alloc-wrap">
+      <div class="t-alloc-list">
+        <section><h2 class="t-alloc-h">צריכות צוות <span class="num">${num(need.length)}</span></h2>
+          ${need.map(x => row(x, 'is-need')).join('') || `<div class="t-calm">${I.check}<b>לכל הנסיעות ביום הזה יש נהג ורכב שיכולים לצאת</b></div>`}</section>
+        ${file.length ? `<section><h2 class="t-alloc-h">לבדוק מול הקובץ <span class="num">${num(file.length)}</span></h2><p class="t-source">שתי נסיעות של אותו קו באותה שעה כבר בקובץ. אולי אלה שני רכבים, אולי טעות בקובץ.</p>${file.map(x => row(x, 'is-file')).join('')}</section>` : ''}
+        <section><button class="t-alloc-h t-alloc-toggle" data-act="toggle-ready" aria-expanded="${shown}">${shown ? '▾' : '▸'} מוכנות עם הצוות הקבוע <span class="num">${num(ok.length)}</span></button>
+          ${shown ? ok.map(x => row(x, '')).join('') : ''}</section>
+      </div>
+    </div>
+    ${drafts.length ? `<div class="t-plan-bar" role="status"><span><b>${num(drafts.length)}</b> ${drafts.length === 1 ? 'שינוי שהנהג עוד לא רואה' : 'שינויים שהנהגים עוד לא רואים'}</span><button class="t-btn is-primary" data-act="publish-drafts">פרסום לנהגים</button></div>` : ''}`;
+}
+// Who and what can run this ride: free at its hours, legal on its date, with enough seats.
+async function assignRes(tripId, kind, id) {
+  const date = S.plan.day;
+  const t = dataFor(date).trips.find(x => x.id === tripId);
   const before = { tripId, driverId: t.driverId, vehicleId: t.vehicleId };
-  const name = S.plan.by === 'driver' ? d.drivers.find(x => x.id === rowId)?.name : d.vehicles.find(x => x.id === rowId)?.label;
+  const key = kind === 'driver' ? 'driverId' : 'vehicleId';
   try {
-    await command('plan', { assignments: [{ tripId, [key]: rowId }], publish: false, reason: `הועבר ל${name}` }, null, date);
-    await loadDay(date); paintPlanner(); if (S.insp?.id === tripId) paintInspector();
-    toast(`קו ${t.routeCode} (${t.departure}) עבר ל${name}`, { undo: () => run(async () => { await command('plan', { assignments: [before], publish: t.published, reason: 'בוטל' }, null, date); await loadDay(date); paintPlanner(); }, 'השינוי בוטל') });
+    await command('plan', { assignments: [{ tripId, [key]: id }], publish: false, reason: 'שובץ בבניית הסידור' }, null, date);
+    await loadDay(date); await loadSuggestions(date); paintPlanner();
+    toast('שובץ. הנהג יראה אחרי פרסום.', { action: { label: `לקבוע כקבוע לקו ${t.routeCode}`, fn: () => setRegular(t.routeCode, kind, id) }, undo: () => run(async () => { await command('plan', { assignments: [before], publish: t.published, reason: 'בוטל' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'השיבוץ בוטל') });
   } catch (e) { toast(e.message, { bad: true }); }
+}
+async function acceptSuggestion(tripId) {
+  const date = S.plan.day;
+  const s = S.plan.suggest.get(tripId);
+  if (!s) return;
+  const t = dataFor(date).trips.find(x => x.id === tripId);
+  const before = { tripId, driverId: t.driverId, vehicleId: t.vehicleId };
+  await run(async () => {
+    await command('plan', { assignments: [{ tripId, ...(s.driverId ? { driverId: s.driverId } : {}), ...(s.vehicleId ? { vehicleId: s.vehicleId } : {}) }], publish: true, reason: s.title }, null, date);
+    await loadDay(date); await loadSuggestions(date); paintPlanner();
+    toast('שובץ ופורסם לנהג', { undo: () => run(async () => { await command('plan', { assignments: [before], publish: true, reason: 'בוטל' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'בוטל') });
+  });
+}
+async function autoAllocate() {
+  const date = S.plan.day;
+  const props = S.plan.proposals ?? [];
+  if (!props.length) return;
+  await run(async () => {
+    for (const p of props) await command('plan', p.apply, null, date);
+    await loadDay(date); await loadSuggestions(date); paintPlanner();
+  }, `שובץ ופורסם: ${props.length === 1 ? props[0].title : `${props.length} שינויים`}`);
 }
 async function publishDrafts() {
   const date = S.plan.day;
   const ids = dataFor(date).trips.filter(t => !t.published && editableTrip(t, date)).map(t => ({ tripId: t.id }));
   if (!ids.length) return;
-  await run(async () => { await command('plan', { assignments: ids, publish: true, reason: 'פורסם לנהג' }, null, date); await loadDay(date); paintPlanner(); }, 'פורסם. מה שאין בו התנגשות כבר אצל הנהגים.');
+  await run(async () => { await command('plan', { assignments: ids, publish: true, reason: 'פורסם לנהג' }, null, date); await loadDay(date); paintPlanner(); }, 'פורסם לנהגים');
 }
-function nextConflict() {
-  const blocks = [...document.querySelectorAll('.t-blk.is-conflict')];
-  if (!blocks.length) return;
-  S.plan.ci = ((S.plan.ci ?? -1) + 1) % blocks.length;
-  const b = blocks[S.plan.ci];
-  b.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
-  b.focus({ preventScroll: true });
-  spot(`[data-plan-trip="${b.dataset.planTrip}"]`, b.title.split('\n')[1] ?? b.title);
+async function planGo(date) {
+  if (!date) return;
+  S.plan.day = date; S.plan.view = 'day'; S.plan.sel = null;
+  document.querySelectorAll('[data-pview]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pview === 'day'));
+  paintPlanner();
+  if (!dataFor(date)) await loadDay(date);
+  await loadSuggestions(date); paintPlanner();
 }
-// drag and drop (pointer-free HTML5 drag; click or Enter opens the same trip for keyboard users)
-document.addEventListener('dragstart', e => {
-  const b = e.target.closest?.('.t-blk[draggable="true"]'); if (!b) return;
-  e.dataTransfer.setData('text/plain', b.dataset.planTrip); e.dataTransfer.effectAllowed = 'move';
-  S.plan.drag = b.dataset.planTrip; b.classList.add('is-dragging'); document.body.classList.add('is-planning-drag'); clearSpot();
-});
-document.addEventListener('dragend', () => { S.plan.drag = null; document.querySelectorAll('.is-dragging,.is-drop-ok,.is-drop-bad').forEach(x => x.classList.remove('is-dragging', 'is-drop-ok', 'is-drop-bad')); document.body.classList.remove('is-planning-drag'); });
-document.addEventListener('dragover', e => {
-  const row = e.target.closest?.('[data-prow]'); if (!row || !S.plan.drag) return;
-  e.preventDefault();
-  const t = dataFor(S.plan.day).trips.find(x => x.id === S.plan.drag);
-  const { rows } = planModel(S.plan.day);
-  const r = rows.find(x => x.id === row.dataset.prow);
-  const [s, en] = span(t);
-  const clash = !r?.valid || r.trips.some(o => o.id !== t.id && span(o)[0] < en && s < span(o)[1]);
-  document.querySelectorAll('.is-drop-ok,.is-drop-bad').forEach(x => x !== row && x.classList.remove('is-drop-ok', 'is-drop-bad'));
-  row.classList.toggle('is-drop-ok', !clash); row.classList.toggle('is-drop-bad', clash);
-  e.dataTransfer.dropEffect = 'move';
-});
-document.addEventListener('drop', e => {
-  const row = e.target.closest?.('[data-prow]'); if (!row || !S.plan.drag) return;
-  e.preventDefault(); const id = S.plan.drag; S.plan.drag = null; moveTrip(id, row.dataset.prow);
-});
+async function planView(v) {
+  S.plan.view = v; S.plan.sel = null; S.plan.route = null;
+  document.querySelectorAll('[data-pview]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pview === v));
+  paintPlanner();
+  if (v === 'month') { await loadMonth(); paintPlanner(); }
+  if (v === 'week') { await Promise.all(DAYS.map(x => (dataFor(x.date) ? null : loadDay(x.date)))); paintPlanner(); }
+  if (v === 'day') { if (!dataFor(S.plan.day)) await loadDay(S.plan.day); await loadSuggestions(S.plan.day); paintPlanner(); }
+}
+function paintPlannerSelection() {}
+// ---- a small picker anchored to a chip: free first, then the unavailable with their reason
+function closePicker() { S.picker?.el.remove(); S.picker = null; }
+function openPicker(anchor, { title, items, onPick, search = true }) {
+  closePicker();
+  const el = document.createElement('div');
+  el.className = 't-picker'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', title);
+  el.innerHTML = `<header>${esc(title)}</header>${search ? '<input class="t-input t-picker-q" placeholder="חיפוש" aria-label="חיפוש">' : ''}<div class="t-picker-list" role="listbox"></div>`;
+  const list = el.querySelector('.t-picker-list');
+  const draw = (q = '') => {
+    const match = it => !q || `${it.label} ${it.sub ?? ''}`.includes(q);
+    const free = items.filter(it => !it.why && match(it));
+    const busy = items.filter(it => it.why && match(it));
+    list.innerHTML = free.map(it => `<button role="option" class="t-pick ${it.current ? 'is-current' : ''}" data-pid="${esc(it.id)}"><span><b>${esc(it.label)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.current ? I.check : ''}</button>`).join('')
+      + (busy.length ? `<p class="t-picker-h">לא זמינים</p>${busy.map(it => `<div class="t-pick is-off ${it.current ? 'is-current' : ''}" aria-disabled="true"><span><b>${esc(it.label)}</b><small>${esc(it.why)}</small></span></div>`).join('')}` : '')
+      || '<p class="t-empty">לא נמצא.</p>';
+  };
+  draw();
+  document.body.append(el);
+  const r = anchor.getBoundingClientRect();
+  el.style.top = `${Math.min(window.innerHeight - el.offsetHeight - 12, r.bottom + 6)}px`;
+  el.style.left = `${Math.max(12, Math.min(window.innerWidth - el.offsetWidth - 12, r.right - el.offsetWidth))}px`;
+  el.addEventListener('click', e => { const b = e.target.closest('[data-pid]'); if (b) { closePicker(); onPick(b.dataset.pid); anchor.focus?.(); } });
+  el.querySelector('.t-picker-q')?.addEventListener('input', e => draw(e.target.value.trim()));
+  (el.querySelector('.t-picker-q') ?? el.querySelector('[data-pid]'))?.focus();
+  S.picker = { el, anchor };
+}
+function crewItems(kind, t, date, d) {
+  const items = (kind === 'driver' ? d.drivers : d.vehicles).filter(x => !x.archived).map(x => {
+    const why = kind === 'driver' ? driverState(x, t, date, d) : busState(x, t, date, d);
+    const trips = d.trips.filter(o => (kind === 'driver' ? o.driverId : o.vehicleId) === x.id).length;
+    return { id: x.id, label: kind === 'driver' ? x.name : x.label, sub: kind === 'driver' ? `${x.routeCode ? `קו ${x.routeCode}` : 'חלופי'} · ${trips} נסיעות ביום` : `${x.capacity ? `${x.capacity} מקומות` : 'מקומות לא ידוע'} · ${trips} נסיעות ביום`, why: x.id === (kind === 'driver' ? t.driverId : t.vehicleId) ? '' : why, current: x.id === (kind === 'driver' ? t.driverId : t.vehicleId), spare: !x.routeCode && kind === 'driver' || x.id === 'bus-spare', trips };
+  });
+  return items.sort((a, b) => Boolean(a.why) - Boolean(b.why) || b.current - a.current || b.spare - a.spare || a.trips - b.trips);
+}
+function pickCrew(anchor, kind, tripId) {
+  const date = S.plan.day; const d = dataFor(date); const t = d.trips.find(x => x.id === tripId);
+  openPicker(anchor, { title: `${kind === 'driver' ? 'נהג' : 'רכב'} לקו ${t.routeCode} · ${t.departure}`, items: crewItems(kind, t, date, d), onPick: id => assignRes(tripId, kind, id) });
+}
+function pickRegular(anchor, kind, code) {
+  const d = dataFor(TOMORROW); const sample = d.trips.find(t => t.routeCode === code) ?? { id: '', routeCode: code, planned: 0, stops: [], departure: '00:00' };
+  const cur = S.data.template?.[code];
+  const items = (kind === 'driver' ? d.drivers : d.vehicles).filter(x => !x.archived).map(x => {
+    const bad = kind === 'driver' ? (x.available === false ? 'סומן כלא זמין' : x.licenseUntil < TOMORROW ? 'הרישיון פג' : '') : (x.available === false ? 'מושבת' : x.testUntil < TOMORROW ? 'הטסט פג' : x.capacity != null && x.capacity < (sample.planned || 0) ? `${x.capacity} מקומות` : '');
+    const routes = Object.entries(S.data.template ?? {}).filter(([, c]) => (kind === 'driver' ? c.driverId : c.vehicleId) === x.id).map(([c]) => c);
+    return { id: x.id, label: kind === 'driver' ? x.name : x.label, sub: routes.length ? `קבוע בקו ${routes.join(', ')}` : 'פנוי, לא משויך לקו', why: x.id === (kind === 'driver' ? cur?.driverId : cur?.vehicleId) ? '' : bad, current: x.id === (kind === 'driver' ? cur?.driverId : cur?.vehicleId), routes: routes.length };
+  }).sort((a, b) => Boolean(a.why) - Boolean(b.why) || b.current - a.current || a.routes - b.routes);
+  openPicker(anchor, { title: `${kind === 'driver' ? 'נהג' : 'רכב'} קבוע לקו ${code}`, items, onPick: id => setRegular(code, kind, id) });
+}
+async function setRegular(code, kind, id) {
+  const before = { ...(S.data.template?.[code] ?? {}) };
+  const data = { routeCode: code, [kind === 'driver' ? 'driverId' : 'vehicleId']: id };
+  try {
+    await command('template', data, null, TODAY);
+    S.week = {}; await loadDay(TODAY); await Promise.all(DAYS.map(x => loadDay(x.date)));
+    if (S.plan.day) await loadSuggestions(S.plan.day);
+    paintPlanner();
+    toast(`הצוות הקבוע של קו ${code} עודכן מעכשיו והלאה`, { undo: () => run(async () => { await command('template', { routeCode: code, ...before }, null, TODAY); S.week = {}; await loadDay(TODAY); await Promise.all(DAYS.map(x => loadDay(x.date))); paintPlanner(); }, 'הוחזר') });
+  } catch (e) { toast(e.message, { bad: true }); }
+}
+function rowMenu(anchor, tripId) {
+  const date = S.plan.day; const d = dataFor(date); const t = d.trips.find(x => x.id === tripId);
+  const reg = S.data.template?.[t.routeCode];
+  const isRegular = reg && reg.driverId === t.driverId && reg.vehicleId === t.vehicleId;
+  const items = [
+    ...(isRegular ? [] : [{ id: 'make-regular', label: `לקבוע את הצוות הזה כקבוע לקו ${t.routeCode}`, sub: `${name2(d.drivers, t.driverId)} · ${name2(d.vehicles, t.vehicleId)}, מעכשיו והלאה` }]),
+    ...(isRegular ? [] : [{ id: 'back-regular', label: 'החזרה לצוות הקבוע', sub: `${name2(d.drivers, reg?.driverId)} · ${name2(d.vehicles, reg?.vehicleId)}` }]),
+    { id: 'open', label: 'פרטי הנסיעה והתחנות' },
+  ];
+  openPicker(anchor, { title: `קו ${t.routeCode} · ${t.departure}`, items, search: false, onPick: async id => {
+    if (id === 'open') openRide(tripId, date, 'overview');
+    if (id === 'make-regular') { await command('template', { routeCode: t.routeCode, driverId: t.driverId, vehicleId: t.vehicleId }, null, TODAY).catch(e => toast(e.message, { bad: true })); S.week = {}; await loadDay(TODAY); await loadDay(date); await loadSuggestions(date); paintPlanner(); toast(`הצוות של קו ${t.routeCode} נקבע כקבוע`); }
+    if (id === 'back-regular') { await run(async () => { await command('plan', { assignments: [{ tripId, driverId: reg.driverId, vehicleId: reg.vehicleId }], publish: false, reason: 'חזרה לצוות הקבוע' }, null, date); await loadDay(date); await loadSuggestions(date); paintPlanner(); }, 'חזר לצוות הקבוע'); }
+  } });
+}
+const name2 = (list, id) => (list.find(x => x.id === id)?.name ?? list.find(x => x.id === id)?.label ?? '—');
 
 // ------------------------------------------------------------ the planning assistant
 async function openAssist(date = TOMORROW, askText = '') {
@@ -742,7 +950,7 @@ function fleetPage(v) {
   const soon = people ? items.filter(x => daysLeft(x.licenseUntil) >= 0 && daysLeft(x.licenseUntil) <= 30).length : items.filter(x => (daysLeft(x.testUntil) >= 0 && daysLeft(x.testUntil) <= 30) || daysLeft(x.serviceDue) <= 7).length;
   return `<div class="t-page t-page-full">
     <header class="t-page-head"><div><h1>${people ? 'נהגים' : 'רכבים'}</h1><p>${[`${num(items.length)} ${people ? 'נהגים' : 'רכבים'}`, expired ? `${num(expired)} ${people ? 'עם רישיון שפג' : 'עם טסט שפג'}` : null, soon ? `${num(soon)} פגים בקרוב` : null].filter(Boolean).join(' · ') || 'הכל בתוקף'}</p></div>
-      <div class="t-spacer"></div><button class="t-chip" data-act="fleet-issues" aria-pressed="${Boolean(S.fleetIssues)}">רק מה שפג או עומד לפוג</button></header>
+      <div class="t-spacer"></div><button class="t-chip" data-act="fleet-issues" aria-pressed="${Boolean(S.fleetIssues)}">רק מה שפג או עומד לפוג</button><button class="t-btn is-primary" data-act="rec-new">${I.plus ?? ''}${people ? 'נהג חדש' : 'רכב חדש'}</button></header>
     <div class="t-grid t-grid-main" id="g-fleet"></div>
     <p class="t-grid-foot">לחיצה על תאריך כדי לעדכן אותו.</p>
   </div>`;
@@ -758,25 +966,88 @@ function fleetRows(v) {
 function mountFleet(v) {
   const flash = { 't-flash': p => p.data?.id === S.flash };
   const columnDefs = isPeople(v) ? [
-    { headerName: 'נהג', field: 'name', flex: 1.4, minWidth: 180, cellRenderer: p => two(esc(p.value), p.data.routeCode ? `קו ${esc(p.data.routeCode)}` : 'נהג חלופי') },
+    { headerName: 'נהג', field: 'name', flex: 1.4, minWidth: 180, cellRenderer: p => two(esc(p.value), p.data.archived ? 'הוסר מהצי' : (p.data.away ?? []).some(a => a.from <= TOMORROW && TOMORROW <= a.to) ? 'בהיעדרות מחר' : p.data.routeCode ? `קו ${esc(p.data.routeCode)}` : 'נהג חלופי') },
     { headerName: 'טלפון', field: 'contact', width: 140, cellRenderer: p => `<span dir="ltr" class="num">${esc(p.value)}</span>` },
     { headerName: 'רישיון', field: 'licenseType', width: 90 },
     { headerName: 'רישיון בתוקף עד', field: 'licenseUntil', ...dateCell('driver', 'licenseUntil', x => `תוקף רישיון של ${x.name}`, 30) },
     { headerName: 'רכב קבוע', colId: 'bus', width: 130, valueGetter: p => S.data.vehicles.find(v => v.id === `bus-${p.data.routeCode}`)?.label ?? '—' },
-    { headerName: 'כשיר לנהיגה', colId: 'fit', width: 130, valueGetter: p => (p.data.available !== false && daysLeft(p.data.licenseUntil) >= 0 ? 'כן' : 'לא'), cellRenderer: p => (p.value === 'כן' ? '<span class="t-quiet">כן</span>' : '<span class="t-pill is-bad">לא</span>') },
+    { headerName: 'כשיר לנהיגה', colId: 'fit', width: 130, valueGetter: p => (!p.data.archived && p.data.available !== false && daysLeft(p.data.licenseUntil) >= 0 ? 'כן' : 'לא'), cellRenderer: p => (p.value === 'כן' ? '<span class="t-quiet">כן</span>' : '<span class="t-pill is-bad">לא</span>') },
     { headerName: 'נסיעות היום', field: 'today', width: 120, cellClass: endCell },
   ] : [
-    { headerName: 'רכב', field: 'label', flex: 1.2, minWidth: 160, cellRenderer: p => two(esc(p.value), `<span dir="ltr">${esc(p.data.registration)}</span>`) },
+    { headerName: 'רכב', field: 'label', flex: 1.2, minWidth: 160, cellRenderer: p => two(esc(p.value), p.data.archived ? 'הוסר מהצי' : (p.data.away ?? []).some(a => a.from <= TOMORROW && TOMORROW <= a.to) ? 'מושבת מחר' : `<span dir="ltr">${esc(p.data.registration)}</span>`) },
     { headerName: 'מקומות', field: 'capacity', width: 100, cellClass: endCell, cellRenderer: p => (p.value ? num(p.value) : '<span class="t-quiet">לא בקובץ</span>') },
     { headerName: 'טסט בתוקף עד', field: 'testUntil', ...dateCell('vehicle', 'testUntil', x => `תוקף טסט ל${x.label}`, 30) },
     { headerName: 'טיפול הבא', field: 'serviceDue', ...dateCell('vehicle', 'serviceDue', x => `מועד טיפול ל${x.label}`, 7) },
-    { headerName: 'זמין לשיבוץ', colId: 'fit', width: 130, valueGetter: p => (p.data.available !== false && daysLeft(p.data.testUntil) >= 0 && daysLeft(p.data.serviceDue) >= 0 ? 'כן' : 'לא'), cellRenderer: p => (p.value === 'כן' ? '<span class="t-quiet">כן</span>' : '<span class="t-pill is-bad">לא</span>') },
+    { headerName: 'זמין לשיבוץ', colId: 'fit', width: 130, valueGetter: p => (!p.data.archived && p.data.available !== false && daysLeft(p.data.testUntil) >= 0 && daysLeft(p.data.serviceDue) >= 0 ? 'כן' : 'לא'), cellRenderer: p => (p.value === 'כן' ? '<span class="t-quiet">כן</span>' : '<span class="t-pill is-bad">לא</span>') },
     { headerName: 'נסיעות היום', field: 'today', width: 120, cellClass: endCell },
   ];
-  const g = grid($('#g-fleet'), 'fleet', { rowData: fleetRows(v), rowClassRules: flash, columnDefs });
+  const g = grid($('#g-fleet'), 'fleet', { rowData: fleetRows(v), rowClassRules: { ...flash, 't-grid-selected': p => p.data?.id === S.rec?.id }, columnDefs,
+    onRowClicked: e => { if (!e.event?.target?.closest?.('input,button,a')) openRecord(v, e.data.id); },
+    onCellKeyDown: e => { if (e.event?.key === 'Enter' && !e.event.target.closest('input')) openRecord(v, e.data.id); } });
   if (S.flash) { const n = g?.getRowNode(S.flash); if (n) setTimeout(() => g.ensureNodeVisible(n, 'middle'), 50); }
 }
-function paintFleet() { S.grids.fleet?.setGridOption('rowData', fleetRows(view())); }
+function paintFleet() { S.grids.fleet?.setGridOption('rowData', fleetRows(view())); S.grids.fleet?.redrawRows(); }
+// ---- one driver or bus: details, availability, removal. Saving shows what it changes for the coming days.
+function openRecord(v, id) {
+  const people = isPeople(v);
+  const src = id ? (people ? S.data.drivers : S.data.vehicles).find(x => x.id === id) : null;
+  S.rec = { v, id, draft: src ? structuredClone(src) : (people ? { name: '', contact: '', licenseType: 'D', licenseUntil: '', available: true, away: [] } : { label: '', registration: '', capacity: null, testUntil: '', serviceDue: '', available: true, away: [] }) };
+  S.rec.draft.away ??= [];
+  paintRecord(); S.grids.fleet?.redrawRows();
+}
+function paintRecord() {
+  const slot = $('#inspector');
+  const r = S.rec;
+  if (!r) { slot.innerHTML = ''; return; }
+  const people = isPeople(r.v);
+  const x = r.draft;
+  const field = (key, label, type = 'text', extra = '') => `<div class="t-field"><label for="rec-${key}">${label}</label><input id="rec-${key}" class="t-input" data-rec="${key}" type="${type}" value="${esc(x[key] ?? '')}" ${extra}></div>`;
+  const regular = people ? S.data.template && Object.entries(S.data.template).filter(([, c]) => c.driverId === x.id).map(([code]) => code) : Object.entries(S.data.template ?? {}).filter(([, c]) => c.vehicleId === x.id).map(([code]) => code);
+  slot.innerHTML = `<aside class="t-insp t-rec" aria-label="${people ? 'נהג' : 'רכב'}">
+    <header class="t-insp-head"><div class="t-insp-title">${people ? I.user : I.bus}<h2 tabindex="-1" id="rec-title">${esc((people ? x.name : x.label) || (people ? 'נהג חדש' : 'רכב חדש'))}</h2></div>
+      <p>${r.id ? (regular?.length ? `צוות קבוע של ${regular.map(c => `קו ${c}`).join(', ')}` : people ? 'נהג חלופי' : 'רכב חלופי') : 'אחרי השמירה אפשר לשבץ אותו בבניית הסידור.'}</p>
+      <button class="t-icon-btn t-insp-close" data-act="rec-close" aria-label="סגירה">${I.x}</button></header>
+    <div class="t-insp-body">
+      ${people ? `${field('name', 'שם מלא')}${field('contact', 'טלפון', 'tel', 'dir="ltr"')}
+        <div class="t-field"><label for="rec-licenseType">סוג רישיון</label><select id="rec-licenseType" class="t-select" data-rec="licenseType">${['D', 'C1', 'D1'].map(o => `<option ${x.licenseType === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div>
+        ${field('licenseUntil', 'רישיון בתוקף עד', 'date')}`
+      : `${field('label', 'שם הרכב')}${field('registration', 'מספר רישוי', 'text', 'dir="ltr"')}${field('capacity', 'מספר מקומות', 'number', 'min="1" max="99"')}${field('testUntil', 'טסט בתוקף עד', 'date')}${field('serviceDue', 'טיפול הבא עד', 'date')}`}
+      <div class="t-pop-row t-rec-switch"><span id="l-avail">${people ? 'זמין לשיבוץ' : 'זמין לשיבוץ (לא מושבת)'}</span><button class="t-switch" role="switch" aria-checked="${x.available !== false}" aria-labelledby="l-avail" data-act="rec-avail"></button></div>
+      <h3 class="t-insp-h">${people ? 'היעדרויות' : 'השבתות'}</h3>
+      <div class="t-away">${x.away.map((a, i) => `<div class="t-away-row"><span class="num">${a.from.split('-').reverse().join('.')} – ${a.to.split('-').reverse().join('.')}</span><span>${esc(a.reason || '')}</span><button class="t-icon-btn" data-away-del="${i}" aria-label="הסרה">${I.x}</button></div>`).join('') || `<p class="t-source">אין ${people ? 'היעדרויות' : 'השבתות'} מתוכננות.</p>`}
+        <div class="t-away-add"><input type="date" class="t-input" id="away-from" aria-label="מתאריך"><input type="date" class="t-input" id="away-to" aria-label="עד תאריך"><input class="t-input" id="away-reason" placeholder="${people ? 'חופשה, מחלה, מילואים' : 'מוסך, תקלה'}" aria-label="סיבה"><button class="t-btn is-sm" data-act="away-add">הוספה</button></div>
+      </div>
+      <div id="rec-impact"></div>
+    </div>
+    <footer class="t-insp-foot"><button class="t-btn is-primary" data-act="rec-save">שמירה</button>${r.id && !x.archived ? `<button class="t-btn is-ghost t-danger" data-act="rec-archive">הסרה מהצי</button>` : ''}${x.archived ? '<button class="t-btn" data-act="rec-restore">החזרה לצי</button>' : ''}</footer>
+  </aside>`;
+  if (!r.focused) { $('#rec-title')?.focus({ preventScroll: true }); r.focused = true; }
+}
+async function upcomingImpact(id) {
+  // Which rides in the coming days can't run with this driver or bus now.
+  const out = [];
+  for (const day of DAYS.slice(1, 4)) { const d = await loadDay(day.date); const ts = d.trips.filter(t => (t.driverId === id || t.vehicleId === id) && t.blockers.length); if (ts.length) out.push({ day, n: ts.length }); }
+  return out;
+}
+async function saveRecord() {
+  const r = S.rec; const people = isPeople(r.v); const x = r.draft;
+  const data = people ? { id: r.id ?? undefined, name: x.name, contact: x.contact, licenseType: x.licenseType, licenseUntil: x.licenseUntil, available: x.available !== false, away: x.away }
+    : { id: r.id ?? undefined, label: x.label, registration: x.registration, capacity: x.capacity === '' || x.capacity == null ? null : Number(x.capacity), testUntil: x.testUntil, serviceDue: x.serviceDue, available: x.available !== false, away: x.away };
+  try {
+    await command(people ? 'driver-save' : 'vehicle-save', data, null, TODAY);
+    await loadDay(TODAY);
+    const saved = r.id ?? (people ? S.data.drivers : S.data.vehicles).at(-1)?.id;
+    S.rec = null; paintRecord(); paintFleet(); S.flash = saved; paintFleet();
+    const impact = saved ? await upcomingImpact(saved) : [];
+    toast(impact.length ? `נשמר. ${impact.map(i => `${dayWord(i.day.date)}: ${i.n} נסיעות צריכות צוות אחר`).join(' · ')}` : 'נשמר. אין שינוי בנסיעות של הימים הקרובים.');
+  } catch (e) { toast(e.message, { bad: true }); }
+}
+async function archiveRecord(restore = false) {
+  const r = S.rec; const people = isPeople(r.v);
+  const n = DAYS.slice(1).reduce((k, day) => k + (dataFor(day.date)?.trips.filter(t => t.driverId === r.id || t.vehicleId === r.id).length ?? 0), 0);
+  if (!restore && !(await ask(`להסיר את ${people ? r.draft.name : r.draft.label} מהצי? ${n ? `הוא משובץ ל־${n} נסיעות השבוע, והן יופיעו בבניית הסידור כצריכות צוות.` : ''}`, 'הסרה מהצי', 'ביטול'))) return;
+  await run(async () => { await command('archive', { kind: people ? 'driver' : 'vehicle', id: r.id, restore }, null, TODAY); await loadDay(TODAY); S.rec = null; paintRecord(); paintFleet(); }, restore ? 'הוחזר לצי' : 'הוסר מהצי. אפשר להחזיר מהרשימה.');
+}
 
 // ------------------------------------------------------------ the brief, point by point (presenter tour)
 const BRIEF = [
@@ -784,7 +1055,7 @@ const BRIEF = [
   { title: 'ממשק הסדרנים', text: 'סידור יומי, שיוך נהג ורכב, תחנות ותלמידים, מצב כל נסיעה, מתוכנן מול בפועל, והתראות.', go: async () => { location.hash = '#/rides'; await wait(400); const t = S.data.trips.find(x => x.status === 'active'); if (t) await openRide(t.id, TODAY, 'overview'); }, spot: '.t-insp', say: 'כל נסיעה נפתחת בצד: תחנות עם מתוכנן מול בפועל, הנהג, הרכב, והתראות עם פעולה.' },
   { title: 'ממשק הנהג', text: 'סידור העבודה, תחנה אחת בכל מסך, ספירה, אישור יציאה בהחלקה, ופיזור.', go: async () => { if (!S.phone) { S.phone = true; paintPhone(); } }, spot: '.t-phone', say: 'הנהג רואה רק את הנסיעות שלו. מחליקים רק כשהרכב עומד.' },
   { title: 'נהגים וצי רכב', text: 'פרטי קשר, סוג רישיון ותוקפו, טסט, טיפולים וזמינות, עם התראה לפני שפג.', go: () => { S.fleetIssues = true; location.hash = '#/drivers'; }, spot: '#g-fleet', say: 'מה שפג או עומד לפוג, ולחיצה על תאריך מעדכנת.' },
-  { title: 'תהליך העבודה', text: 'שלב 1: בונים את הסידור למחר. משם הנהג רואה, מדווח, והדשבורד מתעדכן.', go: () => { location.hash = '#/plan'; }, spot: '#timeline', say: 'מחר במבט אחד: כל נהג והנסיעות שלו. גוררים נסיעה לנהג אחר, והתנגשויות נצבעות.' },
+  { title: 'תהליך העבודה', text: 'שלב 1: בונים את הסידור למחר. משם הנהג רואה, מדווח, והדשבורד מתעדכן.', go: () => { location.hash = '#/plan'; }, spot: '#plan-body', say: 'הנסיעות כבר בסידור. מחר מופיעות רק אלה שחסר להן נהג או רכב, עם הצעה לכל אחת.' },
   { title: 'הדמו (MVP)', text: 'דשבורד עם מפה, סידור יומי, ממשק נהג, עדכון מיידי וניהול צי, כולם על הנתונים שלכם.', go: async () => { location.hash = '#/rides'; await wait(300); await openMap(); }, spot: '.t-mapfull', say: 'המפה החיה, עם כל האוטובוסים. נפתחת בלחיצה, לא מסתירה את העבודה.' },
   { title: 'מה למדנו מהקובץ', text: 'מסלולים ותחנות: קוד סידור הוא האוטובוס, נסיעה היא יום + קוד + מספר. יש קווי בוקר וצהריים שונים בכל יום, ושישי שונה. גם נהגי מועצה וגם קבלנים. בקובץ רק מספרי תלמידים, בלי שמות. אין בו נתוני נהגים ותוקפים, ולא GPS.' },
   { title: 'נקודות לתכנון', text: 'בטיחות: דיווח רק בהחלקה כשהרכב עומד. אמינות: כל מספר מסומן "דיווח נהג" או "משוער". הרשאות: נהג רואה רק את שלו. פרטיות: מספרים בלבד. בלי קליטה: הדיווחים נשמרים בטלפון ונשלחים כשחוזרת קליטה.' },
@@ -838,7 +1109,7 @@ function paintHelp() {
     <div class="t-help-cols">
       <section><h3>המסכים</h3><ul>
         <li><b>נסיעות</b>: מה דורש טיפול עכשיו, מה יוצא, מה בדרך ומה הגיע. לחיצה על נסיעה פותחת אותה בצד.</li>
-        <li><b>בניית סידור</b>: כל נהג והנסיעות שלו לאורך היום. גוררים נסיעה לנהג אחר. אדום: התנגשות. מקווקו: עוד לא פורסם.</li>
+        <li><b>בניית סידור</b>: הנסיעות מגיעות מהסידור הקבוע. בכל יום מופיעות רק נסיעות שחסר להן נהג או רכב, עם הצעה, ולחיצה מראה מי פנוי. בסוף: פרסום לנהגים.</li>
         <li><b>נהגים</b> ו<b>רכבים</b>: תוקף רישיון, טסט וטיפולים. לחיצה על תאריך מעדכנת אותו.</li>
         <li><b>עוזר התכנון</b>: כותבים מה קרה ("דוד לא מגיע מחר") ומקבלים הצעה לאישור.</li>
       </ul></section>
@@ -862,7 +1133,7 @@ function cmdItems() {
   const d = S.data;
   const items = [
     { kind: 'מסך', label: 'נסיעות', sub: 'מה דורש טיפול, מה בדרך ומה הגיע', go: () => { location.hash = '#/rides'; } },
-    { kind: 'מסך', label: 'בניית סידור', sub: 'נהגים מול שעות, גוררים כדי לשבץ', go: () => { location.hash = '#/plan'; } },
+    { kind: 'מסך', label: 'בניית סידור', sub: 'חודש, סידור קבוע, ושיבוץ צוות לכל יום', go: () => { location.hash = '#/plan'; } },
     { kind: 'מסך', label: 'נהגים', sub: 'טלפונים ותוקף רישיון', go: () => { location.hash = '#/drivers'; } },
     { kind: 'מסך', label: 'רכבים', sub: 'מקומות, טסט וטיפולים', go: () => { location.hash = '#/vehicles'; } },
     { kind: 'פעולה', label: 'מפה חיה', sub: 'כל האוטובוסים על המפה', go: () => openMap() },
@@ -925,7 +1196,7 @@ async function render() {
   dropGrids();
   if (v === 'plan') {
     main.innerHTML = plannerPage();
-    await loadPlanDay(); paintPlanner(); loadWeek().then(paintPlanner);
+    await planView(S.plan.view);
   } else if (v === 'drivers' || v === 'vehicles') {
     main.innerHTML = fleetPage(v); mountFleet(v);
   } else {
@@ -963,7 +1234,19 @@ document.addEventListener('click', async e => {
   if (pick) { applyTheme(pick.dataset.themePick); rail(); return; }
   const ci = e.target.closest('[data-ci]');
   if (ci) { pickCmd(Number(ci.dataset.ci)); return; }
-  const el = e.target.closest('[data-act],[data-ride],[data-plan-trip],[data-itab],[data-rides],[data-tfacet],[data-pday],[data-pby],[data-ack],[data-unack],[data-prop-apply],[data-prop-open],[data-prop-more],[data-ask],[data-tour],[data-tour-step]');
+  if (S.picker && !e.target.closest('.t-picker') && !e.target.closest('[data-pick],[data-tpick],[data-rowmenu]')) closePicker();
+  const pk = e.target.closest('[data-pick]');
+  if (pk && !pk.disabled) { const [k, id] = pk.dataset.pick.split(':'); pickCrew(pk, k, id); return; }
+  const tp = e.target.closest('[data-tpick]');
+  if (tp) { const [k, code] = tp.dataset.tpick.split(':'); pickRegular(tp, k, code); return; }
+  const rm = e.target.closest('[data-rowmenu]');
+  if (rm) { rowMenu(rm, rm.dataset.rowmenu); return; }
+  const foc = e.target.closest('[data-focus]');
+  if (foc) { focusFix(foc.dataset.focus); return; }
+  if (e.target.closest('[data-pgo-today]')) { S.focus = null; S.plan.day = TODAY; S.plan.view = 'day'; location.hash = '#/plan'; return; }
+  const del = e.target.closest('[data-away-del]');
+  if (del) { S.rec.draft.away.splice(Number(del.dataset.awayDel), 1); paintRecord(); return; }
+  const el = e.target.closest('[data-act],[data-ride],[data-plan-trip],[data-itab],[data-rides],[data-tfacet],[data-pview],[data-pgo],[data-psel],[data-paccept],[data-pres],[data-proute],[data-ride-open],[data-ack],[data-unack],[data-prop-apply],[data-prop-open],[data-prop-more],[data-ask],[data-tour],[data-tour-step]');
   if (!el) return;
   const ds = el.dataset;
   if (ds.ride) { openRide(ds.ride, TODAY, 'overview'); return; }
@@ -971,8 +1254,10 @@ document.addEventListener('click', async e => {
   if (ds.itab) { if (S.insp.tab === 'assign' && ds.itab !== 'assign' && !(await leaveEdits())) return; S.dirty = false; S.insp.tab = ds.itab; S.composing = false; paintInspector(); return; }
   if (ds.rides) { S.rides = ds.rides; store.set('t-rides-view', S.rides); render(); return; }
   if (ds.tfacet) { S.table.facet = S.table.facet === ds.tfacet ? '' : ds.tfacet; document.querySelectorAll('[data-tfacet]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tfacet === S.table.facet)); paintTable(); return; }
-  if (ds.pday) { S.plan.day = ds.pday; S.plan.ci = -1; document.querySelectorAll('[data-pday]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pday === S.plan.day)); await loadPlanDay(); paintPlanner(); return; }
-  if (ds.pby) { S.plan.by = ds.pby; document.querySelectorAll('[data-pby]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pby === S.plan.by)); paintPlanner(); return; }
+  if (ds.pview) { planView(ds.pview); return; }
+  if (ds.pgo !== undefined) { planGo(ds.pgo); return; }
+  if (ds.paccept) { acceptSuggestion(ds.paccept); return; }
+  if (ds.rideOpen) { openRide(ds.rideOpen, S.plan.day, 'overview'); return; }
   if (ds.ack) {
     const alertId = ds.ack;
     command('ack', { alertId }).then(() => toast('סומן כטופל', { undo: () => run(() => command('unack', { alertId }), 'הוחזר לטיפול') })).catch(err => toast(err.message, { bad: true }));
@@ -988,6 +1273,15 @@ document.addEventListener('click', async e => {
   const act = ds.act;
   const d = S.data;
   if (act === 'cmd') openCmd();
+  if (act === 'focus-close') { S.focus = null; paintRides(); }
+  if (act === 'focus-apply') focusApply();
+  if (act === 'rec-new') openRecord(view(), null);
+  if (act === 'rec-close') { S.rec = null; paintRecord(); S.grids.fleet?.redrawRows(); }
+  if (act === 'rec-avail') { S.rec.draft.available = S.rec.draft.available === false; el.setAttribute('aria-checked', S.rec.draft.available !== false); }
+  if (act === 'away-add') { const from = $('#away-from').value, to = $('#away-to').value || from; if (!from) { toast('יש לבחור תאריך התחלה', { bad: true }); return; } S.rec.draft.away.push({ from, to: to < from ? from : to, reason: $('#away-reason').value.trim() }); paintRecord(); }
+  if (act === 'rec-save') saveRecord();
+  if (act === 'rec-archive') archiveRecord(false);
+  if (act === 'rec-restore') archiveRecord(true);
   if (act === 'later') { S.rides = 'table'; S.table.facet = 'later'; store.set('t-rides-view', 'table'); render(); }
   if (act === 'cmd-close' && e.target === el) closeCmd();
   if (act === 'pop') { S.pop = !S.pop; S.confirmReset = false; rail(); }
@@ -1000,10 +1294,10 @@ document.addEventListener('click', async e => {
   if (act === 'assist-today') openAssist(TODAY);
   if (act === 'assist-tomorrow') openAssist(TOMORROW);
   if (act === 'close-assist') { S.assist = null; paintAssist(); rail(); }
-  if (act === 'only-issues') { S.plan.onlyIssues = !S.plan.onlyIssues; paintPlanner(); }
-  if (act === 'next-conflict') nextConflict();
   if (act === 'publish-drafts') publishDrafts();
-  if (act === 'assist-plan') openAssist(S.plan.day);
+  if (act === 'auto-alloc') autoAllocate();
+  if (act === 'toggle-ready') { S.plan.showReady = !S.plan.showReady; paintPlanner(); }
+  if (act === 'guide-hide') { store.set('t-plan-guide', '0'); $('.t-guide')?.remove(); }
   if (act === 'fleet-issues') { S.fleetIssues = !S.fleetIssues; el.setAttribute('aria-pressed', S.fleetIssues); paintFleet(); }
   if (act === 'tour') { S.pop = false; tourGo(0); }
   if (act === 'tour-close') { S.tour = null; paintTour(); }
@@ -1040,6 +1334,7 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'note-text') S.draft = el.value;
+  if (el.dataset.rec && S.rec) S.rec.draft[el.dataset.rec] = el.value;
   if (el.id === 'tq') { S.table.q = el.value; paintTable(); }
   if (el.id === 'pq') { S.plan.q = el.value; paintPlanner(); }
   if (el.id === 'cmd-q') { S.cmd.q = el.value; S.cmd.i = 0; drawCmd(); }
@@ -1081,6 +1376,8 @@ document.addEventListener('keydown', e => {
   if (e.key === '?') { S.help = !S.help; paintHelp(); return; }
   if (e.key.toLowerCase() === 'm' || e.key === 'צ') { S.mapOpen ? closeMap() : openMap(); return; }
   if (e.key.toLowerCase() === 'a' || e.key === 'ש') { S.assist ? (S.assist = null, paintAssist(), rail()) : openAssist(TOMORROW); return; }
+  if (e.key === 'Escape' && S.picker) { const a = S.picker.anchor; closePicker(); a?.focus?.(); return; }
+  if (e.key === 'Enter' && e.target.matches?.('[data-tpick]')) { e.target.click(); return; }
   if (e.key === 'Escape') {
     clearSpot();
     if (S.help) { S.help = false; paintHelp(); return; }
@@ -1091,7 +1388,7 @@ document.addEventListener('keydown', e => {
     if (S.tour) { S.tour = null; paintTour(); }
   }
 });
-window.addEventListener('hashchange', async () => { if (!['drivers', 'vehicles'].includes(view())) S.flash = null; if (S.mapOpen && !S.tour) closeMap(); if (S.insp) { S.dirty = false; S.insp = null; } await render(); });
+window.addEventListener('hashchange', async () => { S.rec = null; if (!['drivers', 'vehicles'].includes(view())) S.flash = null; if (S.mapOpen && !S.tour) closeMap(); if (S.insp) { S.dirty = false; S.insp = null; } await render(); });
 
 function tick() {
   clearInterval(tick.t);

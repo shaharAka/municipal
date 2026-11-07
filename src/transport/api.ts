@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { createTransportState, actorFor, snapshot, execute, weekday, TransportError, sourceData } from './engine.ts';
+import { createTransportState, actorFor, snapshot, execute, weekday, TransportError, sourceData, monthSummary } from './engine.ts';
 import { proposalsFor, understand } from './assistant.ts';
 const changes = new EventEmitter(); changes.setMaxListeners(100);
 const file = process.env.TRANSPORT_STATE_PATH || new URL('../../.local/transport-state.json',import.meta.url).pathname;
@@ -44,6 +44,10 @@ export async function handleTransport(req:IncomingMessage,res:ServerResponse,url
       const notify=(message:any)=>{if(message.date===date)res.write(`data: ${JSON.stringify(message)}\n\n`);};changes.on('change',notify);
       const heartbeat=setInterval(()=>res.write(': heartbeat\n\n'),20000);heartbeat.unref();
       req.on('close',()=>{clearInterval(heartbeat);changes.off('change',notify);});return;
+    }
+    if(url.pathname==='/api/transport/month'&&req.method==='GET'){
+      if(actorFor(s,viewer).role!=='dispatcher')throw new TransportError('זמין לסדרנים בלבד.',403);
+      return json(res,200,monthSummary(s,date));
     }
     if(url.pathname==='/api/transport/assistant'&&req.method==='GET'){
       if(actorFor(s,viewer).role!=='dispatcher')throw new TransportError('העוזר זמין לסדרנים בלבד.',403);
