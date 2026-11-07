@@ -1,0 +1,284 @@
+{
+ "places": {
+  "אבני איתן": {
+   "lat": 32.82129,
+   "lng": 35.76529,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/10",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "אודם": {
+   "lat": 33.20251,
+   "lng": 35.74584,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/17",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "אורטל": {
+   "lat": 33.09946,
+   "lng": 35.7604,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/24",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "אל רום": {
+   "lat": 33.16997,
+   "lng": 35.78695,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/36",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "אלוני הבשן": {
+   "lat": 32.97873,
+   "lng": 35.84725,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/42",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "אלי-עד": {
+   "lat": 32.80495,
+   "lng": 35.73471,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/57",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "אניעם": {
+   "lat": 32.96029,
+   "lng": 35.74363,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/61",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "אפיק": {
+   "lat": 32.78824,
+   "lng": 35.69838,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/72",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "בני יהודה": {
+   "lat": 32.80067,
+   "lng": 35.70199,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/87",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "גבעת יואב": {
+   "lat": 32.80841,
+   "lng": 35.68698,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/102",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "גשור": {
+   "lat": 32.81775,
+   "lng": 35.71045,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/109",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "חד נס": {
+   "lat": 33.02261,
+   "lng": 35.71473,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/126",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "יונתן": {
+   "lat": 32.93059,
+   "lng": 35.76458,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/146",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "כנף": {
+   "lat": 32.86915,
+   "lng": 35.70368,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/155",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "כפר חרוב": {
+   "lat": 32.76539,
+   "lng": 35.68033,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/160",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "מבוא חמה": {
+   "lat": 32.70511,
+   "lng": 35.78853,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/164",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "מיצר": {
+   "lat": 32.76885,
+   "lng": 35.72648,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/239",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "מעלה גמלא": {
+   "lat": 32.8777,
+   "lng": 35.72004,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/261",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "מרום גולן": {
+   "lat": 33.13592,
+   "lng": 35.79189,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/275",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "נאות גולן": {
+   "lat": 32.81469,
+   "lng": 35.74059,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/284",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "נוב": {
+   "lat": 32.8153,
+   "lng": 35.77299,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/292",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "נטור": {
+   "lat": 32.84659,
+   "lng": 35.74917,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/307",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "קדמת צבי": {
+   "lat": 33.02822,
+   "lng": 35.6957,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/334",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "קלע אלון": {
+   "lat": 33.14814,
+   "lng": 35.68402,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/882",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "קשת": {
+   "lat": 32.9754,
+   "lng": 35.82106,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/353",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "רמות": {
+   "lat": 32.85002,
+   "lng": 35.67853,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/369",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "רמת מגשימים": {
+   "lat": 32.85597,
+   "lng": 35.81942,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/377",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "שעל": {
+   "lat": 33.12748,
+   "lng": 35.69087,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/385",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "חספין": {
+   "lat": 32.82193,
+   "lng": 35.74246,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/137",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "עין זיון": {
+   "lat": 33.09186,
+   "lng": 35.81456,
+   "source": "https://ags20.intertown.co.il/arcgis/rest/services/gln_layers/gln_yeshuvim/MapServer/319",
+   "accuracy": "settlement midpoint (council GIS); exact stop unverified",
+   "kind": "village"
+  },
+  "קצרין": {
+   "lat": 32.99277,
+   "lng": 35.68795,
+   "source": "https://he.wikipedia.org/wiki/קצרין",
+   "accuracy": "public settlement location (Wikipedia); exact stop unverified",
+   "kind": "village"
+  },
+  "עמיר": {
+   "lat": 33.17803,
+   "lng": 35.62035,
+   "source": "https://he.wikipedia.org/wiki/עמיר",
+   "accuracy": "public settlement location (Wikipedia); exact stop unverified",
+   "kind": "village"
+  },
+  "אוהלו": {
+   "lat": 32.71583,
+   "lng": 35.57306,
+   "source": "https://he.wikipedia.org/wiki/אוהלו",
+   "accuracy": "public settlement location (Wikipedia); exact stop unverified",
+   "kind": "village"
+  },
+  "רמת טראמפ": {
+   "lat": 33.13233,
+   "lng": 35.69054,
+   "source": "https://he.wikipedia.org/wiki/רמת_הנשיא_טראמפ",
+   "accuracy": "public settlement location (Wikipedia); exact stop unverified",
+   "kind": "village"
+  }
+ },
+ "aliases": {
+  "אליעד": "אלי-עד",
+  "דימוקרטי אליעד": "אלי-עד",
+  "חיספין": "חספין",
+  "עין זיוון": "עין זיון",
+  "מבא חמה": "מבוא חמה",
+  "אמיר": "עמיר",
+  "אוהלו בתחנה על הכביש": "אוהלו",
+  "לקצרין": "קצרין",
+  "קצרין הורדה בטרמפידה": "קצרין",
+  "נופי גולן": "קצרין",
+  "ברנקו וייס רמות": "רמות",
+  "גבעת יואב – מתנס מזכירות": "גבעת יואב",
+  "גבעת יואב – מתנס מזכירות – ברנקו וייס רמות": "גבעת יואב",
+  "בני יהודה – ישנה חדשה": "בני יהודה",
+  "בני יהודה – ישנה חדשה תחנה לכיוון גשור": "בני יהודה",
+  "כפר חרוב – הרחבה מזכירות": "כפר חרוב",
+  "כפר חרוב – הרחבה מרכז": "כפר חרוב",
+  "קדמת צבי – הרחבה ישוב": "קדמת צבי",
+  "נטור אפיק": "נטור",
+  "נטור רמגש": "נטור",
+  "שעל מיניבוס": "שעל",
+  "אבני איתן ת\"ת": "אבני איתן"
+ },
+ "schools": {
+  "אביטל – מרום גולן": "מרום גולן",
+  "ביה\"ס גולן + ת\"ת חיספין (2 מוסדות, מתחם משותף)": "חספין",
+  "דמוקרטי אפיק": "אפיק",
+  "דמוקרטי נטור": "נטור",
+  "שורשים נטור": "נטור",
+  "הצבי קשת / קשת ואהבת": "קשת",
+  "מעיינות אבני איתן": "אבני איתן",
+  "מצפה גולן (בני יהודה)": "בני יהודה",
+  "מעלות הגולן": "רמות",
+  "נופי גולן": "קצרין"
+ },
+ "unknown": {
+  "ילקוט רועים": "מיקום בית הספר לא מופיע בקובץ",
+  "תחנה לבירור": "שם התחנה בקובץ: \"תחנה לבירור\"",
+  "גנים דרום הגולן": "לא נמצא מיקום ציבורי"
+ },
+ "note": "Settlement points, not verified bus stops. Council GIS midpoints and Wikipedia coordinates; no geocoding service."
+}

@@ -1,7 +1,10 @@
 import schedule from './schedule.json' with { type: 'json' };
 import { composeBaseline, loadPacks, pageProblems } from '../ontology/compose.ts';
 import { refFor } from '../graph/graph.ts';
+import { liveFor, pointsFor, alertsFor } from './simulate.ts';
 export const DEMO_DATE = '2026-11-08';
+export const DEMO_CLOCK = '07:05';
+const DEMO_NAMES = ['דוד מזרחי','יעקב אוחיון','סאמר חלבי','אבי ברק','מוחמד ספדי','משה דהן','אלון שגיא','ראובן לוי','ניר עמר','אדהם אבו סאלח','שלמה פרץ','יוסי חזן','רמי נחום','אייל גבאי','ואיל מסעדה','עמית כרמי','חיים אזולאי','טל רוזן','ג׳מאל אבו זייד','אורי שלום','בני אדרי','גיל נאור','סלים חוסיין','אליהו ביטון','עופר זיו','נתן פרידמן','מאיר כהן','יגאל טל','שמעון דוד','איתי בר','רפאל אסולין'];
 export const DAYS = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
 const ontology = composeBaseline(loadPacks());
 export class TransportError extends Error {
@@ -20,12 +23,15 @@ export function weekday(date: string) {
 export function createTransportState(): any {
   const codes = [...new Set(schedule.trips.map(t => t.routeCode))].sort((a,b) => Number(a)-Number(b));
   const drivers: any = {}, vehicles: any = {};
-  for (const code of codes) {
-    drivers['driver-'+code] = {id:'driver-'+code, name:'נהג הדגמה '+code, routeCode:code, licenseType:'D', licenseUntil:code==='21'?'2026-11-06':'2027-06-30', available:true, contact:'לא נמסר', origin:'demo'};
+  // Fictional names and plates: the workbook's real drivers and vehicles stay out of the demo.
+  codes.forEach((code, i) => {
+    const name = DEMO_NAMES[i % DEMO_NAMES.length];
+    drivers['driver-'+code] = {id:'driver-'+code, name, routeCode:code, licenseType:Number(code)>=300?'C1':'D', licenseUntil:code==='21'?'2026-11-06':`2027-0${1+(i%9)}-15`, available:true, contact:`050-0000${String(100+i).slice(-3)}`, origin:'demo'};
     const capacity = (schedule.capacities as any)[code];
-    vehicles['bus-'+code] = {id:'bus-'+code, label:'אוטובוס '+code, registration:'רכב הדגמה '+code, capacity:capacity?.seats || 55, capacitySource:capacity?.source || 'נתון הדגמה', testUntil:code==='14'?'2026-11-06':'2027-03-31', serviceDue:code==='15'?'2026-11-12':'2026-12-15', available:true, origin:'demo'};
-  }
-  vehicles['bus-spare'] = {id:'bus-spare',label:'אוטובוס חלופי',registration:'רכב הדגמה חלופי',capacity:60,capacitySource:'נתון הדגמה',testUntil:'2027-04-30',serviceDue:'2026-12-15',available:true,origin:'demo'};
+    vehicles['bus-'+code] = {id:'bus-'+code, label:'אוטובוס '+code, registration:`${10+i}-${300+i*7}-${String(40+i).padStart(2,'0')}`, capacity:capacity?.seats ?? null, capacitySource:capacity?.source || 'לא מופיע בקובץ', testUntil:code==='14'?'2026-11-06':`2027-0${1+((i+3)%9)}-28`, serviceDue:code==='15'?'2026-11-12':`2026-12-${String(10+(i%18)).padStart(2,'0')}`, available:true, origin:'demo'};
+  });
+  drivers['driver-spare'] = {id:'driver-spare', name:'רון אלמוג', routeCode:'', licenseType:'D', licenseUntil:'2027-08-31', available:true, contact:'050-0000999', origin:'demo'};
+  vehicles['bus-spare'] = {id:'bus-spare',label:'אוטובוס חלופי',registration:'71-990-12',capacity:60,capacitySource:'נתון הדגמה',testUntil:'2027-04-30',serviceDue:'2026-12-15',available:true,origin:'demo'};
   return {schema:1, revision:1, drivers, vehicles, days:{}, receipts:{}, createdAt:new Date().toISOString()};
 }
 export function actorFor(state: any, id: string) {
@@ -37,15 +43,8 @@ export function dayFor(state: any, date: string) {
   const day = weekday(date);
   if (!state.days[date]) {
     const trips = schedule.trips.filter(t => t.weekday===day).map(t => ({...clone(t), date, version:1, driverId:'driver-'+t.routeCode, vehicleId:'bus-'+t.routeCode, published:!t.reviewReasons.length, phase:'pending', reports:{}, departures:[], onBoard:0, boarded:null, alighted:0, delayMinutes:0, notes:[], events:[], demoFocus:['10-1','11-1','12-1'].includes(t.number)}));
-    state.days[date] = {date, trips, events:[], clock:'07:18', nextId:1};
-    // An expressly simulated operational state; workbook records remain unchanged.
-    const active = trips.find(t => t.number==='11-1') as any;
-    if (active) {
-      active.phase='active'; active.reports['stop-1']={count:active.stops[0].planned,kind:'pickup',source:'demo',at:date+'T05:15:00Z',actor:'תרחיש הדגמה'};
-      active.departures=['stop-1']; active.boarded=active.stops[0].planned;active.onBoard=active.stops[0].planned;
-    }
-    const delayed = trips.find(t => t.number==='12-1') as any;
-    if (delayed) delayed.delayMinutes=8;
+    // The day starts just before the presenter's trip; other buses move by the demo clock (simulate.ts).
+    state.days[date] = {date, trips, events:[], clock:DEMO_CLOCK, nextId:1};
   }
   return state.days[date];
 }
@@ -62,7 +61,7 @@ export function readiness(state: any, trip: any, date: string): string[] {
     if (!bus.available) issues.push('הרכב אינו זמין');
     if (!bus.testUntil || bus.testUntil<date) issues.push('תוקף רישוי הרכב דורש טיפול');
     if (!bus.serviceDue || bus.serviceDue<date) issues.push('מועד טיפול הרכב חלף');
-    if (numericCount(trip.planned) && trip.planned>bus.capacity) issues.push('המספר המתוכנן גבוה מקיבולת הרכב');
+    if (numericCount(trip.planned) && bus.capacity!=null && trip.planned>bus.capacity) issues.push(`מתוכננים ${trip.planned} תלמידים לרכב עם ${bus.capacity} מקומות`);
   }
   if (!validTime(trip.departure)) issues.push('חסרה שעת יציאה תקינה');
   if (!trip.stops.length || trip.stops.some((s:any)=>!numericCount(s.planned))) issues.push('יש להשלים את כמויות התחנות');
@@ -73,16 +72,21 @@ export function nextStop(trip:any) {
   if (trip.direction==='morning') stops.push({id:'school',name:trip.school,time:null,planned:trip.boarded,kind:'dropoff'});
   return stops.find((s:any)=>!trip.departures.includes(s.id)) || null;
 }
-export function tripView(state:any, trip:any) {
+export function tripView(state:any, trip:any, clock = DEMO_CLOCK) {
   const issues=readiness(state,trip,trip.date);
   const reports=Object.values(trip.reports) as any[];
-  const mismatch=reports.some(r=>r.expected!==undefined && r.count!==r.expected);
-  return {...trip, issues, driverName:state.drivers[trip.driverId]?.name || 'לא משובץ',vehicleName:state.vehicles[trip.vehicleId]?.label || 'לא משובץ',capacity:state.vehicles[trip.vehicleId]?.capacity || null,status:trip.phase==='completed'?'completed':trip.delayMinutes?'delayed':trip.phase, mismatch,nextStop:nextStop(trip), actual:trip.boarded, reportSource:reports.length ? reports.some(r=>r.source==='driver')?'driver':'demo':null, canPublish:issues.length===0};
+  const live=liveFor(trip, clock);
+  const mismatch=Object.values(live.stopCounts).some((c:any)=>c.expected!=null && c.count!==c.expected);
+  return {...trip, issues, points:pointsFor(trip), live, driverName:state.drivers[trip.driverId]?.name || 'לא משובץ',driverContact:state.drivers[trip.driverId]?.contact || null,vehicleName:state.vehicles[trip.vehicleId]?.label || 'לא משובץ',capacity:state.vehicles[trip.vehicleId]?.capacity || null,status:live.status, mismatch,nextStop:nextStop(trip), actual:live.boarded, reportSource:reports.length ? reports.some(r=>r.source==='driver')?'driver':'demo':null, canPublish:issues.length===0};
 }
 export function snapshot(state:any,date:string,viewer:string) {
   const actor=actorFor(state,viewer),day=dayFor(state,date);
   const trips=day.trips.filter((t:any)=>actor.role==='dispatcher'||(t.driverId===actor.id&&t.published&&!readiness(state,t,date).length));
-  return {revision:state.revision,date,weekday:DAYS[weekday(date)],actor,clock:day.clock,source:schedule.source,trips:trips.map((t:any)=>tripView(state,t)),drivers:actor.role==='dispatcher'?Object.values(state.drivers):[state.drivers[actor.id]],vehicles:actor.role==='dispatcher'?Object.values(state.vehicles):[...new Set(trips.map((t:any)=>t.vehicleId))].map(id=>state.vehicles[id as string]),events:day.events.filter((e:any)=>actor.role==='dispatcher'||trips.some((t:any)=>t.id===e.tripId)),identityMode:'demo',gps:{connected:false,source:'demo',label:'מיקומי הרכבים בהדגמה; אין חיבור GPS'},serverTime:new Date().toISOString()};
+  const views=trips.map((t:any)=>tripView(state,t,day.clock));
+  const dispatcher=actor.role==='dispatcher';
+  const drivers=dispatcher?Object.values(state.drivers):[state.drivers[actor.id]];
+  const vehicles=dispatcher?Object.values(state.vehicles):[...new Set(trips.map((t:any)=>t.vehicleId))].map(id=>state.vehicles[id as string]);
+  return {revision:state.revision,date,weekday:DAYS[weekday(date)],actor,clock:day.clock,source:schedule.source,trips:views,drivers,vehicles,alerts:dispatcher?alertsFor(views,drivers,vehicles,date,day.clock):[],events:day.events.filter((e:any)=>dispatcher||trips.some((t:any)=>t.id===e.tripId)),identityMode:'demo',gps:{connected:false,source:'simulation',label:'מיקומי הרכבים בהדגמה הם סימולציה לפי שעון ההדגמה; אין חיבור GPS'},serverTime:new Date().toISOString()};
 }
 function event(state:any, day:any, trip:any,actor:any,kind:string,text:string,extra:any={}) {
   const e={id:'transport-event-'+day.nextId++,tripId:trip?.id||null,actor:actor.name,actorId:actor.id,kind,text,at:new Date().toISOString(),source:actor.role==='driver'?'driver':'dispatcher',...extra};
@@ -154,7 +158,7 @@ export function execute(state:any,viewer:string,command:any) {
     if(trip.phase==='completed')fail('הנסיעה כבר הושלמה.');
     if(command.type==='start') {
       if(trip.phase!=='pending')fail('הנסיעה כבר החלה.');
-      if(trip.direction==='afternoon'&&(!numericCount(data.count)||data.count>state.vehicles[trip.vehicleId].capacity))fail('יש לדווח כמות עלייה תקינה בבית הספר.');
+      if(trip.direction==='afternoon'&&(!numericCount(data.count)||(state.vehicles[trip.vehicleId].capacity!=null&&data.count>state.vehicles[trip.vehicleId].capacity)))fail('יש לדווח כמות עלייה תקינה בבית הספר.');
       trip.phase='active';if(trip.direction==='afternoon'){trip.boarded=data.count;trip.onBoard=data.count;}
       event(state,day,trip,actor,'start','הנהג דיווח על תחילת נסיעה');
     } else if(command.type==='delay') {
@@ -166,7 +170,7 @@ export function execute(state:any,viewer:string,command:any) {
       if(command.type==='report') {
         if(trip.reports[stop.id])fail('לתחנה כבר התקבל דיווח.');
         if(!numericCount(data.count))fail('יש להזין מספר שלם שאינו שלילי.');
-        if(stop.kind==='pickup'&&trip.onBoard+data.count>state.vehicles[trip.vehicleId].capacity)fail('הדיווח יחרוג מקיבולת הרכב.');
+        if(stop.kind==='pickup'&&state.vehicles[trip.vehicleId].capacity!=null&&trip.onBoard+data.count>state.vehicles[trip.vehicleId].capacity)fail('הדיווח יחרוג מקיבולת הרכב.');
         if(stop.kind==='dropoff'&&data.count>trip.onBoard)fail('מספר היורדים גבוה ממספר הנוסעים ברכב.');
         const r={count:data.count,expected:stop.planned,kind:stop.kind,source:'driver',actor:actor.id,at:new Date().toISOString()};
         trip.reports[stop.id]=r;

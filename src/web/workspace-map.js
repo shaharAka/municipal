@@ -15,7 +15,7 @@ export function googleDirectionsUrl(stops) {
   url.searchParams.set('waypoints', stops.map(p => `${p.lat},${p.lng}`).join('|'));
   return url.href;
 }
-async function loadGoogle(key) {
+export async function loadGoogle(key) {
   if (window.google?.maps?.importLibrary) return;
   if (!loading) loading = new Promise((resolve, reject) => {
     const callback = '__municipalMapsReady';

@@ -28,8 +28,12 @@ Nothing to install. Node 22.18+:
 ```bash
 npm run demo   # the whole loop, narrated in the terminal with real numbers
 npm start      # the product at http://127.0.0.1:4173
-npm test       # 63 tests across the platform and the shared workspace
+npm test       # 72 tests across the platform, the shared workspace and school transport
 ```
+
+School transport (Golan Regional Council): <http://127.0.0.1:4173/transport.html>
+for dispatchers and `/driver.html?d=driver-10` for a driver. Run of show and
+data sources: [docs/TRANSPORT-DEMO.md](docs/TRANSPORT-DEMO.md).
 
 Open <http://127.0.0.1:4173> for the new workspace. Its top-bar role switch
 simulates manager, finance and dispatcher views. AG Grid tables support dense

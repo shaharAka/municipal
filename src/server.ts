@@ -1540,7 +1540,8 @@ async function main() {
     }
   });
 
-  server.listen(PORT, '127.0.0.1', () => {
+  // HOST=0.0.0.0 lets a phone on the same Wi-Fi open the driver app; the default stays local.
+  server.listen(PORT, process.env.HOST || '127.0.0.1', () => {
     console.log(`\nWorkbench: http://127.0.0.1:${PORT}\n`);
   });
 }
