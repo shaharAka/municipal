@@ -200,3 +200,21 @@ test('a plan is all or nothing: a trip that already left stops the whole change'
   assert.equal(snapshot(s, DEMO_DATE, 'shuki').trips.find((x: any) => x.id === waiting.id).vehicleId, before, 'nothing changed');
   assert.ok(left);
 });
+
+test('only today runs live: tomorrow is a plan in which nothing has left, so every trip can still be changed', () => {
+  const s = createTransportState();
+  const d = snapshot(s, '2026-11-09', 'shuki');
+  assert.ok(d.trips.every((t: any) => t.live.phase === 'pending'));
+  const early = d.trips.find((t: any) => t.departure === '06:30');
+  assert.ok(early, 'the 06:30 trip exists tomorrow');
+  assert.doesNotThrow(() => execute(s, 'shuki', { id: `p-${++n}`, type: 'plan', date: '2026-11-09', data: { assignments: [{ tripId: early.id, vehicleId: 'bus-spare' }], publish: false } }));
+});
+
+test('an estimated count never raises a missing-children alert; only a driver report does', () => {
+  const s = createTransportState();
+  run(s, 'shuki', 'clock', null, { time: '07:40' });
+  const d = snapshot(s, DEMO_DATE, 'shuki');
+  const scenario = d.trips.find((t: any) => t.number === '19-1');
+  assert.ok(Object.values(scenario.live.stopCounts).some((c: any) => c.source === 'simulation' && c.count !== c.expected), 'the timetable estimate differs at כנף');
+  assert.ok(!d.alerts.some((a: any) => a.kind === 'count'), 'but no count alert is raised from it');
+});

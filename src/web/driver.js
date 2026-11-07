@@ -136,7 +136,7 @@ function todayScreen() {
     ${netBanner()}
     <main class="m-scroll">
       ${now ? `<button class="m-now" data-open="${now.id}">
-          <small>${now.phase === 'active' ? 'בדרך עכשיו' : 'הנסיעה הבאה'}</small>
+          <small>${now.phase === 'active' ? 'בדרך עכשיו' : clock > minutes(now.departure) ? `<span class="m-late">באיחור ${clock - minutes(now.departure)} דק׳</span>` : 'הנסיעה הבאה'}</small>
           <span class="m-now-time num">${esc(now.departure)}</span>
           <b>${esc(now.school)}</b>
           <small>${now.direction === 'morning' ? 'איסוף' : 'פיזור'} · ${now.stops.length} תחנות · ${now.planned} תלמידים</small>
@@ -152,8 +152,8 @@ function messagesScreen() {
   return `<header class="m-nav"><div class="m-nav-row"></div><h1 class="m-large">הודעות</h1><p class="m-sub">מהסדרנים</p></header>
     <main class="m-scroll"><section class="m-section">${list.length ? list.map(n => `<div class="m-msg"><small>${esc(n.actor)} · ${esc(n.trip.number)} · ${new Date(n.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</small>${esc(n.text)}</div>`).join('') : `<div class="m-empty">${I.chat}<div>אין הודעות</div></div>`}</section></main>${tabs()}`;
 }
-function slider(label) {
-  return `<div class="m-slide ${S.busy ? 'is-busy' : ''}" data-slide>
+function slider(label, locked = false) {
+  return `<div class="m-slide ${S.busy ? 'is-busy' : ''} ${locked ? 'is-locked' : ''}" data-slide ${locked ? 'aria-disabled="true"' : ''}>
       <span class="m-slide-fill"></span><span class="m-slide-label">${esc(label)}</span>
       <span class="m-slide-knob" role="button" tabindex="0" aria-label="${esc(label)}">${I.go}</span>
     </div>`;
@@ -180,11 +180,12 @@ function tripScreen(t) {
   const target = atSchoolStart ? { id: 'start', name: t.school, time: t.departure, kind: 'school' } : next;
   const dropping = target.kind === 'school' && !atSchoolStart || t.direction === 'afternoon' && !atSchoolStart;
   const expected = atSchoolStart ? t.planned : target.kind === 'school' ? (t.onBoard ?? 0) : target.planned ?? 0;
-  if (S.count == null) S.count = expected;
-  const off = S.count !== expected;
+  // The count starts empty: the driver confirms the planned number or adjusts it, so "actual" is never just a copy of "planned".
+  const counted = S.count != null;
+  const off = counted && S.count !== expected;
   const kind = atSchoolStart ? 'עלייה בבית הספר' : target.kind === 'school' ? 'הגעה לבית הספר' : dropping ? 'תחנת פיזור' : t.phase === 'pending' ? 'תחנה ראשונה' : 'תחנת איסוף';
   const verb = atSchoolStart || !dropping ? 'עלו' : 'ירדו';
-  const label = atSchoolStart ? `עלו ${S.count} · יציאה לפיזור` : target.kind === 'school' ? `ירדו ${S.count} · סיום הנסיעה` : `${verb} ${S.count} · יציאה מהתחנה`;
+  const label = !counted ? 'קודם סופרים' : atSchoolStart ? `עלו ${S.count} · יציאה לפיזור` : target.kind === 'school' ? `ירדו ${S.count} · סיום הנסיעה` : `${verb} ${S.count} · יציאה מהתחנה`;
   const index = pts.findIndex(p => p.id === target.id);
   return `${nav}
     <div class="m-steps" aria-label="התקדמות">${pts.map((p, i) => `<i class="${t.departures.includes(p.id) ? 'is-done' : i === index ? 'is-now' : ''}"></i>`).join('')}</div>
@@ -193,12 +194,13 @@ function tripScreen(t) {
       <div class="m-stop"><span class="m-kind">${kind}</span><h1>${esc(target.name)}</h1><p class="num">${esc(target.time ?? '')}${t.onBoard ? ` · ${t.onBoard} ברכב` : ''}</p></div>
       <div class="m-count">
         <button data-step="1" aria-label="הוספת תלמיד">${I.plus}</button>
-        <output class="num ${off ? 'is-off' : ''}" aria-live="polite" aria-label="${verb} ${S.count}">${S.count}</output>
+        <output class="num ${off ? 'is-off' : ''} ${counted ? '' : 'is-empty'}" aria-live="polite" aria-label="${counted ? `${verb} ${S.count}` : 'עוד לא נספר'}">${counted ? S.count : '–'}</output>
         <button data-step="-1" aria-label="הפחתת תלמיד">${I.minus}</button>
       </div>
       <p class="m-expected ${off ? 'is-off' : ''}">${verb === 'עלו' ? 'צפויים לעלות' : 'צפויים לרדת'} <b class="num">${expected}</b>${off ? ` · ${S.count < expected ? expected - S.count + ' פחות' : S.count - expected + ' יותר'}` : ''}</p>
+      ${counted ? '' : `<button class="m-asplanned" data-asplanned="${expected}">${verb} ${expected}, כמתוכנן</button>`}
     </main>
-    <div class="m-dock">${slider(label)}<p class="m-dock-note">מחליקים רק כשהרכב עומד</p></div>`;
+    <div class="m-dock">${slider(label, !counted)}<p class="m-dock-note">${counted ? 'מחליקים רק כשהרכב עומד' : 'מאשרים כמתוכנן או משנים עם + ו־−'}</p></div>`;
 }
 function sheet(t) {
   if (!S.sheet) return '';
@@ -272,6 +274,7 @@ function bindSlides() {
       fill.style.width = `${64 + px}px`;
       labelEl.style.opacity = String(1 - p * 1.4);
     };
+    if (track.classList.contains('is-locked')) return;
     knob.addEventListener('pointerdown', e => { start = e.clientX; max = track.clientWidth - 64; try { knob.setPointerCapture(e.pointerId); } catch {} });
     knob.addEventListener('pointermove', e => { if (start == null) return; set(Math.min(1, Math.max(0, (rtl ? start - e.clientX : e.clientX - start) / max))); });
     const end = e => {
@@ -293,7 +296,8 @@ document.addEventListener('click', e => {
   if (el.dataset.open) { S.trip = el.dataset.open; S.count = null; S.sheet = null; render(); window.scrollTo(0, 0); return; }
   if ('back' in el.dataset) { S.trip = null; S.sheet = null; render(); return; }
   if (el.dataset.tab) { S.tab = el.dataset.tab; render(); return; }
-  if (el.dataset.step) { S.count = Math.max(0, (S.count ?? 0) + Number(el.dataset.step)); navigator.vibrate?.(8); render(); return; }
+  if (el.dataset.asplanned) { S.count = Number(el.dataset.asplanned); navigator.vibrate?.(8); render(); return; }
+  if (el.dataset.step) { const base = S.count ?? Number(document.querySelector('[data-asplanned]')?.dataset.asplanned ?? 0); S.count = Math.max(0, base + Number(el.dataset.step)); navigator.vibrate?.(8); render(); return; }
   if (el.dataset.sheet) { S.sheet = el.dataset.sheet; S.delay = null; render(); return; }
   if ('close' in el.dataset) { S.sheet = null; S.delay = null; render(); return; }
   if (el.dataset.minutes) { S.delay = Number(el.dataset.minutes); render(); }

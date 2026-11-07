@@ -602,3 +602,14 @@ body:has(.t-plan-bar) .t-toasts { bottom: 96px; }
 .t-assist .t-prop.is-done b { color: var(--ok); }
 .t-link { min-height: 28px; padding: 4px 6px; margin: -4px -6px; border-radius: 8px; }
 .t-link:hover { background: var(--hover); }
+.t-blk.is-note { border-color: var(--warn-line); background: var(--warn-soft); color: var(--warn); }
+.t-late { color: var(--bad); font-weight: 600; }
+.t-src { margin-inline-start: auto; font-size: 12px; color: var(--accent-text); font-weight: 500; }
+.t-quiet { color: var(--muted); }
+.t-col.is-done .t-col-body { gap: 2px; }
+.t-ride-mini { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; width: 100%; text-align: start; padding: 6px 8px; border: 0; border-radius: 10px; background: transparent; color: var(--ink-2); font-size: 13px; }
+.t-ride-mini:hover, .t-ride-mini.is-open { background: var(--surface); }
+.t-ride-mini > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-board { grid-template-columns: 1.1fr 1fr 1fr .8fr; }
+.t-cluster { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 999px; font-size: 14px; }
+.t-tour.is-away { inset-inline-start: auto; inset-inline-end: 16px; }

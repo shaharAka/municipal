@@ -89,7 +89,8 @@ export function tripView(state:any, trip:any, clock = DEMO_CLOCK) {
 export function snapshot(state:any,date:string,viewer:string) {
   const actor=actorFor(state,viewer),day=dayFor(state,date);
   const trips=day.trips.filter((t:any)=>actor.role==='dispatcher'||(t.driverId===actor.id&&t.published&&!blockers(state,t,date).length));
-  const views=trips.map((t:any)=>tripView(state,t,day.clock));
+  // Only today runs live; any other day is a plan, so nothing in it has left yet.
+  const views=trips.map((t:any)=>tripView(state,t,date===DEMO_DATE?day.clock:'00:00'));
   const dispatcher=actor.role==='dispatcher';
   const drivers=dispatcher?Object.values(state.drivers):[state.drivers[actor.id]];
   const vehicles=dispatcher?Object.values(state.vehicles):[...new Set(trips.map((t:any)=>t.vehicleId))].map(id=>state.vehicles[id as string]);

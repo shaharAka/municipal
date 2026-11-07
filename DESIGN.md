@@ -198,7 +198,7 @@ Every colour is a CSS custom property, and a theme is one block of them on
 | `primary` | the one action that matters on a card or form | decoration |
 | `accent` | what is moving now: buses on the map, the route line, "בדרך" | warnings |
 | `hi` | the selected row, the clock dot, the presenter's bus | large filled areas |
-| `warn` | things to fix before a bus leaves | anything on the road now |
+| `warn` | things to check: workbook notes, overlaps already in the council's file | anything on the road now |
 | `bad` | children at risk: late, missing, not accounted for | anything else |
 | `ok` | valid and published | "moving" |
 
@@ -242,21 +242,27 @@ No text below 12px. Weight steps are 400, 500 and 600; 700 only in the route cod
 
 ## Layout
 
-- **Shell:** a 56px top bar (brand, three tabs, search, clock, the הדגמה menu, the
-  signed-in person), then the page.
-- **היום:** a 420px panel at the inline start (the right, in RTL) and the map filling the
-  rest. The panel shows a greeting, four number tiles that are also tabs, one list for the
-  selected tile, and a single line for the next day's preparation. Selecting a trip
-  replaces the panel's content with that trip. The back button returns to the list.
-- **סידור and נהגים ורכבים** follow the Omni kit's page anatomy: a page header with a
-  meta line of facts joined by middle dots, a toolbar (search, segmented controls, filter
-  chips with counts), an AG Grid filling the height, and a count line under it. A record
-  opens in an inspector docked beside the grid (320–380px). It has a sticky footer that
-  holds at most one primary action.
-- **Driver app:** a phone layout with safe areas, one stop per screen, controls in
-  the thumb zone, and slide-to-confirm instead of a tap for anything that reports.
+Built like a modern CRM: rides are the records.
 
-Below 1180px the inspector stacks under the grid and the driver phone dock hides.
+- **Shell:** a 236px sidebar (brand, search, נסיעות, בניית סידור, נהגים, רכבים, עוזר
+  התכנון, the clock, the signed-in person, help, and the presenter menu) and the
+  work area. There is no top bar.
+- **נסיעות:** a page header (greeting, one meta line, one line saying the numbers follow
+  the timetable unless marked "דיווח נהג"), then a board of four columns: דורש טיפול,
+  יוצאות בשעה הקרובה (with a link to the rest of the day), בדרך, הגיעו (compact rows).
+  A table view (AG Grid) is one toggle away.
+- **Ride panel (inspector):** opens at the inline end over the work area, 460px, with
+  tabs סקירה, מפה, שיבוץ ותחנות, פעילות; the sticky footer holds at most one primary
+  action. Focus moves into it and back to the card on close.
+- **Live map:** never the page. It opens full screen over the work area (button or M),
+  fitted to the buses; overlapping buses become one round count.
+- **בניית סידור:** one day at a time (tomorrow first). Rows are drivers or buses, the axis
+  is the day, each trip a block showing its time. Drag a block to another row to
+  reassign; drops are drafts until one publish bar sends them.
+- **נהגים, רכבים:** one page each, a page header and one AG Grid filling the height.
+- **Assistant:** a panel at the inline end, like the ride panel.
+- **Driver app:** a phone layout with safe areas, one stop per screen, controls in the
+  thumb zone, slide-to-confirm for anything that reports, and a count that starts empty.
 
 ## Elevation and depth
 
@@ -283,8 +289,9 @@ markers.
 
 ## Components
 
-- **Number tile:** a big number with a label under it. The tile is a tab; the selected
-  tile gets an ink outline. The "לטיפול" number turns `bad` only when it is above zero.
+- **Plan block:** neutral grey with its time; red only when the trip cannot run or a move
+  made it clash; amber when the council's own file has two trips at once; dashed while a
+  change is not yet published.
 - **Alert card:** a bold one-line title and a muted line of detail, then at most two
   buttons. One is the primary action (call the driver, or fix in the schedule) and the other
   is "טופל". "טופל" can be undone from the toast, and handled items collapse into "טופלו

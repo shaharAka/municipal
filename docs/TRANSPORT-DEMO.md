@@ -65,14 +65,17 @@ it, or drive by hand as below.
      the toast offers "ביטול".
    - Type "דוד מזרחי לא מגיע מחר": it moves his trips to a free driver, with
      the reason, for approval.
-4. **תכנון שבועי.** Every route against Sunday–Friday, tomorrow highlighted.
-   Red: can't leave; dashed: not published; dot: a note in their file.
-   - Click a trip on Monday: the same panel opens on "שיבוץ ותחנות"; buses
-     that fit are listed first. "שמירה ופרסום לנהג".
-   - "בדיקת מחר עם העוזר" checks all of tomorrow.
+4. **בניית סידור.** Tomorrow, drivers down the side and the day across. Each trip is a
+   grey block with its time. Red: it can't run (expired licence or test, too few seats,
+   or a clash you made); amber: two trips at once already in their file.
+   - Drag one of Yossi Hazan's trips onto Ron Almog (spare): the row tints green, the
+     block turns dashed, "1 שינוי שהנהג עוד לא רואה · פרסום לנהגים".
+   - "12 לתיקון · לבא" steps through what's left; "הצעה לתיקון" opens the assistant.
 5. **The driver's morning.** Turn on "טלפון הנהג על המסך": David Mizrahi,
    route 10.
-   - "הנסיעה הבאה 07:10", "לנסיעה", one stop per screen, count preset.
+   - "הנסיעה הבאה 07:10" (or "באיחור N דק׳"), "לנסיעה", one stop per screen. The count
+     starts empty: he taps "עלו 15, כמתוכנן" or adjusts with + and −; the slide stays
+     locked until he has counted.
    - He slides "עלו 15 · יציאה מהתחנה" ("מחליקים רק כשהרכב עומד"); the server
      refuses any report without that slide.
    - At Kela Alon, press − twice and slide: on the board, "קו 10: עלו 30 במקום
@@ -80,8 +83,8 @@ it, or drive by hand as below.
    - Send him a note from the ride ("הודעה לנהג"): a badge on his "הודעות".
 6. **No reception.** "הטלפון בלי קליטה": the phone shows "אין שירות", reports
    are saved on the phone and arrive when reception returns.
-7. **נהגים ורכבים.** Licence, test and service dates; "רק מה שפג או עומד לפוג";
-   click a date to update it.
+7. **נהגים** and **רכבים.** Licence, test and service dates, fit for duty / available
+   for assignment, "רק מה שפג או עומד לפוג"; click a date to update it (with undo).
 8. **Close on what we need from them** (below).
 
 ## The brief's questions, answered from the workbook

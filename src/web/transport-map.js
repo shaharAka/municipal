@@ -172,7 +172,7 @@ export async function mountTransportMap(element, { config, onSelect, focus = nul
       const trips = group.map(b => last?.trips.find(t => t.id === b.id)).filter(Boolean);
       const el = document.createElement('div');
       el.className = `t-cluster${trips.some(t => ['late', 'delayed'].includes(t.status)) ? ' is-bad' : ''}`;
-      el.innerHTML = `${BUS}<span>${group.length}</span>`;
+      el.innerHTML = `<span>${group.length}</span>`;
       el.title = trips.map(t => `קו ${t.routeCode}`).join(' · ');
       const at = { lat: group.reduce((s, g) => s + g.m.at.lat, 0) / group.length, lng: group.reduce((s, g) => s + g.m.at.lng, 0) / group.length };
       clusters.push(new Marker({ map, position: at, content: el, zIndex: 25, title: el.title, onClick: () => {
@@ -208,5 +208,6 @@ export async function mountTransportMap(element, { config, onSelect, focus = nul
   }
 
   function retheme() { map.setOptions({ styles: quiet(), backgroundColor: css('--map-bg') }); const sel = shownRoute.split(':')[0]; shownRoute = ''; if (last) update(last, sel || null); }
-  return { update, retheme, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, destroy() { clearTimeout(pending); clusters.forEach(c => c.remove()); buses.forEach(m => m.remove()); clearRoute(); }, get last() { return last; } };
+  function fitBuses() { const b = new google.maps.LatLngBounds(); (last?.trips ?? []).forEach(t => t.live.position && b.extend(t.live.position)); if (!b.isEmpty()) map.fitBounds(b, 80); }
+  return { update, retheme, fitBuses, ready: true, overview() { map.panTo(GOLAN); map.setZoom(11); }, destroy() { clearTimeout(pending); clusters.forEach(c => c.remove()); buses.forEach(m => m.remove()); clearRoute(); }, get last() { return last; } };
 }

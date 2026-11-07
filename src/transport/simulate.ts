@@ -187,7 +187,8 @@ export function alertsFor(trips: any[], drivers: any[], vehicles: any[], date: s
     if (t.live.status === 'late') alerts.push({ id: `late-${t.id}`, queue: 'road', level: 'high', risk: 1, kind: 'late', tripId: t.id, title: `${line(t)} לא יצא · ${t.live.lateMinutes} דק׳ איחור`, detail: who(t), call: call(t) });
     else if (t.live.status === 'delayed') alerts.push({ id: `delay-${t.id}`, queue: 'road', level: 'high', risk: 2, kind: 'delay', tripId: t.id, title: `${line(t)} מאחר ${t.live.lateMinutes} דק׳`, detail: who(t), call: call(t) });
     if (t.unaccounted) alerts.push({ id: `unaccounted-${t.id}`, queue: 'road', level: 'high', risk: 0, kind: 'count', tripId: t.id, title: `${line(t)}: ${t.unaccounted} תלמידים לא דווחו כיורדים`, detail: `${t.school} · דיווח נהג`, call: call(t) });
-    const off = Object.entries(t.live.stopCounts).filter(([id, c]: any) => c.expected != null && c.count !== c.expected && !(t.unaccounted && (id === 'school' || c.kind === 'dropoff'))) as [string, any][];
+    // Only a count the driver reported can say children are missing; an estimate never raises this alert.
+    const off = Object.entries(t.live.stopCounts).filter(([id, c]: any) => c.source === 'driver' && c.expected != null && c.count !== c.expected && !(t.unaccounted && (id === 'school' || c.kind === 'dropoff'))) as [string, any][];
     if (off.length) {
       const [id, c] = off[0];
       const name = t.stops.find((x: any) => x.id === id)?.name ?? '';
